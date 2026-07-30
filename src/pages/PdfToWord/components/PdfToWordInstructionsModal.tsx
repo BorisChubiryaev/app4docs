@@ -1,0 +1,160 @@
+// PdfToWordInstructionsModal.tsx
+import React from "react";
+import "../PdfToWord.css";
+
+export const PdfToWordInstructionsModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+}> = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>📚 Инструкция по конвертации документов</h2>
+          <button className="modal-close" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="instructions-section">
+            <h3>🔄 Два режима конвертации</h3>
+            <p>
+              Инструмент работает в обе стороны: из PDF в Word (.docx) и из Word
+              в PDF. Все файлы обрабатываются локально — данные не покидают ваш
+              компьютер.
+            </p>
+          </div>
+
+          <div className="instructions-section">
+            <h3>📄 PDF → Word</h3>
+            <p>
+              <strong>Поддерживаемые возможности:</strong>
+            </p>
+            <ul>
+              <li>Текст с форматированием (жирный, курсив, заголовки)</li>
+              <li>Списки с автоматическим определением маркеров</li>
+              <li>Отступы и выравнивание абзацев</li>
+              <li>Три режима работы с изображениями</li>
+            </ul>
+          </div>
+
+          <div className="instructions-section">
+            <h3>🖼️ Режимы изображений (PDF → Word)</h3>
+            <ul>
+              <li>
+                <strong>Извлечь:</strong> Картинки вырезаются из PDF и
+                вставляются отдельно. Сохраняется их положение относительно
+                текста
+              </li>
+              <li>
+                <strong>Снимок:</strong> Вся страница рендерится как одно
+                изображение. Полезно для сложных макетов
+              </li>
+              <li>
+                <strong>Без картинок:</strong> Извлекается только текст.
+                Быстрее, легче, меньше размер файла
+              </li>
+            </ul>
+          </div>
+
+          <div className="instructions-section">
+            <h3>📘 Word → PDF</h3>
+            <p>
+              <strong>Поддерживаемые возможности:</strong>
+            </p>
+            <ul>
+              <li>
+                Текст со стилями (заголовки, жирный, курсив, подчеркивание)
+              </li>
+              <li>Таблицы с границами</li>
+              <li>Изображения (встроенные и внешние ссылки)</li>
+              <li>Умное разбиение по страницам — блоки не обрезаются</li>
+            </ul>
+          </div>
+
+          <div className="instructions-section">
+            <h3>📑 Умное разбиение страниц (Word → PDF)</h3>
+            <p>
+              При конвертации в PDF страницы разбиваются по логическим блокам:
+            </p>
+            <ul>
+              <li>Заголовки и абзацы не разрываются пополам</li>
+              <li>Изображения и таблицы сохраняются целиком</li>
+              <li>
+                Высота страницы A4 с отступами рассчитывается автоматически
+              </li>
+            </ul>
+          </div>
+
+          <div className="instructions-section">
+            <h3>📦 Пакетная обработка</h3>
+            <p>
+              Можно загрузить несколько файлов одновременно и конвертировать их
+              одной кнопкой:
+            </p>
+            <ol>
+              <li>
+                Перетащите файлы в зону загрузки или нажмите «Выбрать файлы»
+              </li>
+              <li>Настройте режим изображений (для PDF → Word)</li>
+              <li>
+                Нажмите «Конвертировать» — все файлы обработаются
+                последовательно
+              </li>
+              <li>Скачайте результаты по одному или все сразу</li>
+            </ol>
+          </div>
+
+          <div className="instructions-section">
+            <h3>💡 Советы</h3>
+            <ul>
+              <li>
+                <strong>Для отсканированных PDF:</strong> используйте режим
+                «Снимок» — текст через OCR не распознаётся
+              </li>
+              <li>
+                <strong>Для больших PDF:</strong> режим «Без картинок» работает
+                заметно быстрее
+              </li>
+              <li>
+                <strong>Для .docx с изображениями:</strong> дождитесь загрузки
+                картинок — конвертер ждёт их до 3 секунд
+              </li>
+              <li>
+                <strong>При ошибке:</strong> можно повторить конвертацию
+                отдельного файла кнопкой 🔄
+              </li>
+            </ul>
+          </div>
+
+          <div className="instructions-section">
+            <h3>⚠️ Ограничения</h3>
+            <ul>
+              <li>
+                <strong>PDF → Word:</strong> таблицы, колонки и формы не
+                переносятся. Отсканированные PDF требуют предварительного OCR
+              </li>
+              <li>
+                <strong>Word → PDF:</strong> поддерживаются только файлы .docx
+                (Word 2007+). SmartArt и фигуры отображаются упрощённо
+              </li>
+              <li>
+                <strong>Размер файлов:</strong> очень большие изображения
+                (больше 25 Мпикс) могут быть пропущены
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button className="glass-button primary" onClick={onClose}>
+            Понятно! Начать конвертацию!
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
