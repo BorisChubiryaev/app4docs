@@ -1,0 +1,971 @@
+.workplace-compare-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4edf5 100%);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  padding: 20px;
+}
+
+.workplace-compare-container {
+  max-width: 1800px;
+  margin: 0 auto;
+}
+
+/* Заголовок */
+.workplace-compare-header {
+  text-align: center;
+  margin-bottom: 40px;
+  position: relative;
+}
+
+.header-content {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.modal-content-workplace {
+  width: auto;
+}
+
+.workplace-compare-header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #1d1d1f;
+  margin: 0 0 12px 0;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #1d1d1f 0%, #424245 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Кнопка На главную */
+.home-button {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #1d1d1f !important;
+  text-decoration: none;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.home-button:hover {
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-50%) scale(1.05);
+  box-shadow: 
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* Блок загрузки файлов */
+.workplace-upload-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.workplace-upload-box {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 20px;
+  padding: 32px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+  overflow: hidden;
+}
+
+.workplace-upload-box::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.4) 100%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.workplace-upload-box:hover {
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.12),
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.workplace-upload-box:hover::before {
+  opacity: 1;
+}
+
+.workplace-upload-box.file-loaded {
+  border-style: solid;
+}
+
+.workplace-upload-box.file1.file-loaded {
+  background: linear-gradient(135deg, rgba(10, 132, 255, 0.1) 0%, rgba(0, 122, 255, 0.05) 100%);
+  border-color: rgba(10, 132, 255, 0.2);
+}
+
+.workplace-upload-box.file2.file-loaded {
+  background: linear-gradient(135deg, rgba(50, 215, 75, 0.1) 0%, rgba(48, 209, 88, 0.05) 100%);
+  border-color: rgba(50, 215, 75, 0.2);
+}
+
+.workplace-upload-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  position: relative;
+  z-index: 2;
+}
+
+.workplace-upload-box.file1 .workplace-upload-icon {
+  background: rgba(10, 132, 255, 0.1);
+  color: #007AFF;
+}
+
+.workplace-upload-box.file2 .workplace-upload-icon {
+  background: rgba(50, 215, 75, 0.1);
+  color: #32D74B;
+}
+
+.workplace-upload-box h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1d1d1f;
+  margin: 0 0 16px 0;
+  letter-spacing: -0.3px;
+  position: relative;
+  z-index: 2;
+}
+
+.workplace-file-info {
+  margin: 20px 0;
+  position: relative;
+  z-index: 2;
+}
+
+.workplace-file-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1d1d1f;
+  margin: 0 0 4px 0;
+}
+
+.workplace-file-size {
+  font-size: 0.875rem;
+  color: #86868b;
+}
+
+.workplace-file-placeholder {
+  font-size: 0.875rem;
+  color: #86868b;
+  margin: 20px 0;
+  position: relative;
+  z-index: 2;
+}
+
+.workplace-file-input {
+  display: none;
+}
+
+.workplace-file-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 20px 0;
+  position: relative;
+  z-index: 2;
+}
+
+/* Кнопки */
+.workplace-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.workplace-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transition: left 0.5s ease;
+}
+
+.workplace-btn:hover::before {
+  left: 100%;
+}
+
+.workplace-btn-primary {
+  background: linear-gradient(135deg, #007AFF 0%, #0056CC 100%);
+  color: white;
+  box-shadow: 
+    0 8px 24px rgba(0, 122, 255, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.workplace-btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 
+    0 12px 32px rgba(0, 122, 255, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.workplace-btn-primary:disabled {
+  background: rgba(120, 120, 128, 0.2);
+  color: rgba(60, 60, 67, 0.3);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.workplace-btn-file1 {
+  background: rgba(10, 132, 255, 0.1);
+  color: #007AFF;
+  border: 1px solid rgba(10, 132, 255, 0.2);
+}
+
+.workplace-btn-file1:hover {
+  background: rgba(10, 132, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.workplace-btn-file2 {
+  background: rgba(50, 215, 75, 0.1);
+  color: #32D74B;
+  border: 1px solid rgba(50, 215, 75, 0.2);
+}
+
+.workplace-btn-file2:hover {
+  background: rgba(50, 215, 75, 0.2);
+  transform: translateY(-2px);
+}
+
+.workplace-btn-danger {
+  background: rgba(255, 59, 48, 0.1);
+  color: #FF3B30;
+  border: 1px solid rgba(255, 59, 48, 0.2);
+  padding: 12px;
+}
+
+.workplace-btn-danger:hover {
+  background: rgba(255, 59, 48, 0.2);
+  transform: translateY(-2px);
+}
+
+.workplace-actions-center {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.workplace-btn-compare {
+  background: linear-gradient(135deg, #BF5AF2 0%, #9B30F0 100%);
+  color: white;
+  padding: 16px 32px;
+  font-size: 1rem;
+  animation: gentlePulse 3s ease-in-out infinite;
+}
+
+.workplace-btn-compare:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 
+    0 12px 32px rgba(191, 90, 242, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.workplace-btn-clear {
+  background: rgba(255, 255, 255, 0.7);
+  color: #86868b;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.workplace-btn-clear:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+  box-shadow: 
+    0 8px 24px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* Панель фильтров */
+.workplace-filters-panel {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.workplace-filters-header {
+  padding: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.workplace-filters-title h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1d1d1f;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.workplace-filters-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 1rem;
+}
+
+.workplace-filters-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.workplace-filter-badge {
+  background: rgba(10, 132, 255, 0.1);
+  color: #007AFF;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid rgba(10, 132, 255, 0.2);
+}
+
+.workplace-filter-badge.active {
+  background: rgba(255, 159, 10, 0.1);
+  color: #FF9F0A;
+  border-color: rgba(255, 159, 10, 0.2);
+}
+
+.workplace-filters-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.workplace-filter-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #86868b;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.workplace-filter-action-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.workplace-filter-action-btn.export {
+  background: linear-gradient(135deg, #32D74B 0%, #30D158 100%);
+  color: white;
+  border-color: rgba(50, 215, 75, 0.3);
+}
+
+.workplace-filter-action-btn.export:hover {
+  background: linear-gradient(135deg, #30D158 0%, #34C759 100%);
+  transform: translateY(-2px);
+}
+
+.workplace-filter-action-btn.fullscreen {
+  background: linear-gradient(135deg, #FF9F0A 0%, #FF9500 100%);
+  color: white;
+  border-color: rgba(255, 159, 10, 0.3);
+}
+
+.workplace-filter-action-btn.fullscreen:hover {
+  background: linear-gradient(135deg, #FF9500 0%, #FF8A00 100%);
+  transform: translateY(-2px);
+}
+
+/* Сетка фильтров */
+.workplace-filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  padding: 24px;
+}
+
+.workplace-filter-group {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.workplace-filter-group h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1d1d1f;
+  margin: 0 0 16px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.workplace-filter-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workplace-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.workplace-filter-option:hover {
+  transform: translateX(4px);
+}
+
+.workplace-filter-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(120, 120, 128, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.workplace-filter-option input[type="checkbox"]:checked {
+  background: #007AFF;
+  border-color: #007AFF;
+}
+
+.workplace-filter-label {
+  font-size: 0.875rem;
+  color: #1d1d1f;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workplace-status-badge {
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.workplace-status-badge.old {
+  background: linear-gradient(135deg, #FF3B30 0%, #D70015 100%);
+}
+
+.workplace-status-badge.new {
+  background: linear-gradient(135deg, #32D74B 0%, #30D158 100%);
+}
+
+.workplace-status-badge.added {
+  background: linear-gradient(135deg, #007AFF 0%, #0056CC 100%);
+}
+
+.workplace-status-badge.deleted {
+  background: linear-gradient(135deg, #FF9F0A 0%, #FF9500 100%);
+}
+
+.workplace-filter-tag {
+  background: rgba(120, 120, 128, 0.1);
+  color: #1d1d1f;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid rgba(120, 120, 128, 0.2);
+}
+
+.workplace-filter-tag.highlight {
+  background: rgba(191, 90, 242, 0.1);
+  color: #BF5AF2;
+  border-color: rgba(191, 90, 242, 0.2);
+}
+
+/* Таблица результатов */
+.workplace-results-container {
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  overflow: hidden;
+}
+
+.workplace-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.workplace-results-table thead {
+  background: rgba(255, 255, 255, 0.8);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.workplace-results-table th {
+  padding: 16px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-weight: 600;
+  color: #1d1d1f;
+  text-align: left;
+  white-space: nowrap;
+  position: relative;
+}
+
+.workplace-results-table th.sticky {
+  position: sticky;
+  background: rgba(255, 255, 255, 0.9);
+  z-index: 50;
+}
+
+.workplace-results-table th.sticky-0 {
+  left: 0;
+  z-index: 100;
+}
+
+.workplace-results-table th.sticky-40 {
+  left: 40px;
+  z-index: 90;
+}
+
+.workplace-results-table th.sticky-120 {
+  left: 120px;
+  z-index: 80;
+}
+
+.workplace-results-table td {
+  padding: 12px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  vertical-align: top;
+  transition: all 0.2s ease;
+}
+
+.workplace-results-table td.sticky {
+  position: sticky;
+  background: white;
+  z-index: 40;
+}
+
+.workplace-results-table td.sticky-0 {
+  left: 0;
+  z-index: 60;
+}
+
+.workplace-results-table td.sticky-40 {
+  left: 40px;
+  z-index: 50;
+}
+
+.workplace-results-table td.sticky-120 {
+  left: 120px;
+  z-index: 40;
+}
+
+/* Стили для строк */
+.workplace-row-old {
+  background: rgba(255, 59, 48, 0.05);
+}
+
+.workplace-row-new {
+  background: rgba(50, 215, 75, 0.05);
+}
+
+.workplace-row-added {
+  background: rgba(0, 122, 255, 0.05);
+}
+
+.workplace-row-deleted {
+  background: rgba(255, 159, 10, 0.05);
+}
+
+.workplace-row-old:hover {
+  background: rgba(255, 59, 48, 0.1);
+}
+
+.workplace-row-new:hover {
+  background: rgba(50, 215, 75, 0.1);
+}
+
+.workplace-row-added:hover {
+  background: rgba(0, 122, 255, 0.1);
+}
+
+.workplace-row-deleted:hover {
+  background: rgba(255, 159, 10, 0.1);
+}
+
+.workplace-row-checked {
+  background: rgba(120, 120, 128, 0.08) !important;
+  color: #86868b !important;
+}
+
+/* Стили для ячеек */
+.workplace-cell-checkbox {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.workplace-cell-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  border-radius: 6px;
+  border: 2px solid rgba(120, 120, 128, 0.3);
+  background: rgba(255, 255, 255, 0.7);
+  transition: all 0.2s ease;
+}
+
+.workplace-cell-checkbox input[type="checkbox"]:checked {
+  background: #007AFF;
+  border-color: #007AFF;
+}
+
+.workplace-cell-status {
+  font-weight: 600;
+  text-align: center;
+}
+
+.workplace-cell-changetype {
+  font-size: 0.7rem;
+  font-style: italic;
+  color: #FF3B30;
+  line-height: 1.3;
+}
+
+.workplace-cell-highlight {
+  background: rgba(255, 204, 0, 0.2) !important;
+  font-weight: 600;
+}
+
+.workplace-cell-target {
+  font-weight: 600;
+  color: #007AFF;
+}
+
+/* Полноэкранный режим */
+.workplace-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  z-index: 1000;
+  padding: 20px;
+  overflow: auto;
+}
+
+.workplace-fullscreen .workplace-results-container {
+  max-height: calc(100vh - 40px);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Сообщения */
+.workplace-alert {
+  padding: 20px;
+  border-radius: 16px;
+  margin: 20px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.workplace-alert-info {
+  background: rgba(0, 122, 255, 0.05);
+  width: fit-content;
+  align-items: flex-end;
+  margin: auto;
+}
+
+.workplace-alert-icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+}
+
+.workplace-alert-content {
+  flex: 1;
+  font-size: 1.2rem;
+  color: #1d1d1f;
+}
+
+/* Анимации */
+@keyframes gentlePulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+/* Адаптивность */
+@media (max-width: 1200px) {
+  .workplace-upload-section {
+    flex-direction: column;
+    gap: 24px;
+  }
+  
+  .workplace-actions-center {
+    flex-direction: row;
+    justify-content: center;
+  }
+  
+  .workplace-filters-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .workplace-compare-header h1 {
+    font-size: 2rem;
+  }
+  
+  .workplace-upload-box {
+    padding: 24px;
+  }
+  
+  .workplace-file-actions {
+    flex-direction: column;
+  }
+  
+  .workplace-btn {
+    justify-content: center;
+  }
+  
+  .workplace-filters-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  
+  .workplace-filters-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .workplace-results-table {
+    font-size: 0.7rem;
+  }
+  
+  .workplace-results-table th,
+  .workplace-results-table td {
+    padding: 8px 6px;
+  }
+
+  .header-content {
+    padding-top: 50px;
+  }
+  
+  .home-button {
+    position: static;
+    color: #1d1d1f;
+    transform: none;
+    margin-bottom: 20px;
+    display: inline-flex;
+  }
+  
+  .home-button:hover {
+    transform: scale(1.05);
+  }
+}
+
+/* Утилиты */
+.workplace-text-gray-400 {
+  color: #8e8e93;
+}
+
+.workplace-text-gray-500 {
+  color: #86868b;
+}
+
+.workplace-line-through {
+  text-decoration: line-through;
+}
+
+.workplace-font-bold {
+  font-weight: 600;
+}
+
+.workplace-italic {
+  font-style: italic;
+}
+
+/* Эффект стекла при скролле */
+.workplace-results-table thead::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+}
+
+.instructions-button {
+    left: auto !important;
+    right: 0px;
+    cursor: help;
+}
+
+/* Добавьте эти стили в ваш CSS-файл */
+
+/* Стили для drag & drop */
+.workplace-upload-box {
+  /* существующие стили... */
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.workplace-upload-box.drag-over {
+  transform: scale(1.02);
+  border: 2px dashed #007AFF !important;
+  background: rgba(0, 122, 255, 0.05) !important;
+  box-shadow: 
+    0 0 0 4px rgba(0, 122, 255, 0.1),
+    0 20px 40px rgba(0, 0, 0, 0.12) !important;
+}
+
+.workplace-upload-box.file1.drag-over {
+  border-color: #007AFF !important;
+  background: rgba(10, 132, 255, 0.1) !important;
+  box-shadow: 
+    0 0 0 4px rgba(0, 122, 255, 0.15),
+    0 20px 40px rgba(10, 132, 255, 0.2) !important;
+}
+
+.workplace-upload-box.file2.drag-over {
+  border-color: #32D74B !important;
+  background: rgba(50, 215, 75, 0.1) !important;
+  box-shadow: 
+    0 0 0 4px rgba(50, 215, 75, 0.15),
+    0 20px 40px rgba(50, 215, 75, 0.2) !important;
+}
+
+.workplace-upload-box.drag-over .workplace-upload-icon {
+  transform: scale(1.1);
+  transition: transform 0.3s ease;
+}
+
+.workplace-upload-box.drag-over .workplace-file-placeholder {
+  color: #007AFF;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+/* Анимация пульсации при наведении файла */
+@keyframes dragPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(0, 122, 255, 0.15);
+  }
+}
+
+.workplace-upload-box.drag-over {
+  animation: dragPulse 1.5s ease-in-out infinite;
+}
+
+/* Только пунктир и легкая анимация */
+.workplace-upload-box:not(.file-loaded) {
+  border: 2px dashed rgba(120, 120, 128, 0.4) !important;
+  transition: all 0.3s ease;
+}
+
+.workplace-upload-box:not(.file-loaded):hover {
+  border-color: rgba(0, 122, 255, 0.5) !important;
+  box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.1);
+}
+
+.workplace-upload-box.file1:not(.file-loaded) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(10, 132, 255, 0.03) 100%);
+}
+
+.workplace-upload-box.file2:not(.file-loaded) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(50, 215, 75, 0.03) 100%);
+}
+
+/* Маленькая подсказка */
+.workplace-file-placeholder {
+  position: relative;
+}
+
+.workplace-file-placeholder small {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.7rem;
+  color: #86868b;
+  opacity: 0.6;
+}
