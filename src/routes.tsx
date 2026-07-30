@@ -5,7 +5,6 @@ import TransformPage from "./pages/TransformPage/TransformPage";
 import WorkplaceCompare from "./pages/WorkplaceCompare/WorkplaceCompare";
 import ComparePage from "./pages/ComparePage/ComparePage";
 import HtmlToExcelConverter from "./pages/DownloadExcel/HtmlToExcelConverter";
-import VPR4Excel from "./pages/VPR4Excel/VPR4Excel";
 import Svg2Png from "./pages/Svg2Png/Svg2Png";
 import PdfCompressor from "./pages/PdfCompressor/PdfCompressor";
 import PdfEditor from "./pages/PdfEditor/PdfEditor";
@@ -24,7 +23,6 @@ const RootRoutes = () => {
       <Route path="/WorkplaceCompare" element={<WorkplaceCompare />} />
       <Route path="/compare" element={<ComparePage />} />
       <Route path="/htmlToExcel" element={<HtmlToExcelConverter />} />
-      <Route path="/VPR4Excel" element={<VPR4Excel />} />
       <Route path="/Svg2Png" element={<Svg2Png />} />
       <Route path="/PdfCompressor" element={<PdfCompressor />} />
       <Route path="/PdfEditor" element={<PdfEditor />} />

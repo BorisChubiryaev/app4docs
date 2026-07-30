@@ -28,3 +28,4 @@ dist-ssr
 /release
 excelapp.zip
 unit-app-light.zip
+package-lock.json
