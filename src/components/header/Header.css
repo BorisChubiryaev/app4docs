@@ -1,0 +1,88 @@
+/* Заголовок */
+.pdf2pptx-header {
+  margin-bottom: 20px;
+}
+
+.header-content {
+  text-align: center;
+  color: white;
+}
+
+.header-title h1 {
+  font-size: 2.5rem;
+  margin: 10px 0 5px;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.header-title p {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0;
+}
+
+.header-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.instructions-button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  padding: 10px 20px;
+  border-radius: 25px;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  height: min-content;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+  color: white;
+}
+
+.instructions-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .header-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .header-title h1 {
+    font-size: 2rem;
+    margin: 5px 0;
+  }
+  
+  .header-title p {
+    font-size: 1rem;
+  }
+  
+  .instructions-button {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-title h1 {
+    font-size: 1.7rem;
+  }
+  
+  .header-title p {
+    font-size: 0.9rem;
+  }
+  
+  .instructions-button {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+}
