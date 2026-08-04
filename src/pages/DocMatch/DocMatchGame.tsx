@@ -1,7 +1,6 @@
 // DocMatchGame.tsx
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "react-router-dom";
-import Header from "../../components/header/Header";
+import PageShell from "../../components/PageShell";
 import "./DocMatch.css";
 
 const BOARD_SIZE = 8;
@@ -438,20 +437,10 @@ const DocMatchGame: React.FC = () => {
   };
 
   return (
-    <div className="doc-match-page">
-      <div className="liquid-background">
-        <div className="liquid-shape liquid-1"></div>
-        <div className="liquid-shape liquid-2"></div>
-        <div className="liquid-grid"></div>
-      </div>
-
-      <div className="doc-match-container">
-        <Header
-          title="Документный Три-в-Ряд 🎮"
-          description={`Уровень ${level}: собери ${currentTarget} очков!`}
-          showHomeButton={true}
-          showInstructionsButton={false}
-        />
+    <PageShell
+      title="Документный Три-в-Ряд 🎮"
+      subtitle={`Уровень ${level}: собери ${currentTarget} очков!`}
+    >
 
         <div className="game-layout">
           <div className="glass-card game-board-wrapper" ref={boardRef}>
@@ -632,8 +621,7 @@ const DocMatchGame: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </PageShell>
   );
 };
 

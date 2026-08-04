@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
 import { PDFDocument } from "pdf-lib";
 import { PdfCompressorInstructions } from "./components/PdfCompressorInstructions";
 
 import "./PdfCompressor.css";
 
-import Header from "../../components/header/Header";
+import PageShell from "../../components/PageShell";
 
 import * as pdfjs from "pdfjs-dist";
 
@@ -321,22 +320,11 @@ const PdfCompressor: React.FC = () => {
   };
 
   return (
-    <div className="pdf-compressor-page">
-      <div className="liquid-background">
-        <div className="liquid-shape liquid-1"></div>
-        <div className="liquid-shape liquid-2"></div>
-        <div className="liquid-grid"></div>
-      </div>
-
-      <div className="pdf-compressor-container">
-        <Header
-          title="PDF компрессор"
-          description="Уменьшайте размер PDF с минимальной потерей качества"
-          showHomeButton={true}
-          showInstructionsButton={true}
-          onShowInstructions={() => setShowInstructions(true)}
-        />
-
+    <PageShell
+      title="PDF компрессор"
+      subtitle="Уменьшайте размер PDF с минимальной потерей качества"
+      onShowInstructions={() => setShowInstructions(true)}
+    >
         <div className="compressor-content">
           <div className="input-column">
             <div
@@ -666,12 +654,11 @@ const PdfCompressor: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
       <PdfCompressorInstructions
         isOpen={showInstructions}
         onClose={() => setShowInstructions(false)}
       />
-    </div>
+    </PageShell>
   );
 };
 

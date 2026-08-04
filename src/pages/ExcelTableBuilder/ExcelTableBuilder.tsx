@@ -6,7 +6,7 @@ import React, {
   useEffect,
 } from "react";
 import * as XLSX from "xlsx";
-import Header from "../../components/header/Header";
+import PageShell from "../../components/PageShell";
 import "./ExcelTableBuilder.css";
 
 // Типы данных
@@ -708,16 +708,11 @@ const ExcelTableBuilder: React.FC = () => {
   };
 
   return (
-    <div className="conference-builder">
-      <header className="app-header">
-        <Header
-          title="Excel группиратор"
-          description="Группировка данных из нескольких Excel-файлов с сохранением информации о файлах"
-          showHomeButton={true}
-          showInstructionsButton={true}
-          onShowInstructions={() => setShowInstructions(true)}
-        />
-      </header>
+    <PageShell
+      title="Excel группиратор"
+      subtitle="Группировка данных из нескольких Excel-файлов с сохранением информации о файлах"
+      onShowInstructions={() => setShowInstructions(true)}
+    >
 
       {/* Навигация */}
       <nav className="app-navigation">
@@ -1734,7 +1729,7 @@ const ExcelTableBuilder: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 };
 

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import * as ExcelJS from "exceljs";
-import { Link } from "react-router-dom";
 import mammoth from "mammoth";
 import InstructionsModalShell from "../../components/InstructionsModal";
+import PageShell from "../../components/PageShell";
 
 import "./ComparePage.css";
 
@@ -1516,27 +1516,15 @@ const ComparePage: React.FC = () => {
       <FullScreenModal />
       <InstructionsModal />
 
-      <div className="compare-page">
-        <div className="compare-container">
-          <div className="compare-header">
-            <div className="header-content">
-              <Link to="/" className="home-button">
-                🏠 На главную
-              </Link>
-              <h1>Сравнение Excel и Word файлов</h1>
-              <p>
-                {fileType1 === "word"
-                  ? "Интеллектуальное сравнение Word документов по параграфам и таблицам"
-                  : "Точное сравнение Excel файлов по ячейкам с визуальной подсветкой"}
-              </p>
-              <button
-                className="instructions-button home-button"
-                onClick={() => setShowInstructions(true)}
-              >
-                📚 Инструкция
-              </button>
-            </div>
-          </div>
+      <PageShell
+        title="Сравнение Excel и Word файлов"
+        subtitle={
+          fileType1 === "word"
+            ? "Интеллектуальное сравнение Word документов по параграфам и таблицам"
+            : "Точное сравнение Excel файлов по ячейкам с визуальной подсветкой"
+        }
+        onShowInstructions={() => setShowInstructions(true)}
+      >
 
           <div className="upload-section">
             {/* Файл 1 */}
@@ -1794,8 +1782,7 @@ const ComparePage: React.FC = () => {
                 </div>
               </div>
             )}
-        </div>
-      </div>
+      </PageShell>
     </>
   );
 };

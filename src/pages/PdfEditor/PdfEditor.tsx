@@ -1,7 +1,7 @@
 // src/components/PdfEditor.tsx
 import React, { useState, useRef, ChangeEvent, useEffect } from "react";
 import { PDFDocument } from "pdf-lib";
-import Header from "../../components/header/Header";
+import PageShell from "../../components/PageShell";
 import { PdfEditorInstructions } from "./components/PdfEditorInstructions";
 
 import "./PdfEditor.css";
@@ -916,14 +916,11 @@ const PdfEditor: React.FC = () => {
   // ─── JSX ─────────────────────────────────────────────────────────
 
   return (
-    <div className="pdf-editor-container">
-      <Header
-        title="PDF Редактор"
-        description="Объединяйте, переставляйте и удаляйте страницы PDF файлов"
-        onShowInstructions={() => setShowInstructions(true)}
-        showHomeButton={true}
-        showInstructionsButton={true}
-      />
+    <PageShell
+      title="PDF Редактор"
+      subtitle="Объединяйте, переставляйте и удаляйте страницы PDF файлов"
+      onShowInstructions={() => setShowInstructions(true)}
+    >
 
       {/* Плавающая панель инструментов */}
       {pageItems.length > 0 && (
@@ -1380,7 +1377,7 @@ const PdfEditor: React.FC = () => {
         isOpen={showInstructions}
         onClose={() => setShowInstructions(false)}
       />
-    </div>
+    </PageShell>
   );
 };
 

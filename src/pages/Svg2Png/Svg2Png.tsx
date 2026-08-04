@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
-import { Link } from "react-router-dom";
 import { SvgInstructionsModal } from "./components/SvgInstructionsModal";
+import PageShell from "../../components/PageShell";
 import "./Svg2Png.css";
 
 interface ConversionResult {
@@ -12,27 +12,6 @@ interface ConversionResult {
   timestamp: Date;
   format: "PNG" | "JPEG";
 }
-
-interface AnimatedBackgroundProps {
-  className?: string;
-}
-
-const AnimatedBackground: React.FC<AnimatedBackgroundProps> = ({
-  className,
-}) => {
-  return (
-    <div className={`animated-background ${className || ""}`}>
-      <div className="bg-shapes">
-        <div className="shape shape-1"></div>
-        <div className="shape shape-2"></div>
-        <div className="shape shape-3"></div>
-        <div className="shape shape-4"></div>
-        <div className="shape shape-5"></div>
-      </div>
-      <div className="bg-grid"></div>
-    </div>
-  );
-};
 
 const Svg2Png: React.FC = () => {
   const [svgFile, setSvgFile] = useState<File | null>(null);
@@ -330,26 +309,11 @@ const Svg2Png: React.FC = () => {
         isOpen={showInstructions}
         onClose={() => setShowInstructions(false)}
       />
-      <div className="svg2png-page">
-        <div className="svg2png-container">
-          <div className="svg2png-header">
-            <div className="header-content">
-              <Link to="/" className="home-button">
-                🏠 На главную
-              </Link>
-              <h1>SVG в PNG/JPEG Конвертер</h1>
-              <p>
-                Быстрая конвертация SVG изображений в PNG и JPEG форматы с
-                настройками
-              </p>
-              <button
-                className="instructions-button home-button"
-                onClick={() => setShowInstructions(true)}
-              >
-                📚 Инструкция
-              </button>
-            </div>
-          </div>
+      <PageShell
+        title="SVG в PNG/JPEG Конвертер"
+        subtitle="Быстрая конвертация SVG изображений в PNG и JPEG форматы с настройками"
+        onShowInstructions={() => setShowInstructions(true)}
+      >
 
           <div className="converter-layout">
             {/* Левая колонка - Ввод */}
@@ -966,9 +930,7 @@ const Svg2Png: React.FC = () => {
               </div>
             </div>
           )}
-        </div>
-      </div>
-      <AnimatedBackground className="placeholder-bg" />
+      </PageShell>
     </>
   );
 };

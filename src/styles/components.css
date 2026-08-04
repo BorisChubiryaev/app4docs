@@ -74,3 +74,101 @@
 .btn-danger:hover:not(:disabled) {
   background: rgba(255, 59, 48, 0.18);
 }
+
+/* ============================================================
+   Примитивы единого стиля (чистый/светлый). Классы ds-*.
+   ============================================================ */
+
+/* Карточка / панель */
+.ds-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
+}
+.ds-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 18px;
+}
+
+/* Заголовок секции */
+.ds-section-title {
+  margin: 0 0 14px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Поля ввода */
+.ds-input,
+.ds-select,
+.ds-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ds-input:focus,
+.ds-select:focus,
+.ds-textarea:focus {
+  outline: none;
+  border-color: var(--brand-2);
+  box-shadow: 0 0 0 3px rgba(81, 93, 173, 0.15);
+}
+
+/* Табы (сегмент-контрол) */
+.ds-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.ds-tab {
+  padding: 8px 18px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ds-tab:hover:not(.ds-tab--active) {
+  color: var(--ink);
+}
+.ds-tab--active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Зона загрузки файлов */
+.ds-dropzone {
+  border: 2px dashed var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.ds-dropzone:hover,
+.ds-dropzone--over {
+  border-color: var(--brand-2);
+  background: #fafbff;
+}

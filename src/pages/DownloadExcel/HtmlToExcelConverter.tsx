@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import * as ExcelJS from "exceljs";
 import { handleUrlExcelDownload } from "../../utils/urlExcelDownloader";
 import "./HtmlToExcelConverter.css";
-import { Link } from "react-router-dom";
 import InstructionsModalShell from "../../components/InstructionsModal";
+import PageShell from "../../components/PageShell";
 
 const HtmlToExcelConverter: React.FC = () => {
   // Существующие состояния для HTML
@@ -1327,23 +1327,11 @@ const HtmlToExcelConverter: React.FC = () => {
         style={{ display: "none" }}
       />
 
-      <div className="html-excel-converter">
-        <div className="converter-container">
-          <div className="converter-header">
-            <div className="header-content">
-              <Link to="/" className="home-button">
-                🏠 На главную
-              </Link>
-              <h1>Конвертер в Excel</h1>
-              <p>Преобразуйте HTML-таблицы и JSON-данные в файлы Excel</p>
-              <button
-                className="home-button instructions-button"
-                onClick={() => setShowInstructions(true)}
-              >
-                📚 Инструкция
-              </button>
-            </div>
-          </div>
+      <PageShell
+        title="Конвертер в Excel"
+        subtitle="Преобразуйте HTML-таблицы и JSON-данные в файлы Excel"
+        onShowInstructions={() => setShowInstructions(true)}
+      >
 
           <div className="converter-content">
             <div className="input-section">
@@ -1744,8 +1732,7 @@ const HtmlToExcelConverter: React.FC = () => {
               )}
             </div>
           </div>
-        </div>
-      </div>
+      </PageShell>
     </>
   );
 };
