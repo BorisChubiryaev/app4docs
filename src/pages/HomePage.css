@@ -495,7 +495,7 @@ body {
 }
 
 .lg-btn--primary {
-  background: linear-gradient(135deg, var(--lg-accent) 0%, var(--lg-accent-dark) 100%);
+  background: var(--brand-gradient);
   color: white;
   box-shadow:
     0 4px 16px rgba(0, 122, 255, 0.25),
@@ -641,7 +641,13 @@ body {
    ╚══════════════════════════════════════════╝ */
 .lg-gradient-text {
   font-weight: 700;
-  background: linear-gradient(135deg, #0087CD 0%, #515DAD 25%, #8253AA 65%, #FF1C77 100%);
+  background: linear-gradient(
+    135deg,
+    var(--brand-1) 0%,
+    var(--brand-2) 25%,
+    var(--brand-3) 65%,
+    var(--brand-4) 100%
+  );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

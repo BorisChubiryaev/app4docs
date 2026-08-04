@@ -1,0 +1,76 @@
+/* ============================================================
+   EX-EL — общие компоненты интерфейса (кнопки и т.п.)
+   Подключается один раз в src/index.tsx ПОСЛЕ tokens.css и после
+   стилей страниц, чтобы канонический бренд-стиль кнопок побеждал
+   ранее дублировавшиеся постраничные определения.
+   Классы .btn-primary / .btn-secondary / .btn-danger самодостаточны:
+   работают и как `btn btn-primary`, и как одиночный `btn-primary`.
+   ============================================================ */
+
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.15;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.15s ease, box-shadow 0.15s ease,
+    filter 0.15s ease, background 0.15s ease;
+}
+
+.btn-primary:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled),
+.btn-danger:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+/* Primary — фирменный градиент */
+.btn-primary {
+  background: var(--brand-gradient);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(81, 93, 173, 0.3);
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 12px 26px rgba(130, 83, 170, 0.38);
+}
+
+/* Secondary — нейтральная поверхность */
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #ececf1;
+}
+
+/* Danger — мягкая красная (для действий очистки/удаления) */
+.btn-danger {
+  background: rgba(255, 59, 48, 0.1);
+  color: #e5484d;
+  border: 1px solid rgba(255, 59, 48, 0.25);
+}
+.btn-danger:hover:not(:disabled) {
+  background: rgba(255, 59, 48, 0.18);
+}

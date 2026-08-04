@@ -3,6 +3,7 @@ import * as ExcelJS from "exceljs";
 import { handleUrlExcelDownload } from "../../utils/urlExcelDownloader";
 import "./HtmlToExcelConverter.css";
 import { Link } from "react-router-dom";
+import InstructionsModalShell from "../../components/InstructionsModal";
 
 const HtmlToExcelConverter: React.FC = () => {
   // Существующие состояния для HTML
@@ -1245,91 +1246,69 @@ const HtmlToExcelConverter: React.FC = () => {
   };
 
   // Модальное окно инструкции
-  const InstructionsModal: React.FC = () => {
-    if (!showInstructions) return null;
-
-    return (
-      <div className="modal-overlay" onClick={() => setShowInstructions(false)}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header">
-            <h2>📋 Инструкция по использованию конвертера</h2>
-            <button
-              className="modal-close"
-              onClick={() => setShowInstructions(false)}
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="modal-body">
-            <div className="instructions-section">
-              <h3>🔄 Режимы конвертера</h3>
-              <p>Конвертер поддерживает два типа входных данных:</p>
-              <ul>
-                <li>
-                  <strong>HTML в Excel</strong> - конвертация HTML-таблиц
-                </li>
-                <li>
-                  <strong>JSON в Excel</strong> - конвертация JSON-данных
-                </li>
-              </ul>
-            </div>
-
-            <div className="instructions-section">
-              <h3>📊 JSON в Excel</h3>
-              <ol>
-                <li>Выберите вкладку "JSON в Excel"</li>
-                <li>
-                  Вставьте JSON-данные (массив объектов или объект с массивом)
-                </li>
-                <li>Выберите нужные колонки для экспорта</li>
-                <li>Нажмите "Скачать как Excel"</li>
-              </ol>
-              <p>
-                <strong>Поддерживаемые форматы JSON:</strong>
-              </p>
-              <ul>
-                <li>Вложенные объекты автоматически преобразуются в строку</li>
-              </ul>
-            </div>
-
-            <div className="instructions-section">
-              <h3>🛠️ Конструктор таблиц (HTML)</h3>
-              <p>
-                Для HTML-таблиц доступен конструктор для выбора строк и столбцов
-              </p>
-            </div>
-
-            <div className="instructions-section">
-              <h3>⚠️ Частые проблемы и решения</h3>
-              <ul>
-                <li>
-                  <strong>JSON не парсится:</strong> Убедитесь, что JSON валиден
-                </li>
-                <li>
-                  <strong>Не найден массив:</strong> Укажите путь к массиву в
-                  поле "Путь к массиву"
-                </li>
-                <li>
-                  <strong>Большой объем данных:</strong> Для больших массивов
-                  рекомендуется разбить на части
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="modal-footer">
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowInstructions(false)}
-            >
-              Понятно! Начать работу!
-            </button>
-          </div>
-        </div>
+  const InstructionsModal: React.FC = () => (
+    <InstructionsModalShell
+      isOpen={showInstructions}
+      onClose={() => setShowInstructions(false)}
+      title="📋 Инструкция по использованию конвертера"
+      footerLabel="Понятно! Начать работу!"
+    >
+      <div className="instructions-section">
+        <h3>🔄 Режимы конвертера</h3>
+        <p>Конвертер поддерживает два типа входных данных:</p>
+        <ul>
+          <li>
+            <strong>HTML в Excel</strong> - конвертация HTML-таблиц
+          </li>
+          <li>
+            <strong>JSON в Excel</strong> - конвертация JSON-данных
+          </li>
+        </ul>
       </div>
-    );
-  };
+
+      <div className="instructions-section">
+        <h3>📊 JSON в Excel</h3>
+        <ol>
+          <li>Выберите вкладку "JSON в Excel"</li>
+          <li>
+            Вставьте JSON-данные (массив объектов или объект с массивом)
+          </li>
+          <li>Выберите нужные колонки для экспорта</li>
+          <li>Нажмите "Скачать как Excel"</li>
+        </ol>
+        <p>
+          <strong>Поддерживаемые форматы JSON:</strong>
+        </p>
+        <ul>
+          <li>Вложенные объекты автоматически преобразуются в строку</li>
+        </ul>
+      </div>
+
+      <div className="instructions-section">
+        <h3>🛠️ Конструктор таблиц (HTML)</h3>
+        <p>
+          Для HTML-таблиц доступен конструктор для выбора строк и столбцов
+        </p>
+      </div>
+
+      <div className="instructions-section">
+        <h3>⚠️ Частые проблемы и решения</h3>
+        <ul>
+          <li>
+            <strong>JSON не парсится:</strong> Убедитесь, что JSON валиден
+          </li>
+          <li>
+            <strong>Не найден массив:</strong> Укажите путь к массиву в поле
+            "Путь к массиву"
+          </li>
+          <li>
+            <strong>Большой объем данных:</strong> Для больших массивов
+            рекомендуется разбить на части
+          </li>
+        </ul>
+      </div>
+    </InstructionsModalShell>
+  );
 
   return (
     <>

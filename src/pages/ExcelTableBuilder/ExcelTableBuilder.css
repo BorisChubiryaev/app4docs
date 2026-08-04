@@ -55,30 +55,7 @@
 }
 
 /* ===== КНОПКИ ===== */
-.btn-primary {
-  background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-  color: white;
-  border: none;
-  padding: 14px 28px;
-  font-size: 1rem;
-  font-weight: 600;
-  border-radius: var(--border-radius-sm);
-  cursor: pointer;
-  transition: var(--transition);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.3);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+/* .btn-primary — канонический бренд-стиль в src/styles/components.css */
 
 .btn-outline {
   background: transparent;

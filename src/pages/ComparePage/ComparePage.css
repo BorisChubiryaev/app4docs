@@ -237,27 +237,7 @@
   left: 100%;
 }
 
-.btn-primary {
-  background: linear-gradient(135deg, #c6efd805 0%, #32d74b33 100%);
-  color: #86868B;
-  box-shadow: 
-    0 8px 24px rgba(0, 122, 255, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-}
-
-.btn-primary:hover:not(:disabled) {
-  box-shadow: 
-    0 12px 32px rgba(0, 122, 255, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-}
-
-.btn-primary:disabled {
-  background: rgba(120, 120, 128, 0.2);
-  color: rgba(60, 60, 67, 0.3);
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
+/* .btn-primary — канонический бренд-стиль в src/styles/components.css */
 
 .btn-file1 {
   background: rgba(10, 132, 255, 0.1);
@@ -281,17 +261,7 @@
   transform: translateY(-2px);
 }
 
-.btn-danger {
-  background: rgba(255, 59, 48, 0.1);
-  color: #FF3B30;
-  border: 1px solid rgba(255, 59, 48, 0.2);
-  padding: 12px;
-}
-
-.btn-danger:hover {
-  background: rgba(255, 59, 48, 0.2);
-  transform: translateY(-2px);
-}
+/* .btn-danger — канонический бренд-стиль в src/styles/components.css */
 
 .sheet-selector {
   margin-top: 20px;

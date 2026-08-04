@@ -549,22 +549,8 @@
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-.btn-primary {
-  background: rgba(59, 130, 246, 0.1);
-  color: #1e40af;
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.5);
-  color: #1d1d1f;
-}
-
-.btn-danger {
-  background: rgba(239, 68, 68, 0.1);
-  color: #dc2626;
-  border-color: rgba(239, 68, 68, 0.2);
-}
+/* .btn-primary / .btn-secondary / .btn-danger — канонический бренд-стиль
+   в src/styles/components.css */
 
 .btn-link {
   background: transparent;

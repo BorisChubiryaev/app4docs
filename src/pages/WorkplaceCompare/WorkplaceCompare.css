@@ -233,7 +233,7 @@
 }
 
 .workplace-btn-primary {
-  background: linear-gradient(135deg, #007AFF 0%, #0056CC 100%);
+  background: var(--brand-gradient);
   color: white;
   box-shadow: 
     0 8px 24px rgba(0, 122, 255, 0.3),
@@ -297,7 +297,7 @@
 }
 
 .workplace-btn-compare {
-  background: linear-gradient(135deg, #BF5AF2 0%, #9B30F0 100%);
+  background: var(--brand-gradient);
   color: white;
   padding: 16px 32px;
   font-size: 1rem;

@@ -877,7 +877,7 @@
   cursor: not-allowed;
 }
 .cc-button-primary {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: var(--brand-gradient);
   color: white;
 }
 .cc-button-primary:hover:not(:disabled) {

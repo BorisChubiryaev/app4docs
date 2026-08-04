@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
 import RootRoutes from './routes';
 import './styles/tokens.css';
+import './styles/components.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

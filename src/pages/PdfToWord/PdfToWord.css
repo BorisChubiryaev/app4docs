@@ -193,7 +193,7 @@
 }
 
 .glass-button.primary {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  background: var(--brand-gradient);
   color: white;
   border: none;
 }
@@ -1606,7 +1606,7 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
-.glass-button.primary { background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white; border: none; }
+.glass-button.primary { background: var(--brand-gradient); color: white; border: none; }
 .glass-button.secondary { background: rgba(255, 255, 255, 0.2); color: #475569; }
 .glass-button.small { padding: 8px 16px; font-size: 13px; }
 .glass-button.disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
