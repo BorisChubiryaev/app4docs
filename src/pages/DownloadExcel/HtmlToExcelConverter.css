@@ -30,36 +30,7 @@
   pointer-events: none;
 }
 
-.converter-header {
-  color: #495057;
-  padding: 20px;
-  text-align: center;
-  position: relative;
-  background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.8);
-}
-
-.converter-header h1 {
-  font-size: 1.75rem;
-  font-weight: 800;
-  margin: 0 0 16px 0;
-  background: linear-gradient(135deg, #6c757d, #495057);
-  color: transparent;
-  background-clip: text;
-  letter-spacing: -0.8px;
-  position: relative;
-  z-index: 2;
-}
-
-.converter-header p {
-  font-size: 1.25rem;
-  color: #6c757d;
-  margin: 0;
-  font-weight: 500;
-  line-height: 1.6;
-  position: relative;
-  z-index: 2;
-}
+/* .converter-header — удалён (шапка заменена на PageShell) */
 
 .converter-content {
   padding: 50px 40px;
@@ -322,58 +293,6 @@
   font-weight: 700;
 }
 
-/* Кнопка На главную */
-.converter-header {
-  position: relative;
-}
-
-.header-content {
-  position: relative;
-  z-index: 2;
-}
-
-.home-button {
-  position: absolute;
-  left: 40px;
-  top: 50%;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 24px;
-  background: rgba(255, 255, 255, 0.3);
-  color: #495057;
-  text-decoration: none;
-  border-radius: 16px;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  
-  z-index: 3;
-  cursor: pointer;
-}
-
-.home-button:hover {
-  background: rgba(255, 255, 255, 0.5);
-}
-
-
-@keyframes liquidFlow {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.converter-header {
-  background-size: 200% 200%;
-}
-
 /* Адаптивность */
 @media (max-width: 768px) {
   .converter-content {
@@ -382,44 +301,18 @@
     gap: 28px;
   }
   
-  .converter-header {
-    padding: 40px 28px;
-  }
-  
-  .converter-header h1 {
-    font-size: 2.25rem;
-  }
-  
   .actions {
     flex-direction: column;
   }
-  
+
   .btn {
     justify-content: center;
     width: 100%;
   }
 
-  .converter-header {
-    padding-top: 80px;
-  }
-  
-  .home-button {
-    position: absolute;
-    left: 50%;
-    top: 25px;
-    margin-bottom: 0;
-  }
-
   .html-textarea {
     width: 89%;
   }
-}
-
-/* Стили для кнопки инструкции */
-.instructions-button {
-    left: auto !important;
-    right: 40px !important;
-    cursor: help;
 }
 
 /* Стили для модального окна */
@@ -2055,46 +1948,7 @@
   background: linear-gradient(135deg, #5a32a3 0%, #4a2a8a 100%);
 }
 
-/* Стили для переключателя типа конвертера */
-.converter-type-selector {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  padding: 6px;
-  position: relative;
-  z-index: 2;
-}
-
-.converter-type-btn {
-  flex: 1;
-  padding: 14px 20px;
-  border: none;
-  border-radius: 12px;
-  background: transparent;
-  color: #6c757d;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.converter-type-btn:hover {
-  background: rgba(108, 117, 125, 0.08);
-  color: #495057;
-}
-
-.converter-type-btn.active {
-  background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
-  color: white;
-  box-shadow: 0 4px 16px rgba(108, 117, 125, 0.3);
-}
+/* .converter-type-selector/.converter-type-btn заменены на .ds-tabs */
 
 /* Стили для JSON */
 .json-textarea {

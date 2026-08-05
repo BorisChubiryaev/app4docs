@@ -98,12 +98,6 @@
   margin-bottom: 40px;
 }
 
-.header-content {
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
 .header-title {
   text-align: center;
   flex: 1;
@@ -199,17 +193,7 @@
 }
 
 /* Glass Card */
-.glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 20px;
-  padding: 24px;
-  margin-bottom: 20px;
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  transition: all 0.3s ease;
-}
+/* .glass-card — канонический стиль в src/styles/components.css */
 
 .glass-card:hover {
   box-shadow: 
@@ -1240,12 +1224,6 @@
   
   .header-title h1 {
     font-size: 2rem;
-  }
-  
-  .header-content {
-    flex-direction: column;
-    gap: 16px;
-    text-align: center;
   }
   
   .glass-card {

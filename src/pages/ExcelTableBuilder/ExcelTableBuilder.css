@@ -88,49 +88,7 @@
   color: white;
 }
 
-/* ===== НАВИГАЦИЯ ===== */
-.app-navigation {
-  display: flex;
-  gap: 8px;
-  background: white;
-  padding: 8px;
-  border-radius: var(--border-radius-sm);
-  margin-bottom: 24px;
-  box-shadow: var(--box-shadow);
-}
-
-.nav-tab {
-  flex: 1;
-  padding: 16px 24px;
-  border: none;
-  background: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--gray-color);
-  cursor: pointer;
-  transition: var(--transition);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.nav-tab:hover:not(:disabled) {
-  background: var(--light-color);
-  color: var(--dark-color);
-}
-
-.nav-tab.active {
-  background: var(--primary-color);
-  color: white;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
-}
-
-.nav-tab:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+/* ===== НАВИГАЦИЯ (.app-navigation/.nav-tab заменены на .ds-tabs) ===== */
 
 /* ===== ЗАГРУЗКА ФАЙЛОВ ===== */
 .upload-area {

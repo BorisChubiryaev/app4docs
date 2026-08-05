@@ -94,6 +94,18 @@
   padding: 18px;
 }
 
+/* Канонический стиль карточек .glass-card (использовался на нескольких
+   страницах с дублирующимися, конфликтующими определениями). */
+.glass-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
 /* Заголовок секции */
 .ds-section-title {
   margin: 0 0 14px;
