@@ -1,6 +1,6 @@
 // src/components/PdfEditor.tsx
 import React, { useState, useRef, ChangeEvent, useEffect } from "react";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, degrees } from "pdf-lib";
 import PageShell from "../../components/PageShell";
 import { PdfEditorInstructions } from "./components/PdfEditorInstructions";
 
@@ -30,6 +30,8 @@ type PageItem = {
   fileName: string;
   pageNumber: number;
   isGeneratingPreview: boolean;
+  /** Дополнительный поворот страницы в градусах (0/90/180/270) */
+  rotation?: number;
 };
 
 type OutputDocument = {
@@ -77,6 +79,34 @@ const PdfEditor: React.FC = () => {
   const [loadingProgress, setLoadingProgress] =
     useState<LoadingProgress | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
+
+  // ─── Сжатие ──────────────────────────────────────────────────────
+  const [showCompress, setShowCompress] = useState(false);
+  const [compressQuality, setCompressQuality] = useState(0.85);
+  const [compressResult, setCompressResult] = useState<{
+    originalSize: number;
+    compressedSize: number;
+    ratio: number;
+    url: string;
+    fileName: string;
+  } | null>(null);
+
+  // ─── Оформление: номера страниц и водяной знак ───────────────────
+  const [showDecorate, setShowDecorate] = useState(false);
+  const [pageNumbers, setPageNumbers] = useState({
+    enabled: false,
+    position: "bottom-center",
+    format: "{n} / {total}",
+    size: 12,
+    color: "#555555",
+  });
+  const [watermark, setWatermark] = useState({
+    enabled: false,
+    text: "КОНФИДЕНЦИАЛЬНО",
+    opacity: 0.15,
+    size: 52,
+    color: "#e5484d",
+  });
 
   // ─── НОВОЕ: выходные документы (для разделения на несколько файлов) ──
   const [outputDocuments, setOutputDocuments] = useState<OutputDocument[]>([]);
@@ -818,56 +848,298 @@ const PdfEditor: React.FC = () => {
 
   // ─── Скачивание PDF ──────────────────────────────────────────────
 
+  // ─── Поворот страниц ─────────────────────────────────────────────
+
+  const rotatePages = (ids: string[], delta: number) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setPageItems((prev) =>
+      prev.map((it) =>
+        idSet.has(it.id)
+          ? { ...it, rotation: ((((it.rotation ?? 0) + delta) % 360) + 360) % 360 }
+          : it,
+      ),
+    );
+  };
+
+  const rotateSelected = (delta: number) =>
+    rotatePages([...selectedPages], delta);
+
+  // ─── Оформление: рендер текста в PNG (кириллица через canvas) ─────
+
+  const renderTextToImage = (
+    text: string,
+    opts: { fontSize: number; color: string; bold?: boolean },
+  ) => {
+    const s = 3; // супер-сэмплинг для чёткости
+    const font = `${opts.bold ? "bold " : ""}${
+      opts.fontSize * s
+    }px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+    const measureCtx = document.createElement("canvas").getContext("2d")!;
+    measureCtx.font = font;
+    const w = Math.ceil(measureCtx.measureText(text).width) + 12 * s;
+    const h = Math.ceil(opts.fontSize * s * 1.4);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d")!;
+    ctx.font = font;
+    ctx.fillStyle = opts.color;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+    ctx.fillText(text, w / 2, h / 2);
+    return {
+      dataUrl: canvas.toDataURL("image/png"),
+      width: w / s,
+      height: h / s,
+    };
+  };
+
+  const applyDecorations = async (pdfDoc: PDFDocument) => {
+    const pages = pdfDoc.getPages();
+    const total = pages.length;
+
+    let wmImg: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null;
+    let wmW = 0;
+    let wmH = 0;
+    if (watermark.enabled && watermark.text.trim()) {
+      const img = renderTextToImage(watermark.text, {
+        fontSize: watermark.size,
+        color: watermark.color,
+        bold: true,
+      });
+      wmImg = await pdfDoc.embedPng(img.dataUrl);
+      wmW = img.width;
+      wmH = img.height;
+    }
+
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
+      const { width: pw, height: ph } = page.getSize();
+
+      if (wmImg) {
+        const scale = Math.min((pw * 0.85) / wmW, 4);
+        const w = wmW * scale;
+        const h = wmH * scale;
+        const angle = 45;
+        const rad = (angle * Math.PI) / 180;
+        // Центрируем изображение с учётом поворота вокруг нижнего-левого угла
+        const rx = (w / 2) * Math.cos(rad) - (h / 2) * Math.sin(rad);
+        const ry = (w / 2) * Math.sin(rad) + (h / 2) * Math.cos(rad);
+        page.drawImage(wmImg, {
+          x: pw / 2 - rx,
+          y: ph / 2 - ry,
+          width: w,
+          height: h,
+          opacity: watermark.opacity,
+          rotate: degrees(angle),
+        });
+      }
+
+      if (pageNumbers.enabled) {
+        const label = pageNumbers.format
+          .replace("{n}", String(i + 1))
+          .replace("{total}", String(total));
+        const numImg = renderTextToImage(label, {
+          fontSize: pageNumbers.size,
+          color: pageNumbers.color,
+        });
+        const png = await pdfDoc.embedPng(numImg.dataUrl);
+        const margin = 24;
+        let x = pw / 2 - numImg.width / 2;
+        let y = margin;
+        if (pageNumbers.position.includes("top"))
+          y = ph - margin - numImg.height;
+        if (pageNumbers.position.includes("left")) x = margin;
+        if (pageNumbers.position.includes("right"))
+          x = pw - margin - numImg.width;
+        page.drawImage(png, {
+          x,
+          y,
+          width: numImg.width,
+          height: numImg.height,
+        });
+      }
+    }
+  };
+
+  // ─── Сборка PDF из выбранных страниц (с учётом поворотов) ─────────
+
+  const buildMergedBytes = async (
+    items: PageItem[],
+    decorate = false,
+  ): Promise<Uint8Array> => {
+    const mergedPdf = await PDFDocument.create();
+    const uniqueFileIds = [...new Set(items.map((it) => it.fileId))];
+    const loadedDocs = new Map<number, PDFDocument>();
+
+    for (const fileId of uniqueFileIds) {
+      const lf = loadedFilesRef.current[fileId];
+      if (!lf) continue;
+      try {
+        loadedDocs.set(
+          fileId,
+          await PDFDocument.load(cloneArrayBuffer(lf.arrayBuffer)),
+        );
+      } catch (err) {
+        console.error(`Ошибка загрузки PDFDocument fileId=${fileId}:`, err);
+      }
+    }
+
+    for (const item of items) {
+      const srcDoc = loadedDocs.get(item.fileId);
+      if (!srcDoc) continue;
+      try {
+        const [page] = await mergedPdf.copyPages(srcDoc, [item.pageIndex]);
+        if (item.rotation) {
+          const current = page.getRotation().angle;
+          page.setRotation(degrees((current + item.rotation) % 360));
+        }
+        mergedPdf.addPage(page);
+      } catch (err) {
+        console.error(`Ошибка копирования стр. ${item.pageIndex}:`, err);
+      }
+    }
+
+    if (decorate) await applyDecorations(mergedPdf);
+    return mergedPdf.save();
+  };
+
+  const triggerDownload = (bytes: Uint8Array, filename: string) => {
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  };
+
+  const formatBytes = (n: number) => {
+    if (n < 1024) return `${n} Б`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} КБ`;
+    return `${(n / 1024 / 1024).toFixed(2)} МБ`;
+  };
+
+  // ─── Сжатие (растеризация страниц в JPEG и пересборка) ────────────
+
+  const buildCompressedBytes = async (
+    items: PageItem[],
+    quality: number,
+    decorate = false,
+  ): Promise<Uint8Array> => {
+    const dpi = 150;
+    const scale = dpi / 72;
+    const maxDimension = 4096;
+    const outPdf = await PDFDocument.create();
+
+    for (const item of items) {
+      const lf = loadedFilesRef.current[item.fileId];
+      const pdfjsDoc = lf?.pdfInstance;
+      if (!pdfjsDoc) continue;
+
+      try {
+        const page = await pdfjsDoc.getPage(item.pageIndex + 1);
+        const rotation = ((page.rotate || 0) + (item.rotation ?? 0)) % 360;
+        const viewport = page.getViewport({ scale, rotation });
+
+        let width = Math.floor(viewport.width);
+        let height = Math.floor(viewport.height);
+        if (width > maxDimension || height > maxDimension) {
+          const r = Math.min(maxDimension / width, maxDimension / height);
+          width = Math.floor(width * r);
+          height = Math.floor(height * r);
+        }
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d", { alpha: false });
+        if (!ctx) continue;
+        canvas.width = width;
+        canvas.height = height;
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, width, height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+
+        const renderViewport = page.getViewport({
+          scale: scale * (width / viewport.width),
+          rotation,
+        });
+        await page.render({
+          canvasContext: ctx,
+          viewport: renderViewport,
+          background: "white",
+          intent: "print",
+        }).promise;
+
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        const img = await outPdf.embedJpg(dataUrl);
+        const pdfPage = outPdf.addPage([width, height]);
+        pdfPage.drawImage(img, { x: 0, y: 0, width, height });
+
+        canvas.width = 0;
+        canvas.height = 0;
+      } catch (err) {
+        console.warn(`Ошибка сжатия страницы:`, err);
+      }
+    }
+
+    if (decorate) await applyDecorations(outPdf);
+    return outPdf.save();
+  };
+
+  const runCompress = async (items: PageItem[]) => {
+    if (items.length === 0) return;
+    setIsProcessing(true);
+    if (compressResult) URL.revokeObjectURL(compressResult.url);
+    setCompressResult(null);
+    try {
+      const originalBytes = await buildMergedBytes(items, true);
+      const compressedBytes = await buildCompressedBytes(
+        items,
+        compressQuality,
+        true,
+      );
+      const originalSize = originalBytes.byteLength;
+      const compressedSize = compressedBytes.byteLength;
+      const url = URL.createObjectURL(
+        new Blob([compressedBytes], { type: "application/pdf" }),
+      );
+      setCompressResult({
+        originalSize,
+        compressedSize,
+        ratio:
+          originalSize > 0
+            ? Math.round((1 - compressedSize / originalSize) * 100)
+            : 0,
+        url,
+        fileName: `compressed-${Date.now()}.pdf`,
+      });
+    } catch (err) {
+      console.error("Ошибка сжатия:", err);
+      alert("Произошла ошибка при сжатии PDF");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const closeCompress = () => {
+    if (compressResult) URL.revokeObjectURL(compressResult.url);
+    setCompressResult(null);
+    setShowCompress(false);
+  };
+
   const downloadPdfFromItems = async (
     items: PageItem[],
     filenamePrefix: string,
   ) => {
     if (items.length === 0) return;
     setIsProcessing(true);
-
     try {
-      const mergedPdf = await PDFDocument.create();
-
-      const uniqueFileIds = [...new Set(items.map((it) => it.fileId))];
-      const loadedDocs = new Map<number, PDFDocument>();
-
-      for (const fileId of uniqueFileIds) {
-        const lf = loadedFilesRef.current[fileId];
-        if (lf) {
-          try {
-            const doc = await PDFDocument.load(
-              cloneArrayBuffer(lf.arrayBuffer),
-            );
-            loadedDocs.set(fileId, doc);
-          } catch (err) {
-            console.error(`Ошибка загрузки PDFDocument fileId=${fileId}:`, err);
-          }
-        }
-      }
-
-      for (const item of items) {
-        const srcDoc = loadedDocs.get(item.fileId);
-        if (srcDoc) {
-          try {
-            const [page] = await mergedPdf.copyPages(srcDoc, [item.pageIndex]);
-            mergedPdf.addPage(page);
-          } catch (err) {
-            console.error(`Ошибка копирования стр. ${item.pageIndex}:`, err);
-          }
-        }
-      }
-
-      const pdfBytes = await mergedPdf.save();
-      const blob = new Blob([pdfBytes], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${filenamePrefix}-${Date.now()}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 100);
+      const pdfBytes = await buildMergedBytes(items, true);
+      triggerDownload(pdfBytes, `${filenamePrefix}-${Date.now()}.pdf`);
     } catch (err) {
       console.error("Ошибка создания PDF:", err);
       alert("Произошла ошибка при создании PDF");
@@ -917,8 +1189,8 @@ const PdfEditor: React.FC = () => {
 
   return (
     <PageShell
-      title="PDF Редактор"
-      subtitle="Объединяйте, переставляйте и удаляйте страницы PDF файлов"
+      title="PDF Studio"
+      subtitle="Объединяйте, переставляйте, поворачивайте, удаляйте и сжимайте страницы PDF — прямо в браузере"
       onShowInstructions={() => setShowInstructions(true)}
     >
 
@@ -936,49 +1208,76 @@ const PdfEditor: React.FC = () => {
               {deleteHistory.length > 0 && (
                 <button
                   onClick={undoLastDelete}
-                  className="toolbar-button undo-button"
+                  className="toolbar-button icon-only"
                   title="Отменить удаление (Ctrl/cmd + Z)"
                 >
-                  ↩️ Отменить
+                  ↩️
                 </button>
               )}
               {selectedCount > 0 && (
                 <>
                   <button
-                    onClick={downloadSelectedPdf}
-                    className="toolbar-button download-button"
-                    title="Скачать только выделенные страницы"
+                    onClick={() => rotateSelected(90)}
+                    className="toolbar-button icon-only"
+                    title={`Повернуть выделенные на 90° (${selectedCount})`}
                   >
-                    💾 Скачать выделенные ({selectedCount})
+                    ↻
                   </button>
                   <button
                     onClick={addSelectedToNewDocument}
-                    className="toolbar-button"
-                    title="Создать отдельный документ из выделенных страниц"
+                    className="toolbar-button icon-only"
+                    title="Выделенные → в новый документ"
                   >
-                    📂 В новый документ
+                    📂
+                  </button>
+                  <button
+                    onClick={downloadSelectedPdf}
+                    className="toolbar-button icon-only"
+                    title={`Скачать выделенные (${selectedCount})`}
+                  >
+                    💾
                   </button>
                   <button
                     onClick={deleteSelectedPages}
-                    className="toolbar-button delete-selected-button"
-                    title="Удалить выделенные (Delete)"
+                    className="toolbar-button icon-only danger"
+                    title={`Удалить выделенные (${selectedCount})`}
                   >
-                    🗑️ Удалить ({selectedCount})
+                    🗑️
                   </button>
+                  <span className="toolbar-divider" />
                 </>
               )}
               <button
                 onClick={downloadMergedPdf}
                 disabled={isProcessing}
-                className="toolbar-button download-button"
+                className="toolbar-button primary"
               >
-                {isProcessing ? "⏳" : "💾"} Скачать всё
+                {isProcessing ? "⏳" : "💾"} Скачать
+              </button>
+              <button
+                onClick={() => setShowCompress(true)}
+                disabled={isProcessing}
+                className="toolbar-button"
+                title="Сжать PDF (уменьшить размер файла)"
+              >
+                🗜️ Сжать
+              </button>
+              <button
+                onClick={() => setShowDecorate(true)}
+                disabled={isProcessing}
+                className={`toolbar-button icon-only ${
+                  pageNumbers.enabled || watermark.enabled ? "is-active" : ""
+                }`}
+                title="Номера страниц и водяной знак"
+              >
+                🔖
               </button>
               <button
                 onClick={clearAll}
-                className="toolbar-button clear-button"
+                className="toolbar-button icon-only"
+                title="Очистить всё"
               >
-                🗑️ Очистить
+                🧹
               </button>
             </div>
           </div>
@@ -1079,6 +1378,16 @@ const PdfEditor: React.FC = () => {
                       🔍
                     </button>
                     <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        rotatePages([item.id], 90);
+                      }}
+                      className="preview-page-button"
+                      title="Повернуть на 90°"
+                    >
+                      ↻
+                    </button>
+                    <button
                       onClick={(e) => removePage(item.id, e)}
                       className="delete-page-button"
                       title="Удалить"
@@ -1099,6 +1408,11 @@ const PdfEditor: React.FC = () => {
                         alt={`Страница ${item.pageNumber}`}
                         className="page-preview-image"
                         loading="lazy"
+                        style={
+                          item.rotation
+                            ? { transform: `rotate(${item.rotation}deg)` }
+                            : undefined
+                        }
                       />
                     ) : failedPreviews.has(item.id) ? (
                       <div className="page-preview-placeholder error-state">
@@ -1370,6 +1684,339 @@ const PdfEditor: React.FC = () => {
           <div className="empty-icon">📄</div>
           <h3 className="empty-title">Нет загруженных страниц</h3>
           <p className="empty-text">Загрузите PDF файлы для начала работы</p>
+        </div>
+      )}
+
+      {showCompress && (
+        <div
+          className="im-overlay"
+          onClick={() => !isProcessing && closeCompress()}
+        >
+          <div
+            className="im-modal"
+            style={{ maxWidth: 460 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="im-header">
+              <h2 className="im-title">🗜️ Сжатие PDF</h2>
+              <button
+                className="im-close"
+                onClick={() => !isProcessing && closeCompress()}
+                aria-label="Закрыть"
+              >
+                ✕
+              </button>
+            </div>
+
+            {compressResult ? (
+              <>
+                <div className="im-body">
+                  <div className="compress-result">
+                    <div className="compress-result__row">
+                      <span>Было</span>
+                      <strong>{formatBytes(compressResult.originalSize)}</strong>
+                    </div>
+                    <div className="compress-result__arrow">↓</div>
+                    <div className="compress-result__row">
+                      <span>Стало</span>
+                      <strong>
+                        {formatBytes(compressResult.compressedSize)}
+                      </strong>
+                    </div>
+                    <div
+                      className={`compress-result__badge ${
+                        compressResult.ratio > 0
+                          ? "is-good"
+                          : "is-bad"
+                      }`}
+                    >
+                      {compressResult.ratio > 0
+                        ? `Экономия ${compressResult.ratio}%`
+                        : `Файл не уменьшился (${compressResult.ratio}%)`}
+                    </div>
+                  </div>
+                  {compressResult.ratio <= 0 && (
+                    <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                      Для текстовых PDF растеризация может не уменьшить размер.
+                      Попробуйте качество ниже или оставьте исходный файл.
+                    </p>
+                  )}
+                </div>
+                <div className="im-footer" style={{ gap: 10 }}>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => setCompressResult(null)}
+                  >
+                    ← Сжать заново
+                  </button>
+                  <a
+                    className="btn-primary"
+                    href={compressResult.url}
+                    download={compressResult.fileName}
+                  >
+                    💾 Скачать
+                  </a>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="im-body">
+                  <p>
+                    Страницы будут перерисованы в изображения — это эффективно
+                    уменьшает вес PDF со сканами и картинками. Учитываются
+                    текущий порядок, удаления и повороты страниц.
+                  </p>
+                  <label
+                    className="ds-section-title"
+                    style={{ marginTop: 12, marginBottom: 8 }}
+                  >
+                    Качество: {Math.round(compressQuality * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min={0.3}
+                    max={0.95}
+                    step={0.05}
+                    value={compressQuality}
+                    onChange={(e) =>
+                      setCompressQuality(Number(e.target.value))
+                    }
+                    style={{ width: "100%" }}
+                  />
+                  <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                    Ниже качество — меньше файл. 70–85% — хороший баланс.
+                  </p>
+                </div>
+                <div className="im-footer" style={{ gap: 10 }}>
+                  {selectedCount > 0 && (
+                    <button
+                      className="btn-secondary"
+                      disabled={isProcessing}
+                      onClick={() =>
+                        runCompress(
+                          pageItems.filter((p) => selectedPages.has(p.id)),
+                        )
+                      }
+                    >
+                      Сжать выделенные ({selectedCount})
+                    </button>
+                  )}
+                  <button
+                    className="btn-primary"
+                    disabled={isProcessing}
+                    onClick={() => runCompress(pageItems)}
+                  >
+                    {isProcessing ? "⏳ Обработка..." : "Сжать"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showDecorate && (
+        <div className="im-overlay" onClick={() => setShowDecorate(false)}>
+          <div
+            className="im-modal"
+            style={{ maxWidth: 520 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="im-header">
+              <h2 className="im-title">🔖 Оформление</h2>
+              <button
+                className="im-close"
+                onClick={() => setShowDecorate(false)}
+                aria-label="Закрыть"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="im-body">
+              {/* Номера страниц */}
+              <label className="decorate-toggle">
+                <input
+                  type="checkbox"
+                  checked={pageNumbers.enabled}
+                  onChange={(e) =>
+                    setPageNumbers({
+                      ...pageNumbers,
+                      enabled: e.target.checked,
+                    })
+                  }
+                />
+                <span className="ds-section-title" style={{ margin: 0 }}>
+                  🔢 Номера страниц
+                </span>
+              </label>
+              {pageNumbers.enabled && (
+                <div className="decorate-grid">
+                  <label>
+                    Позиция
+                    <select
+                      className="ds-select"
+                      value={pageNumbers.position}
+                      onChange={(e) =>
+                        setPageNumbers({
+                          ...pageNumbers,
+                          position: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="bottom-center">Снизу по центру</option>
+                      <option value="bottom-right">Снизу справа</option>
+                      <option value="bottom-left">Снизу слева</option>
+                      <option value="top-center">Сверху по центру</option>
+                      <option value="top-right">Сверху справа</option>
+                      <option value="top-left">Сверху слева</option>
+                    </select>
+                  </label>
+                  <label>
+                    Формат
+                    <select
+                      className="ds-select"
+                      value={pageNumbers.format}
+                      onChange={(e) =>
+                        setPageNumbers({
+                          ...pageNumbers,
+                          format: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="{n} / {total}">1 / 10</option>
+                      <option value="{n}">1</option>
+                      <option value="- {n} -">- 1 -</option>
+                      <option value="Стр. {n}">Стр. 1</option>
+                    </select>
+                  </label>
+                  <label>
+                    Размер: {pageNumbers.size}
+                    <input
+                      type="range"
+                      min={8}
+                      max={28}
+                      value={pageNumbers.size}
+                      onChange={(e) =>
+                        setPageNumbers({
+                          ...pageNumbers,
+                          size: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Цвет
+                    <input
+                      type="color"
+                      value={pageNumbers.color}
+                      onChange={(e) =>
+                        setPageNumbers({
+                          ...pageNumbers,
+                          color: e.target.value,
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+              )}
+
+              <hr className="decorate-sep" />
+
+              {/* Водяной знак */}
+              <label className="decorate-toggle">
+                <input
+                  type="checkbox"
+                  checked={watermark.enabled}
+                  onChange={(e) =>
+                    setWatermark({ ...watermark, enabled: e.target.checked })
+                  }
+                />
+                <span className="ds-section-title" style={{ margin: 0 }}>
+                  💧 Водяной знак
+                </span>
+              </label>
+              {watermark.enabled && (
+                <div className="decorate-grid">
+                  <label style={{ gridColumn: "1 / -1" }}>
+                    Текст
+                    <input
+                      type="text"
+                      className="ds-input"
+                      value={watermark.text}
+                      onChange={(e) =>
+                        setWatermark({ ...watermark, text: e.target.value })
+                      }
+                      placeholder="Напр. КОНФИДЕНЦИАЛЬНО"
+                    />
+                  </label>
+                  <label>
+                    Прозрачность: {Math.round(watermark.opacity * 100)}%
+                    <input
+                      type="range"
+                      min={0.05}
+                      max={0.6}
+                      step={0.05}
+                      value={watermark.opacity}
+                      onChange={(e) =>
+                        setWatermark({
+                          ...watermark,
+                          opacity: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Размер: {watermark.size}
+                    <input
+                      type="range"
+                      min={24}
+                      max={96}
+                      value={watermark.size}
+                      onChange={(e) =>
+                        setWatermark({
+                          ...watermark,
+                          size: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Цвет
+                    <input
+                      type="color"
+                      value={watermark.color}
+                      onChange={(e) =>
+                        setWatermark({ ...watermark, color: e.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+              )}
+
+              <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                Оформление применяется при скачивании (в т.ч. при сжатии).
+                Кириллица поддерживается.
+              </p>
+            </div>
+            <div className="im-footer" style={{ gap: 10 }}>
+              <button
+                className="btn-secondary"
+                onClick={() => setShowDecorate(false)}
+              >
+                Готово
+              </button>
+              <button
+                className="btn-primary"
+                disabled={isProcessing || pageItems.length === 0}
+                onClick={() => {
+                  setShowDecorate(false);
+                  downloadMergedPdf();
+                }}
+              >
+                💾 Скачать с оформлением
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

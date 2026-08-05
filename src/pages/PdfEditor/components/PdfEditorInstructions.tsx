@@ -13,8 +13,24 @@ export const PdfEditorInstructions: React.FC<PdfEditorInstructionsProps> = ({
   <InstructionsModal
     isOpen={isOpen}
     onClose={onClose}
-    title="📄 Инструкция по работе с PDF Редактором"
+    title="📄 Инструкция по работе с PDF Studio"
   >
+    <section className="instruction-section">
+      <h3>🔁 Поворот и 🗜️ сжатие</h3>
+      <ul>
+        <li>
+          <strong>Поворот:</strong> наведите на страницу и нажмите ↻ (или
+          выделите несколько и «↻ Повернуть») — поворот на 90°. Учитывается при
+          скачивании.
+        </li>
+        <li>
+          <strong>Сжатие:</strong> кнопка «🗜️ Сжать» — страницы перерисовываются
+          в изображения, что уменьшает вес PDF (эффективно для сканов и
+          картинок). Можно сжать все или только выделенные.
+        </li>
+      </ul>
+    </section>
+
     <section className="instruction-section">
       <h3>📁 1. Загрузка PDF файлов</h3>
       <ul>

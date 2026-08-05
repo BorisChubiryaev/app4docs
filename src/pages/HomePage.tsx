@@ -19,54 +19,41 @@ const AnimatedBackground = memo(() => (
   </div>
 ));
 
-// ─── Карточка инструмента ───
+// ─── Карточка инструмента (компактная плитка) ───
 const ToolCard = memo(({ tool, index }) => (
   <Link
     to={tool.path}
     className="lg-card"
-    style={{ "--card-delay": `${index * 0.06}s` }}
+    style={{ "--card-delay": `${index * 0.04}s` }}
   >
-    {/* Стеклянные слои */}
-    <div className="lg-card__glass" />
-    <div className="lg-card__shine" />
-    <div className="lg-card__edge" />
-
-    {/* Контент */}
-    <div className="lg-card__body">
-      <div className="lg-card__top">
-        <span className="lg-card__icon">{tool.icon}</span>
-        <span className="lg-card__num">
-          {String(index + 1).padStart(2, "0")}
-        </span>
-      </div>
-
-      <h3 className="lg-card__title">{tool.title}</h3>
-      <p className="lg-card__desc">{tool.description}</p>
-
-      <ul className="lg-card__features">
-        {tool.features.map((f, i) => (
-          <li key={i} className="lg-card__feature">
-            <span className="lg-card__check">✓</span>
-            {f}
-          </li>
-        ))}
-      </ul>
-
-      <div className="lg-card__action">
-        <span className="lg-card__cta">
-          Открыть
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M6 3l5 5-5 5"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
-      </div>
+    <div className="lg-card__head">
+      <span className="lg-card__icon">{tool.icon}</span>
+      <svg
+        className="lg-card__arrow"
+        width="18"
+        height="18"
+        viewBox="0 0 16 16"
+        fill="none"
+      >
+        <path
+          d="M6 3l5 5-5 5"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
     </div>
+    <h3 className="lg-card__title">{tool.title}</h3>
+    <p className="lg-card__desc">{tool.description}</p>
+    <ul className="lg-card__tags">
+      {tool.features.slice(0, 2).map((f, i) => (
+        <li key={i} className="lg-card__tag">
+          <span className="lg-card__check">✓</span>
+          {f}
+        </li>
+      ))}
+    </ul>
   </Link>
 ));
 
@@ -177,21 +164,17 @@ const tools = [
     features: ["Настройка размеров", "Выбор фона", "Сохранение пропорций"],
   },
   {
-    title: "PDF компрессор",
-    path: "/PdfCompressor",
-    description: "Уменьшение конечного веса PDF-файла",
-    icon: "🗜️",
-    features: ["Уменьшение веса файла", "Минимальная потеря качества"],
-  },
-  {
-    title: "PDF редактор",
+    title: "PDF Studio",
     path: "/PdfEditor",
-    description: "Редактор PDF-файлов",
-    icon: "📝",
+    description:
+      "Всё для работы со страницами PDF в одном месте — объединение, порядок, повороты, сжатие",
+    icon: "📄",
     features: [
-      "Перемещение страниц",
-      "Удаление страниц",
-      "Сохранение изменений",
+      "Объединение и разделение файлов",
+      "Перемещение и удаление страниц",
+      "Поворот страниц",
+      "Сжатие PDF (уменьшение веса)",
+      "✅ Работает офлайн, файлы не покидают устройство",
     ],
   },
   {
@@ -312,7 +295,7 @@ const HomePage = () => {
         <div className="lg-header__content">
           <div className="lg-header__left">
             <div className="lg-logo">
-              <svg width="180" height="82" viewBox="0 0 157 77" fill="none">
+              <svg width="98" height="48" viewBox="0 0 157 77" fill="none">
                 <path
                   d="M34.85 27.87Q34.93 27.71 34.93 27.51L34.93 19.96Q34.93 19.77 34.85 19.61Q34.8 19.5 34.71 19.42Q34.63 19.33 34.52 19.28Q34.36 19.2 34.17 19.2L3.9 19.2Q3.7 19.2 3.55 19.28Q3.44 19.33 3.35 19.42Q3.27 19.5 3.21 19.61Q3.14 19.77 3.14 19.96L3.14 63.23Q3.14 63.37 3.18 63.5Q3.23 63.65 3.35 63.78Q3.44 63.86 3.55 63.92Q3.7 64 3.9 64L34.17 64Q34.36 64 34.52 63.92Q34.63 63.86 34.71 63.78Q34.83 63.65 34.89 63.5Q34.93 63.37 34.93 63.23L34.93 55.68Q34.93 55.49 34.85 55.33Q34.8 55.22 34.71 55.14Q34.61 55.03 34.49 54.97Q34.34 54.9 34.17 54.9L14.07 54.9Q13.92 54.9 13.84 54.82Q13.76 54.75 13.76 54.59L13.76 46.14Q13.76 45.98 13.84 45.9Q13.92 45.82 14.07 45.82L26.93 45.82Q27.13 45.82 27.29 45.74Q27.39 45.69 27.48 45.6Q27.62 45.46 27.68 45.3Q27.71 45.18 27.71 45.06L27.71 37.56Q27.71 37.41 27.66 37.29Q27.61 37.14 27.48 37.03Q27.38 36.92 27.25 36.86Q27.11 36.79 26.93 36.79L14.07 36.79Q13.92 36.79 13.84 36.71Q13.76 36.64 13.76 36.48L13.76 28.6Q13.76 28.43 13.85 28.35Q13.92 28.28 14.07 28.28L34.17 28.28Q34.36 28.28 34.52 28.2Q34.63 28.15 34.71 28.06Q34.8 27.97 34.85 27.87Z"
                   fill="#1d1d1f"
@@ -340,15 +323,14 @@ const HomePage = () => {
               </svg>
             </div>
             <p className="lg-header__sub">
-              Мощные инструменты для работы
-              <br />с Excel файлами и данными
+              Инструменты для работы с документами и данными
             </p>
           </div>
 
           <div className="lg-header__right">
             <svg
               width="auto"
-              height="56"
+              height="38"
               viewBox="0 0 579.913 117"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -446,11 +428,7 @@ const HomePage = () => {
         <div className="lg-footer__glass" />
         <div className="lg-footer__content">
           <div className="lg-footer__info">
-            <h2 className="lg-footer__title">Нужна помощь?</h2>
-            <p className="lg-footer__text">
-              Если у вас возникли вопросы или предложения по улучшению
-              инструментов
-            </p>
+            <span className="lg-footer__title">Нужна помощь?</span>
           </div>
           <div className="lg-footer__actions">
             <button

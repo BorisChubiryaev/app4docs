@@ -440,6 +440,7 @@ const DocMatchGame: React.FC = () => {
     <PageShell
       title="Документный Три-в-Ряд 🎮"
       subtitle={`Уровень ${level}: собери ${currentTarget} очков!`}
+      fill
     >
 
         <div className="game-layout">

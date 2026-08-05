@@ -14,6 +14,8 @@ interface PageShellProps {
   actions?: React.ReactNode;
   /** Максимальная ширина контента, px или строка. По умолчанию 1200 */
   width?: number | string;
+  /** Занять весь экран без прокрутки страницы (контент сам управляет высотой) */
+  fill?: boolean;
   children: React.ReactNode;
 }
 
@@ -30,9 +32,10 @@ const PageShell: React.FC<PageShellProps> = ({
   showHome = true,
   actions,
   width = 1200,
+  fill = false,
   children,
 }) => (
-  <div className="ds-page">
+  <div className={`ds-page${fill ? " ds-page--fill" : ""}`}>
     <header className="ds-page__header">
       <div className="ds-page__header-inner" style={{ maxWidth: width }}>
         <div className="ds-page__nav ds-page__nav--left">
@@ -66,7 +69,10 @@ const PageShell: React.FC<PageShellProps> = ({
       </div>
     </header>
 
-    <main className="ds-page__body" style={{ maxWidth: width }}>
+    <main
+      className={`ds-page__body${fill ? " ds-page__body--fill" : ""}`}
+      style={{ maxWidth: width }}
+    >
       {children}
     </main>
   </div>

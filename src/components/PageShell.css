@@ -10,6 +10,26 @@
   font-family: var(--font-sans);
 }
 
+/* Режим на весь экран без прокрутки страницы */
+.ds-page--fill {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.ds-page--fill .ds-page__header {
+  flex: none;
+}
+.ds-page__body--fill {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 24px 16px;
+}
+
 /* ── Шапка ── */
 .ds-page__header {
   position: sticky;
