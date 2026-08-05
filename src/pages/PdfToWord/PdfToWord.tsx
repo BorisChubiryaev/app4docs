@@ -1173,15 +1173,15 @@ const PdfToWord: React.FC = () => {
     >
 
         {/* Табы */}
-        <div className="mode-tabs">
+        <div className="ds-tabs ds-tabs--fill">
           <button
-            className={`mode-tab ${mode === "pdf-to-word" ? "active" : ""}`}
+            className={`ds-tab ${mode === "pdf-to-word" ? "ds-tab--active" : ""}`}
             onClick={() => switchMode("pdf-to-word")}
           >
             <span className="tab-label">PDF → Word</span>
           </button>
           <button
-            className={`mode-tab ${mode === "word-to-pdf" ? "active" : ""}`}
+            className={`ds-tab ${mode === "word-to-pdf" ? "ds-tab--active" : ""}`}
             onClick={() => switchMode("word-to-pdf")}
           >
             <span className="tab-label">Word → PDF</span>

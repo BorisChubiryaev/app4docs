@@ -1104,21 +1104,21 @@ const ComparePage: React.FC = () => {
           </div>
         </div>
 
-        <div className="word-comparison-tabs">
+        <div className="ds-tabs ds-tabs--fill">
           <button
-            className={`comparison-tab ${activeWordTab === "all" ? "active" : ""}`}
+            className={`ds-tab ${activeWordTab === "all" ? "ds-tab--active" : ""}`}
             onClick={() => setActiveWordTab("all")}
           >
             Все элементы ({wordDifferences.length})
           </button>
           <button
-            className={`comparison-tab ${activeWordTab === "differences" ? "active" : ""}`}
+            className={`ds-tab ${activeWordTab === "differences" ? "ds-tab--active" : ""}`}
             onClick={() => setActiveWordTab("differences")}
           >
             Различия ({differentItems.length})
           </button>
           <button
-            className={`comparison-tab ${activeWordTab === "identical" ? "active" : ""}`}
+            className={`ds-tab ${activeWordTab === "identical" ? "ds-tab--active" : ""}`}
             onClick={() => setActiveWordTab("identical")}
           >
             Идентичные ({identicalItems.length})

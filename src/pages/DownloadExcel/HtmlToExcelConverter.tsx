@@ -1341,15 +1341,15 @@ const HtmlToExcelConverter: React.FC = () => {
               </div>
 
               {/* Переключатель типа конвертера */}
-              <div className="converter-type-selector">
+              <div className="ds-tabs ds-tabs--fill">
                 <button
-                  className={`converter-type-btn ${converterType === "html" ? "active" : ""}`}
+                  className={`ds-tab ${converterType === "html" ? "ds-tab--active" : ""}`}
                   onClick={() => handleConverterTypeChange("html")}
                 >
                   📄 HTML в Excel
                 </button>
                 <button
-                  className={`converter-type-btn ${converterType === "json" ? "active" : ""}`}
+                  className={`ds-tab ${converterType === "json" ? "ds-tab--active" : ""}`}
                   onClick={() => handleConverterTypeChange("json")}
                 >
                   📊 JSON в Excel

@@ -715,22 +715,22 @@ const ExcelTableBuilder: React.FC = () => {
     >
 
       {/* Навигация */}
-      <nav className="app-navigation">
+      <nav className="ds-tabs ds-tabs--fill">
         <button
-          className={`nav-tab ${activeTab === "upload" ? "active" : ""}`}
+          className={`ds-tab ${activeTab === "upload" ? "ds-tab--active" : ""}`}
           onClick={() => setActiveTab("upload")}
         >
           📁 Загрузка файлов {files.length > 0 && `(${files.length})`}
         </button>
         <button
-          className={`nav-tab ${activeTab === "configure" ? "active" : ""}`}
+          className={`ds-tab ${activeTab === "configure" ? "ds-tab--active" : ""}`}
           onClick={() => setActiveTab("configure")}
           disabled={excelData.length === 0}
         >
           ⚙️ Настройка
         </button>
         <button
-          className={`nav-tab ${activeTab === "result" ? "active" : ""}`}
+          className={`ds-tab ${activeTab === "result" ? "ds-tab--active" : ""}`}
           onClick={() => setActiveTab("result")}
           disabled={groupedData.length === 0}
         >

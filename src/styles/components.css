@@ -148,13 +148,25 @@
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.ds-tab:hover:not(.ds-tab--active) {
+.ds-tab:hover:not(.ds-tab--active):not(:disabled) {
   color: var(--ink);
+}
+.ds-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .ds-tab--active {
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow-sm);
+}
+/* Полноширинный вариант: кнопки делят ширину поровну */
+.ds-tabs--fill {
+  display: flex;
+  width: 100%;
+}
+.ds-tabs--fill .ds-tab {
+  flex: 1;
 }
 
 /* Зона загрузки файлов */

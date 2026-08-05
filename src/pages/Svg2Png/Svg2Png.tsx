@@ -319,18 +319,18 @@ const Svg2Png: React.FC = () => {
             {/* Левая колонка - Ввод */}
             <div className="input-column">
               {/* Вкладки */}
-              <div className="input-tabs">
+              <div className="ds-tabs ds-tabs--fill">
                 <button
-                  className={`tab-button ${
-                    activeTab === "file" ? "active" : ""
+                  className={`ds-tab ${
+                    activeTab === "file" ? "ds-tab--active" : ""
                   }`}
                   onClick={() => setActiveTab("file")}
                 >
                   📁 Загрузить файл
                 </button>
                 <button
-                  className={`tab-button ${
-                    activeTab === "code" ? "active" : ""
+                  className={`ds-tab ${
+                    activeTab === "code" ? "ds-tab--active" : ""
                   }`}
                   onClick={() => setActiveTab("code")}
                 >
