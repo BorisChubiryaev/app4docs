@@ -241,11 +241,125 @@ const tools = [
   // },
 ];
 
+// ─── Переключатель вида ───
+const LAYOUTS = [
+  { id: "grid", label: "Сетка", icon: "▦" },
+  { id: "menu", label: "Меню", icon: "☰" },
+  { id: "list", label: "Список", icon: "≣" },
+];
+
+const LayoutSwitcher = ({ value, onChange }) => (
+  <div className="hp-switch" role="tablist" aria-label="Вид главной страницы">
+    {LAYOUTS.map((l) => (
+      <button
+        key={l.id}
+        type="button"
+        role="tab"
+        aria-selected={value === l.id}
+        className={`hp-switch__btn ${value === l.id ? "is-active" : ""}`}
+        onClick={() => onChange(l.id)}
+        title={`Вид: ${l.label}`}
+      >
+        <span className="hp-switch__ico">{l.icon}</span>
+        <span className="hp-switch__label">{l.label}</span>
+      </button>
+    ))}
+  </div>
+);
+
+// ─── Вариант «Сетка» ───
+const GridLayout = memo(() => (
+  <main className="lg-main">
+    <div className="lg-grid">
+      {tools.map((tool, i) => (
+        <ToolCard key={tool.path} tool={tool} index={i} />
+      ))}
+    </div>
+  </main>
+));
+
+// ─── Вариант «Меню»: рельс иконок + деталь при наведении ───
+const MenuLayout = memo(() => {
+  const [active, setActive] = useState(0);
+  const t = tools[active];
+  return (
+    <main className="hp-menu">
+      <nav className="hp-menu__rail">
+        {tools.map((tool, i) => (
+          <Link
+            key={tool.path}
+            to={tool.path}
+            className={`hp-menu__item ${i === active ? "is-active" : ""}`}
+            onMouseEnter={() => setActive(i)}
+            onFocus={() => setActive(i)}
+          >
+            <span className="hp-menu__ico">{tool.icon}</span>
+            <span className="hp-menu__name">{tool.title}</span>
+          </Link>
+        ))}
+      </nav>
+      <section className="hp-menu__detail" key={t.path}>
+        <div className="hp-menu__detail-icon">{t.icon}</div>
+        <h2 className="hp-menu__detail-title">{t.title}</h2>
+        <p className="hp-menu__detail-desc">{t.description}</p>
+        <ul className="hp-menu__detail-features">
+          {t.features.map((f, i) => (
+            <li key={i}>
+              <span className="lg-card__check">✓</span>
+              {f}
+            </li>
+          ))}
+        </ul>
+        <Link to={t.path} className="lg-btn lg-btn--primary hp-menu__open">
+          Открыть →
+        </Link>
+      </section>
+    </main>
+  );
+});
+
+// ─── Вариант «Список»: плотный двухколоночный ───
+const ListLayout = memo(() => (
+  <main className="hp-list">
+    {tools.map((tool) => (
+      <Link key={tool.path} to={tool.path} className="hp-list__row">
+        <span className="hp-list__ico">{tool.icon}</span>
+        <span className="hp-list__text">
+          <span className="hp-list__title">{tool.title}</span>
+          <span className="hp-list__desc">{tool.description}</span>
+        </span>
+        <svg
+          className="hp-list__arrow"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+        >
+          <path
+            d="M6 3l5 5-5 5"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </Link>
+    ))}
+  </main>
+));
+
 // ─── Главная страница ───
 const HomePage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadedFilename, setDownloadedFilename] = useState<string>("");
+  const [layout, setLayout] = useState<string>(
+    () => localStorage.getItem("hp-layout") || "grid",
+  );
+  const changeLayout = useCallback((id: string) => {
+    setLayout(id);
+    localStorage.setItem("hp-layout", id);
+  }, []);
 
   // Добавьте эффект для обработки URL при загрузке главной страницы:
   useEffect(() => {
@@ -326,6 +440,8 @@ const HomePage = () => {
               Инструменты для работы с документами и данными
             </p>
           </div>
+
+          <LayoutSwitcher value={layout} onChange={changeLayout} />
 
           <div className="lg-header__right">
             <svg
@@ -414,14 +530,14 @@ const HomePage = () => {
         </div>
       </header>
 
-      {/* ─── Сетка карточек ─── */}
-      <main className="lg-main">
-        <div className="lg-grid">
-          {tools.map((tool, i) => (
-            <ToolCard key={tool.path} tool={tool} index={i} />
-          ))}
-        </div>
-      </main>
+      {/* ─── Активный вариант отображения ─── */}
+      {layout === "menu" ? (
+        <MenuLayout />
+      ) : layout === "list" ? (
+        <ListLayout />
+      ) : (
+        <GridLayout />
+      )}
 
       {/* ─── Footer / Support ─── */}
       <footer className="lg-footer">
