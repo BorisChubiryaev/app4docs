@@ -1482,3 +1482,21 @@
     width: 100%;
   }
 }
+
+/* Бейдж наличия аннотаций на миниатюре страницы */
+.page-annot-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--brand-gradient, linear-gradient(135deg, #515dad, #ff1c77));
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}

@@ -1,8 +1,9 @@
 // src/components/PdfEditor.tsx
 import React, { useState, useRef, ChangeEvent, useEffect } from "react";
-import { PDFDocument, degrees } from "pdf-lib";
+import { PDFDocument, degrees, rgb } from "pdf-lib";
 import PageShell from "../../components/PageShell";
 import { PdfEditorInstructions } from "./components/PdfEditorInstructions";
+import PageAnnotator, { type Annotation } from "./components/PageAnnotator";
 
 import "./PdfEditor.css";
 
@@ -32,6 +33,8 @@ type PageItem = {
   isGeneratingPreview: boolean;
   /** Дополнительный поворот страницы в градусах (0/90/180/270) */
   rotation?: number;
+  /** Аннотации (текст, фигуры, рисование, картинки) поверх страницы */
+  annotations?: Annotation[];
 };
 
 type OutputDocument = {
@@ -79,6 +82,12 @@ const PdfEditor: React.FC = () => {
   const [loadingProgress, setLoadingProgress] =
     useState<LoadingProgress | null>(null);
   const [showInstructions, setShowInstructions] = useState(false);
+
+  // ─── Редактор-слой ───────────────────────────────────────────────
+  const [editing, setEditing] = useState<{ item: PageItem; bg: string } | null>(
+    null,
+  );
+  const [editingLoading, setEditingLoading] = useState(false);
 
   // ─── Сжатие ──────────────────────────────────────────────────────
   const [showCompress, setShowCompress] = useState(false);
@@ -865,6 +874,148 @@ const PdfEditor: React.FC = () => {
   const rotateSelected = (delta: number) =>
     rotatePages([...selectedPages], delta);
 
+  // ─── Редактор-слой: открытие и сохранение ────────────────────────
+
+  const openEditor = async (item: PageItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setEditingLoading(true);
+    try {
+      const bg = await renderHighResPreview(item.fileId, item.pageIndex);
+      if (bg) setEditing({ item, bg });
+    } finally {
+      setEditingLoading(false);
+    }
+  };
+
+  // Миниатюра страницы с «запечёнными» аннотациями (для предпросмотра в сетке)
+  const makeAnnotatedThumb = async (
+    bgUrl: string,
+    anns: Annotation[],
+  ): Promise<string | null> => {
+    try {
+      const loadImg = (src: string) =>
+        new Promise<HTMLImageElement>((res, rej) => {
+          const i = new Image();
+          i.onload = () => res(i);
+          i.onerror = rej;
+          i.src = src;
+        });
+      const bg = await loadImg(bgUrl);
+      const W = bg.naturalWidth;
+      const H = bg.naturalHeight;
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(bg, 0, 0);
+      const sw = W / 640; // масштаб толщины линий под размер холста
+
+      for (const a of anns) {
+        if (a.type === "highlight") {
+          ctx.globalAlpha = 0.35;
+          ctx.fillStyle = a.color;
+          ctx.fillRect(a.x * W, a.y * H, a.w * W, a.h * H);
+          ctx.globalAlpha = 1;
+        } else if (a.type === "rect") {
+          ctx.strokeStyle = a.color;
+          ctx.lineWidth = a.strokeWidth * sw;
+          ctx.strokeRect(a.x * W, a.y * H, a.w * W, a.h * H);
+        } else if (a.type === "line" || a.type === "arrow") {
+          ctx.strokeStyle = a.color;
+          ctx.lineWidth = a.strokeWidth * sw;
+          ctx.lineCap = "round";
+          const x1 = a.x1 * W;
+          const y1 = a.y1 * H;
+          const x2 = a.x2 * W;
+          const y2 = a.y2 * H;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          if (a.type === "arrow") {
+            const ang = Math.atan2(y2 - y1, x2 - x1);
+            const len = (8 + a.strokeWidth * 2.2) * sw;
+            for (const da of [Math.PI * 0.82, -Math.PI * 0.82]) {
+              ctx.beginPath();
+              ctx.moveTo(x2, y2);
+              ctx.lineTo(
+                x2 + len * Math.cos(ang + da),
+                y2 + len * Math.sin(ang + da),
+              );
+              ctx.stroke();
+            }
+          }
+        } else if (a.type === "draw") {
+          ctx.strokeStyle = a.color;
+          ctx.lineWidth = a.strokeWidth * sw;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.beginPath();
+          a.points.forEach((p, i) => {
+            const px = p.x * W;
+            const py = p.y * H;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          });
+          ctx.stroke();
+        } else if (a.type === "image") {
+          try {
+            const im = await loadImg(a.dataUrl);
+            ctx.drawImage(im, a.x * W, a.y * H, a.w * W, a.h * H);
+          } catch {
+            /* пропускаем битую картинку */
+          }
+        } else if (a.type === "text") {
+          const fs = a.fontSize * H;
+          ctx.fillStyle = a.color;
+          ctx.font = `${fs}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+          ctx.textBaseline = "top";
+          const maxW = a.w * W;
+          const lineH = fs * 1.2;
+          let ly = a.y * H;
+          for (const raw of (a.text || "").split("\n")) {
+            const words = raw.split(" ");
+            let cur = "";
+            for (const w of words) {
+              const test = cur ? `${cur} ${w}` : w;
+              if (ctx.measureText(test).width > maxW && cur) {
+                ctx.fillText(cur, a.x * W, ly);
+                ly += lineH;
+                cur = w;
+              } else {
+                cur = test;
+              }
+            }
+            ctx.fillText(cur, a.x * W, ly);
+            ly += lineH;
+          }
+        }
+      }
+      return canvas.toDataURL("image/jpeg", 0.78);
+    } catch (err) {
+      console.warn("Ошибка генерации превью с аннотациями:", err);
+      return null;
+    }
+  };
+
+  const saveAnnotations = async (
+    id: string,
+    annotations: Annotation[],
+    bgUrl: string,
+  ) => {
+    let previewUrl: string | null = null;
+    if (annotations.length > 0) {
+      previewUrl = await makeAnnotatedThumb(bgUrl, annotations);
+    }
+    setPageItems((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? { ...p, annotations, ...(previewUrl ? { previewUrl } : {}) }
+          : p,
+      ),
+    );
+  };
+
   // ─── Оформление: рендер текста в PNG (кириллица через canvas) ─────
 
   const renderTextToImage = (
@@ -963,6 +1114,175 @@ const PdfEditor: React.FC = () => {
     }
   };
 
+  // ─── Запекание аннотаций редактора в PDF ─────────────────────────
+
+  const hexToRgb = (hex: string) => {
+    const h = hex.replace("#", "");
+    const n = h.length === 3 ? h.replace(/(.)/g, "$1$1") : h;
+    return rgb(
+      parseInt(n.slice(0, 2), 16) / 255,
+      parseInt(n.slice(2, 4), 16) / 255,
+      parseInt(n.slice(4, 6), 16) / 255,
+    );
+  };
+
+  const embedImageSmart = async (pdfDoc: PDFDocument, dataUrl: string) => {
+    try {
+      if (dataUrl.startsWith("data:image/png"))
+        return await pdfDoc.embedPng(dataUrl);
+      if (/^data:image\/jpe?g/.test(dataUrl))
+        return await pdfDoc.embedJpg(dataUrl);
+    } catch {
+      /* конвертируем ниже */
+    }
+    // Прочие форматы → через canvas в PNG
+    const png: string = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = img.width;
+        c.height = img.height;
+        c.getContext("2d")!.drawImage(img, 0, 0);
+        resolve(c.toDataURL("image/png"));
+      };
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
+    return await pdfDoc.embedPng(png);
+  };
+
+  // Текст аннотации → PNG (перенос по ширине бокса, поддержка кириллицы)
+  const renderTextBlock = (
+    text: string,
+    boxWidthPt: number,
+    fontSizePt: number,
+    color: string,
+  ) => {
+    const s = 3;
+    const font = `${fontSizePt * s}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+    const measure = document.createElement("canvas").getContext("2d")!;
+    measure.font = font;
+    const maxW = Math.max(boxWidthPt * s, fontSizePt * s);
+    const lines: string[] = [];
+    for (const raw of (text || "").split("\n")) {
+      const words = raw.split(" ");
+      let cur = "";
+      for (const w of words) {
+        const test = cur ? `${cur} ${w}` : w;
+        if (measure.measureText(test).width > maxW && cur) {
+          lines.push(cur);
+          cur = w;
+        } else {
+          cur = test;
+        }
+      }
+      lines.push(cur);
+    }
+    const lineH = fontSizePt * s * 1.2;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(maxW);
+    canvas.height = Math.max(1, Math.ceil(lines.length * lineH));
+    const ctx = canvas.getContext("2d")!;
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textBaseline = "top";
+    lines.forEach((ln, i) => ctx.fillText(ln, 0, i * lineH));
+    return {
+      dataUrl: canvas.toDataURL("image/png"),
+      heightPt: canvas.height / s,
+    };
+  };
+
+  const applyAnnotations = async (pdfDoc: PDFDocument, items: PageItem[]) => {
+    const pages = pdfDoc.getPages();
+    for (let i = 0; i < items.length; i++) {
+      const anns = items[i].annotations;
+      if (!anns || anns.length === 0) continue;
+      const page = pages[i];
+      if (!page) continue;
+      const { width: W, height: H } = page.getSize();
+
+      for (const a of anns) {
+        if (a.type === "highlight") {
+          page.drawRectangle({
+            x: a.x * W,
+            y: H - (a.y + a.h) * H,
+            width: a.w * W,
+            height: a.h * H,
+            color: hexToRgb(a.color),
+            opacity: 0.35,
+          });
+        } else if (a.type === "rect") {
+          page.drawRectangle({
+            x: a.x * W,
+            y: H - (a.y + a.h) * H,
+            width: a.w * W,
+            height: a.h * H,
+            borderColor: hexToRgb(a.color),
+            borderWidth: a.strokeWidth,
+          });
+        } else if (a.type === "line" || a.type === "arrow") {
+          const start = { x: a.x1 * W, y: H - a.y1 * H };
+          const end = { x: a.x2 * W, y: H - a.y2 * H };
+          const col = hexToRgb(a.color);
+          page.drawLine({ start, end, thickness: a.strokeWidth, color: col });
+          if (a.type === "arrow") {
+            const ang = Math.atan2(end.y - start.y, end.x - start.x);
+            const len = 8 + a.strokeWidth * 2.2;
+            for (const da of [Math.PI * 0.82, -Math.PI * 0.82]) {
+              page.drawLine({
+                start: end,
+                end: {
+                  x: end.x + len * Math.cos(ang + da),
+                  y: end.y + len * Math.sin(ang + da),
+                },
+                thickness: a.strokeWidth,
+                color: col,
+              });
+            }
+          }
+        } else if (a.type === "draw") {
+          const col = hexToRgb(a.color);
+          for (let k = 1; k < a.points.length; k++) {
+            const p0 = a.points[k - 1];
+            const p1 = a.points[k];
+            page.drawLine({
+              start: { x: p0.x * W, y: H - p0.y * H },
+              end: { x: p1.x * W, y: H - p1.y * H },
+              thickness: a.strokeWidth,
+              color: col,
+            });
+          }
+        } else if (a.type === "image") {
+          try {
+            const img = await embedImageSmart(pdfDoc, a.dataUrl);
+            page.drawImage(img, {
+              x: a.x * W,
+              y: H - (a.y + a.h) * H,
+              width: a.w * W,
+              height: a.h * H,
+            });
+          } catch (err) {
+            console.warn("Не удалось вставить картинку-аннотацию:", err);
+          }
+        } else if (a.type === "text") {
+          const block = renderTextBlock(a.text, a.w * W, a.fontSize * H, a.color);
+          try {
+            const png = await pdfDoc.embedPng(block.dataUrl);
+            page.drawImage(png, {
+              x: a.x * W,
+              y: H - a.y * H - block.heightPt,
+              width: a.w * W,
+              height: block.heightPt,
+            });
+          } catch (err) {
+            console.warn("Не удалось вставить текст-аннотацию:", err);
+          }
+        }
+      }
+    }
+  };
+
   // ─── Сборка PDF из выбранных страниц (с учётом поворотов) ─────────
 
   const buildMergedBytes = async (
@@ -1001,6 +1321,7 @@ const PdfEditor: React.FC = () => {
       }
     }
 
+    await applyAnnotations(mergedPdf, items);
     if (decorate) await applyDecorations(mergedPdf);
     return mergedPdf.save();
   };
@@ -1086,6 +1407,7 @@ const PdfEditor: React.FC = () => {
       }
     }
 
+    await applyAnnotations(outPdf, items);
     if (decorate) await applyDecorations(outPdf);
     return outPdf.save();
   };
@@ -1378,6 +1700,13 @@ const PdfEditor: React.FC = () => {
                       🔍
                     </button>
                     <button
+                      onClick={(e) => openEditor(item, e)}
+                      className="preview-page-button"
+                      title="Редактировать (текст, фигуры, подпись)"
+                    >
+                      ✏️
+                    </button>
+                    <button
                       onClick={(e) => {
                         e.stopPropagation();
                         rotatePages([item.id], 90);
@@ -1395,6 +1724,11 @@ const PdfEditor: React.FC = () => {
                       ✕
                     </button>
                   </div>
+                  {item.annotations && item.annotations.length > 0 && (
+                    <span className="page-annot-badge" title="Есть аннотации">
+                      ✏️ {item.annotations.length}
+                    </span>
+                  )}
 
                   <div className="page-preview-container">
                     {item.isGeneratingPreview ? (
@@ -2018,6 +2352,20 @@ const PdfEditor: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {editingLoading && (
+        <div className="pa-overlay">
+          <div className="pa-loading">Загрузка страницы…</div>
+        </div>
+      )}
+      {editing && (
+        <PageAnnotator
+          backgroundUrl={editing.bg}
+          initial={editing.item.annotations || []}
+          onSave={(anns) => saveAnnotations(editing.item.id, anns, editing.bg)}
+          onClose={() => setEditing(null)}
+        />
       )}
 
       <PdfEditorInstructions

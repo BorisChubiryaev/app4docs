@@ -16,6 +16,24 @@ export const PdfEditorInstructions: React.FC<PdfEditorInstructionsProps> = ({
     title="📄 Инструкция по работе с PDF Studio"
   >
     <section className="instruction-section">
+      <h3>✏️ Редактор страницы</h3>
+      <ul>
+        <li>
+          Наведите на страницу и нажмите <strong>✏️</strong> — откроется
+          редактор поверх страницы.
+        </li>
+        <li>
+          Инструменты: текст, рисование, линия, стрелка, прямоугольник,
+          выделение, вставка картинки. Объекты можно двигать и масштабировать.
+        </li>
+        <li>
+          «Готово» сохраняет разметку; она «запекается» в PDF при скачивании.
+          Кириллица поддерживается.
+        </li>
+      </ul>
+    </section>
+
+    <section className="instruction-section">
       <h3>🔁 Поворот и 🗜️ сжатие</h3>
       <ul>
         <li>
