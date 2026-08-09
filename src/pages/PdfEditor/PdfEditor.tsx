@@ -1514,6 +1514,7 @@ const PdfEditor: React.FC = () => {
       title="PDF Studio"
       subtitle="Объединяйте, переставляйте, поворачивайте, удаляйте и сжимайте страницы PDF — прямо в браузере"
       onShowInstructions={() => setShowInstructions(true)}
+      width={1720}
     >
 
       {/* Плавающая панель инструментов */}

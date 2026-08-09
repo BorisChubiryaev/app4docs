@@ -12,7 +12,7 @@ interface PageShellProps {
   showHome?: boolean;
   /** Доп. действия в правой части шапки (перед кнопкой инструкции) */
   actions?: React.ReactNode;
-  /** Максимальная ширина контента, px или строка. По умолчанию 1200 */
+  /** Максимальная ширина контента, px или строка. По умолчанию 1440 */
   width?: number | string;
   /** Занять весь экран без прокрутки страницы (контент сам управляет высотой) */
   fill?: boolean;
@@ -31,7 +31,7 @@ const PageShell: React.FC<PageShellProps> = ({
   onShowInstructions,
   showHome = true,
   actions,
-  width = 1200,
+  width = 1440,
   fill = false,
   children,
 }) => (

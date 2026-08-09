@@ -278,10 +278,40 @@ const GridLayout = memo(() => (
   </main>
 ));
 
+// Акцентные цвета для «живого» фона детали (по индексу инструмента)
+const MENU_ACCENTS = [
+  "#4f7cff",
+  "#22b8a6",
+  "#f59e0b",
+  "#a855f7",
+  "#ef4444",
+  "#10b981",
+  "#06b6d4",
+  "#6366f1",
+  "#ec4899",
+];
+
 // ─── Вариант «Меню»: рельс иконок + деталь при наведении ───
 const MenuLayout = memo(() => {
   const [active, setActive] = useState(0);
   const t = tools[active];
+  const accent = MENU_ACCENTS[active % MENU_ACCENTS.length];
+
+  // лёгкий параллакс фона за курсором
+  const handleParallax = useCallback((e) => {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    const mx = (e.clientX - r.left) / r.width - 0.5;
+    const my = (e.clientY - r.top) / r.height - 0.5;
+    el.style.setProperty("--mx", mx.toFixed(3));
+    el.style.setProperty("--my", my.toFixed(3));
+  }, []);
+
+  const resetParallax = useCallback((e) => {
+    e.currentTarget.style.setProperty("--mx", "0");
+    e.currentTarget.style.setProperty("--my", "0");
+  }, []);
+
   return (
     <main className="hp-menu">
       <nav className="hp-menu__rail">
@@ -298,21 +328,40 @@ const MenuLayout = memo(() => {
           </Link>
         ))}
       </nav>
-      <section className="hp-menu__detail" key={t.path}>
-        <div className="hp-menu__detail-icon">{t.icon}</div>
-        <h2 className="hp-menu__detail-title">{t.title}</h2>
-        <p className="hp-menu__detail-desc">{t.description}</p>
-        <ul className="hp-menu__detail-features">
-          {t.features.map((f, i) => (
-            <li key={i}>
-              <span className="lg-card__check">✓</span>
-              {f}
-            </li>
-          ))}
-        </ul>
-        <Link to={t.path} className="lg-btn lg-btn--primary hp-menu__open">
-          Открыть →
-        </Link>
+      <section
+        className="hp-menu__detail"
+        key={t.path}
+        style={{ "--accent": accent }}
+        onMouseMove={handleParallax}
+        onMouseLeave={resetParallax}
+      >
+        {/* «Живой» фон инструмента */}
+        <div className="hp-menu__detail-bg" aria-hidden="true">
+          <span className="hp-menu__glow" />
+          <span className="hp-menu__ghost">{t.icon}</span>
+          <span className="hp-menu__float hp-menu__float--1">{t.icon}</span>
+          <span className="hp-menu__float hp-menu__float--2">{t.icon}</span>
+          <span className="hp-menu__float hp-menu__float--3">{t.icon}</span>
+          <span className="hp-menu__float hp-menu__float--4">{t.icon}</span>
+          <span className="hp-menu__grid" />
+        </div>
+
+        <div className="hp-menu__detail-body">
+          <div className="hp-menu__detail-icon">{t.icon}</div>
+          <h2 className="hp-menu__detail-title">{t.title}</h2>
+          <p className="hp-menu__detail-desc">{t.description}</p>
+          <ul className="hp-menu__detail-features">
+            {t.features.map((f, i) => (
+              <li key={i}>
+                <span className="lg-card__check">✓</span>
+                {f}
+              </li>
+            ))}
+          </ul>
+          <Link to={t.path} className="lg-btn lg-btn--primary hp-menu__open">
+            Открыть →
+          </Link>
+        </div>
       </section>
     </main>
   );
