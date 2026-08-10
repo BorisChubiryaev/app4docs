@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import ThemeToggle from "./ThemeToggle";
 import "./PageShell.css";
 
 interface PageShellProps {
@@ -56,6 +57,7 @@ const PageShell: React.FC<PageShellProps> = ({
 
         <div className="ds-page__nav ds-page__nav--right">
           {actions}
+          <ThemeToggle />
           {onShowInstructions && (
             <button
               className="ds-nav-btn"

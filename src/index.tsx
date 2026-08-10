@@ -4,6 +4,11 @@ import { HashRouter } from 'react-router-dom';
 import RootRoutes from './routes';
 import './styles/tokens.css';
 import './styles/components.css';
+import './styles/theme-dark.css';
+import { applyTheme, getInitialTheme } from './hooks/useTheme';
+
+// Применяем сохранённую тему до рендера, чтобы не было «мигания» светлой темы.
+applyTheme(getInitialTheme());
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

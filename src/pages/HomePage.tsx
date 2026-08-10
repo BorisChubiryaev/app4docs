@@ -5,6 +5,7 @@ import {
   hasUrlDownloadData,
 } from "../utils/urlExcelDownloader";
 import DownloadSuccessModal from "../components/DownloadSuccessModal";
+import ThemeToggle from "../components/ThemeToggle";
 import { Link } from "react-router-dom";
 import "./HomePage.css";
 
@@ -291,11 +292,438 @@ const MENU_ACCENTS = [
   "#ec4899",
 ];
 
+// Анимированный SVG-«скринкаст» для PDF Studio:
+// страница влетает и объединяется в стопку, верхняя страница поворачивается.
+const PdfStudioArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    {/* лёгкое покачивание всей сцены */}
+    <g className="pdfart-scene">
+      {/* задние листы стопки (результат объединения) */}
+      <g className="pdfart-page pdfart-page--back">
+        <rect x="168" y="128" width="120" height="150" rx="10" />
+      </g>
+      <g className="pdfart-page pdfart-page--mid">
+        <rect x="156" y="116" width="120" height="150" rx="10" />
+      </g>
+
+      {/* влетающая страница — объединение */}
+      <g className="pdfart-merge">
+        <rect
+          className="pdfart-sheet"
+          x="144"
+          y="104"
+          width="120"
+          height="150"
+          rx="10"
+        />
+        <rect className="pdfart-line" x="160" y="126" width="80" height="7" rx="3.5" />
+        <rect className="pdfart-line" x="160" y="144" width="88" height="7" rx="3.5" />
+        <rect className="pdfart-line" x="160" y="162" width="62" height="7" rx="3.5" />
+        <rect className="pdfart-line" x="160" y="180" width="80" height="7" rx="3.5" />
+      </g>
+
+      {/* верхняя страница — поворот */}
+      <g className="pdfart-rotate">
+        <rect
+          className="pdfart-sheet pdfart-sheet--top"
+          x="144"
+          y="104"
+          width="120"
+          height="150"
+          rx="10"
+        />
+        {/* загнутый уголок */}
+        <path className="pdfart-fold" d="M244 104 h20 v20 z" />
+        <rect className="pdfart-line" x="160" y="150" width="72" height="7" rx="3.5" />
+        <rect className="pdfart-line" x="160" y="168" width="88" height="7" rx="3.5" />
+        <rect className="pdfart-line" x="160" y="186" width="56" height="7" rx="3.5" />
+      </g>
+
+      {/* значок «+» объединения */}
+      <g className="pdfart-plus">
+        <circle cx="118" cy="150" r="20" />
+        <path d="M118 141 v18 M109 150 h18" />
+      </g>
+    </g>
+  </svg>
+));
+
+// 🏢 Сравнение по рабочим местам — таблица со сканирующей diff-подсветкой
+const WorkplaceCompareArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <rect className="art-card" x="140" y="86" width="216" height="188" rx="14" />
+      <rect className="art-soft" x="140" y="86" width="216" height="36" rx="14" />
+      <rect className="cmp-scan" x="148" y="130" width="200" height="26" rx="7" />
+      {[0, 1, 2, 3].map((i) => (
+        <g key={i}>
+          <rect
+            className="art-line"
+            x="160"
+            y={137 + i * 30}
+            width="76"
+            height="10"
+            rx="5"
+          />
+          <rect
+            className="art-line"
+            x="256"
+            y={137 + i * 30}
+            width="84"
+            height="10"
+            rx="5"
+          />
+        </g>
+      ))}
+    </g>
+  </svg>
+));
+
+// 📊 Сравнение Excel/Word — два документа, изменённая ячейка мигает
+const CompareDocsArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <rect className="art-card" x="110" y="100" width="120" height="164" rx="12" />
+      <rect className="art-card" x="256" y="100" width="120" height="164" rx="12" />
+      {[0, 1, 2, 3].map((i) => (
+        <rect
+          key={`l${i}`}
+          className="art-line"
+          x="126"
+          y={124 + i * 30}
+          width={i === 1 ? 60 : 88}
+          height="9"
+          rx="4.5"
+        />
+      ))}
+      {[0, 2, 3].map((i) => (
+        <rect
+          key={`r${i}`}
+          className="art-line"
+          x="272"
+          y={124 + i * 30}
+          width={88}
+          height="9"
+          rx="4.5"
+        />
+      ))}
+      {/* изменённая ячейка */}
+      <rect
+        className="cmp2-cell art-accent"
+        x="272"
+        y="151"
+        width="88"
+        height="16"
+        rx="4"
+      />
+    </g>
+  </svg>
+));
+
+// 🔧 HTML/JSON → Excel — код превращается в таблицу
+const HtmlToExcelArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <text
+        className="h2x-code art-code"
+        x="242"
+        y="200"
+        fontSize="92"
+        textAnchor="middle"
+      >
+        {"</>"}
+      </text>
+      <g className="h2x-grid">
+        {[0, 1, 2].map((r) =>
+          [0, 1, 2].map((c) => (
+            <rect
+              key={`${r}-${c}`}
+              className={r === 0 || c === 0 ? "art-accent" : "art-line"}
+              x={172 + c * 50}
+              y={112 + r * 50}
+              width="44"
+              height="44"
+              rx="6"
+            />
+          )),
+        )}
+      </g>
+    </g>
+  </svg>
+));
+
+// 🖼️ SVG → PNG — вектор становится пикселями
+const Svg2PngArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <path
+        className="s2p-vector art-accent"
+        d="M242 96l30 61 67 10-48 47 11 67-60-31-60 31 11-67-48-47 67-10z"
+      />
+      <g className="s2p-pixels">
+        {[
+          [1, 0],
+          [2, 0],
+          [1, 1],
+          [2, 1],
+          [3, 1],
+          [0, 2],
+          [1, 2],
+          [2, 2],
+          [3, 2],
+          [4, 2],
+          [1, 3],
+          [2, 3],
+          [3, 3],
+          [0, 4],
+          [4, 4],
+        ].map(([c, r], i) => (
+          <rect
+            key={i}
+            className={(c + r) % 2 ? "art-accent" : "art-line"}
+            x={172 + c * 30}
+            y={112 + r * 30}
+            width="28"
+            height="28"
+            rx="3"
+          />
+        ))}
+      </g>
+    </g>
+  </svg>
+));
+
+// ✳️ Группиратор — блоки слетаются в общую сетку
+const GrouperArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <rect
+        className="grp-sq grp-sq--1 art-accent"
+        x="186"
+        y="122"
+        width="60"
+        height="60"
+        rx="10"
+      />
+      <rect
+        className="grp-sq grp-sq--2 art-line"
+        x="256"
+        y="122"
+        width="60"
+        height="60"
+        rx="10"
+      />
+      <rect
+        className="grp-sq grp-sq--3 art-line"
+        x="186"
+        y="192"
+        width="60"
+        height="60"
+        rx="10"
+      />
+      <rect
+        className="grp-sq grp-sq--4 art-accent"
+        x="256"
+        y="192"
+        width="60"
+        height="60"
+        rx="10"
+      />
+    </g>
+  </svg>
+));
+
+// 💠 Генератор графиков — растущие столбики
+const ChartCraftArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <path className="art-stroke" d="M156 108 v150 h164" strokeWidth="4" />
+      <rect
+        className="chart-bar chart-bar--1 art-accent"
+        x="176"
+        y="128"
+        width="34"
+        height="130"
+        rx="6"
+      />
+      <rect
+        className="chart-bar chart-bar--2 art-line"
+        x="222"
+        y="128"
+        width="34"
+        height="130"
+        rx="6"
+      />
+      <rect
+        className="chart-bar chart-bar--3 art-accent"
+        x="268"
+        y="128"
+        width="34"
+        height="130"
+        rx="6"
+      />
+      <rect
+        className="chart-bar chart-bar--4 art-line"
+        x="314"
+        y="128"
+        width="34"
+        height="130"
+        rx="6"
+      />
+    </g>
+  </svg>
+));
+
+// 🔄 PDF ↔ Word — переворот карточки
+const PdfToWordArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <g className="p2w-flip">
+        <rect className="art-card" x="182" y="106" width="120" height="150" rx="12" />
+        <text
+          className="p2w-pdf art-label"
+          x="242"
+          y="192"
+          fontSize="34"
+          textAnchor="middle"
+        >
+          PDF
+        </text>
+        <text
+          className="p2w-word art-label"
+          x="242"
+          y="192"
+          fontSize="40"
+          textAnchor="middle"
+        >
+          W
+        </text>
+      </g>
+      <path
+        className="art-stroke"
+        d="M150 300 h100 m0 0 l-16 -12 m16 12 l-16 12"
+        strokeWidth="4"
+      />
+    </g>
+  </svg>
+));
+
+// 🖼️ JPG → PDF — картинки складываются в стопку
+const JpgToPdfArt = memo(() => {
+  const ImgCard = ({ cls, x, y }) => (
+    <g className={cls}>
+      <rect
+        className="art-card"
+        x={x}
+        y={y}
+        width="150"
+        height="112"
+        rx="12"
+      />
+      <circle className="art-accent" cx={x + 34} cy={y + 34} r="14" />
+      <path
+        className="art-line"
+        d={`M${x + 12} ${y + 96} L${x + 58} ${y + 54} L${x + 92} ${y + 88} L${x + 116} ${y + 66} L${x + 138} ${y + 96} Z`}
+      />
+    </g>
+  );
+  return (
+    <svg
+      className="hp-menu__art"
+      viewBox="0 0 400 360"
+      fill="none"
+      aria-hidden="true"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <g className="art-bob">
+        <ImgCard cls="j2p-img j2p-img--1" x={168} y={112} />
+        <ImgCard cls="j2p-img j2p-img--2" x={188} y={138} />
+        <ImgCard cls="j2p-img j2p-img--3" x={208} y={164} />
+        <g className="j2p-badge">
+          <rect className="art-accent" x="286" y="228" width="72" height="40" rx="10" />
+          <text
+            className="art-label"
+            x="322"
+            y="256"
+            fontSize="22"
+            textAnchor="middle"
+            fill="#fff"
+          >
+            PDF
+          </text>
+        </g>
+      </g>
+    </svg>
+  );
+});
+
+// Кастомные «скринкасты» по инструментам (иначе — эмодзи-водяной знак)
+const MENU_ART = {
+  "/WorkplaceCompare": WorkplaceCompareArt,
+  "/compare": CompareDocsArt,
+  "/htmlToExcel": HtmlToExcelArt,
+  "/Svg2Png": Svg2PngArt,
+  "/PdfEditor": PdfStudioArt,
+  "/ExcelTableBuilder": GrouperArt,
+  "/ChartCraft": ChartCraftArt,
+  "/PdfToWord": PdfToWordArt,
+  "/JpgToPdfPage": JpgToPdfArt,
+};
+
 // ─── Вариант «Меню»: рельс иконок + деталь при наведении ───
 const MenuLayout = memo(() => {
   const [active, setActive] = useState(0);
   const t = tools[active];
   const accent = MENU_ACCENTS[active % MENU_ACCENTS.length];
+  const Art = MENU_ART[t.path];
 
   // лёгкий параллакс фона за курсором
   const handleParallax = useCallback((e) => {
@@ -338,11 +766,17 @@ const MenuLayout = memo(() => {
         {/* «Живой» фон инструмента */}
         <div className="hp-menu__detail-bg" aria-hidden="true">
           <span className="hp-menu__glow" />
-          <span className="hp-menu__ghost">{t.icon}</span>
-          <span className="hp-menu__float hp-menu__float--1">{t.icon}</span>
-          <span className="hp-menu__float hp-menu__float--2">{t.icon}</span>
-          <span className="hp-menu__float hp-menu__float--3">{t.icon}</span>
-          <span className="hp-menu__float hp-menu__float--4">{t.icon}</span>
+          {Art ? (
+            <Art />
+          ) : (
+            <>
+              <span className="hp-menu__ghost">{t.icon}</span>
+              <span className="hp-menu__float hp-menu__float--1">{t.icon}</span>
+              <span className="hp-menu__float hp-menu__float--2">{t.icon}</span>
+              <span className="hp-menu__float hp-menu__float--3">{t.icon}</span>
+              <span className="hp-menu__float hp-menu__float--4">{t.icon}</span>
+            </>
+          )}
           <span className="hp-menu__grid" />
         </div>
 
@@ -409,6 +843,7 @@ const HomePage = () => {
     setLayout(id);
     localStorage.setItem("hp-layout", id);
   }, []);
+
 
   // Добавьте эффект для обработки URL при загрузке главной страницы:
   useEffect(() => {
@@ -493,6 +928,7 @@ const HomePage = () => {
           <LayoutSwitcher value={layout} onChange={changeLayout} />
 
           <div className="lg-header__right">
+            <ThemeToggle />
             <svg
               width="auto"
               height="38"

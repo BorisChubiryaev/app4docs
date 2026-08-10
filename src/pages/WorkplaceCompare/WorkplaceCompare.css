@@ -963,3 +963,43 @@
   color: #86868b;
   opacity: 0.6;
 }
+
+/* Шапка WorkplaceCompare: единый ряд [домой][заголовок][тема][инструкция],
+   чтобы элементы не накладывались (переопределяем прежнее абсолютное
+   позиционирование кнопок). */
+.workplace-compare-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+}
+.workplace-compare-header .header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+.workplace-compare-header .home-button {
+  position: static;
+  transform: none;
+}
+.workplace-compare-header .home-button:hover {
+  transform: scale(1.05);
+}
+.workplace-compare-header h1 {
+  font-size: 1.9rem;
+  margin: 0;
+  min-width: 0;
+}
+.workplace-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+.workplace-header-actions .instructions-button {
+  position: static !important;
+  transform: none !important;
+}

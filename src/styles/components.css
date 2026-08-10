@@ -196,3 +196,40 @@
   border-color: var(--brand-2);
   background: #fafbff;
 }
+
+/* Переключатель темы (светлая/тёмная) — сегментированная пилюля */
+.ds-theme {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  flex: none;
+}
+.ds-theme__opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.ds-theme__opt:hover {
+  color: var(--ink);
+}
+.ds-theme__opt.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+.ds-theme__opt svg {
+  display: block;
+}

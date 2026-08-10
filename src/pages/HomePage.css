@@ -204,6 +204,11 @@ body {
   max-width: 260px;
 }
 
+.lg-header__right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
 .lg-header__right svg {
   display: block;
 }
@@ -1136,6 +1141,557 @@ body {
   transform: translate(calc(var(--mx) * 12px), calc(var(--my) * 12px));
   transition: transform 0.25s ease-out;
 }
+/* ── Анимированный SVG-«скринкаст» (PDF Studio) ── */
+.hp-menu__art {
+  position: absolute;
+  right: 1%;
+  bottom: -4%;
+  width: 58%;
+  max-width: 560px;
+  height: auto;
+  opacity: 0.9;
+  transform: translate(calc(var(--mx) * 22px), calc(var(--my) * 22px));
+  transition: transform 0.3s ease-out;
+  pointer-events: none;
+}
+.pdfart-scene {
+  animation: pdfart-bob 5.5s ease-in-out infinite;
+}
+.pdfart-sheet,
+.pdfart-page rect {
+  fill: rgba(255, 255, 255, 0.92);
+  stroke: color-mix(in srgb, var(--accent) 55%, transparent);
+  stroke-width: 2.5;
+  filter: drop-shadow(
+    0 12px 22px color-mix(in srgb, var(--accent) 28%, transparent)
+  );
+}
+.pdfart-page--back rect {
+  opacity: 0.4;
+}
+.pdfart-page--mid rect {
+  opacity: 0.65;
+}
+.pdfart-line {
+  fill: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+.pdfart-fold {
+  fill: color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.9));
+  stroke: color-mix(in srgb, var(--accent) 55%, transparent);
+  stroke-width: 2;
+}
+.pdfart-plus circle {
+  fill: color-mix(in srgb, var(--accent) 85%, transparent);
+}
+.pdfart-plus path {
+  stroke: #fff;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.pdfart-plus {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pdfart-plus 7s ease-in-out infinite;
+}
+/* влетающая страница — объединение */
+.pdfart-merge {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pdfart-merge 7s ease-in-out infinite;
+}
+/* верхняя страница — поворот */
+.pdfart-rotate {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pdfart-rotate 7s ease-in-out infinite;
+}
+@keyframes pdfart-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+@keyframes pdfart-merge {
+  0% {
+    transform: translate(120px, -14px) rotate(6deg);
+    opacity: 0;
+  }
+  16% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  82% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0;
+  }
+}
+@keyframes pdfart-plus {
+  0%,
+  4% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  30%,
+  100% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes pdfart-rotate {
+  0%,
+  42% {
+    transform: rotate(0deg);
+  }
+  58%,
+  80% {
+    transform: rotate(90deg);
+  }
+  95%,
+  100% {
+    transform: rotate(0deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pdfart-scene,
+  .pdfart-merge,
+  .pdfart-rotate,
+  .pdfart-plus {
+    animation: none;
+  }
+  .pdfart-plus {
+    opacity: 0;
+  }
+}
+/* ── Общие примитивы «скринкастов» ── */
+.art-card {
+  fill: rgba(255, 255, 255, 0.92);
+  stroke: color-mix(in srgb, var(--accent) 55%, transparent);
+  stroke-width: 2.5;
+  filter: drop-shadow(
+    0 12px 22px color-mix(in srgb, var(--accent) 26%, transparent)
+  );
+}
+.art-soft {
+  fill: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.art-line {
+  fill: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.art-accent {
+  fill: color-mix(in srgb, var(--accent) 80%, transparent);
+}
+.art-stroke {
+  fill: none;
+  stroke: color-mix(in srgb, var(--accent) 65%, transparent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.art-label {
+  fill: color-mix(in srgb, var(--accent) 85%, transparent);
+  font-weight: 800;
+  font-family: inherit;
+}
+.art-code {
+  fill: color-mix(in srgb, var(--accent) 72%, transparent);
+  font-weight: 800;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.art-bob {
+  animation: pdfart-bob 5.5s ease-in-out infinite;
+}
+
+/* 🏢 Сравнение по рабочим местам — сканирующая подсветка строк */
+.cmp-scan {
+  fill: #22c55e;
+  opacity: 0.82;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cmp-scan 4.6s ease-in-out infinite;
+}
+@keyframes cmp-scan {
+  0% {
+    transform: translateY(0);
+    fill: #22c55e;
+  }
+  24%,
+  26% {
+    transform: translateY(30px);
+    fill: #ef4444;
+  }
+  49%,
+  51% {
+    transform: translateY(60px);
+    fill: #22c55e;
+  }
+  74%,
+  76% {
+    transform: translateY(90px);
+    fill: #ef4444;
+  }
+  100% {
+    transform: translateY(0);
+    fill: #22c55e;
+  }
+}
+
+/* 📊 Сравнение Excel/Word — мигающая изменённая ячейка */
+.cmp2-cell {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cmp2-cell 2.6s ease-in-out infinite;
+}
+@keyframes cmp2-cell {
+  0%,
+  44%,
+  100% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  50% {
+    opacity: 0.25;
+    transform: scaleX(0.55);
+  }
+  56% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+/* 🔧 HTML/JSON → Excel — код превращается в таблицу */
+.h2x-code {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: h2x-code 6s ease-in-out infinite;
+}
+.h2x-grid {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: h2x-grid 6s ease-in-out infinite;
+}
+@keyframes h2x-code {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  10%,
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50%,
+  100% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+@keyframes h2x-grid {
+  0%,
+  45% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  60%,
+  90% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* 🖼️ SVG → PNG — вектор становится пикселями */
+.s2p-vector {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: s2p-vector 5s ease-in-out infinite;
+}
+.s2p-pixels {
+  animation: s2p-pixels 5s ease-in-out infinite;
+}
+@keyframes s2p-vector {
+  0%,
+  35% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes s2p-pixels {
+  0%,
+  40% {
+    opacity: 0;
+  }
+  60%,
+  92% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ✳️ Группиратор — блоки слетаются в общую сетку */
+.grp-sq {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.grp-sq--1 {
+  animation: grp-1 4.6s ease-in-out infinite;
+}
+.grp-sq--2 {
+  animation: grp-2 4.6s ease-in-out infinite;
+}
+.grp-sq--3 {
+  animation: grp-3 4.6s ease-in-out infinite;
+}
+.grp-sq--4 {
+  animation: grp-4 4.6s ease-in-out infinite;
+}
+@keyframes grp-1 {
+  0% {
+    transform: translate(-72px, -64px);
+    opacity: 0;
+  }
+  28%,
+  78% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-72px, -64px);
+    opacity: 0;
+  }
+}
+@keyframes grp-2 {
+  0% {
+    transform: translate(72px, -64px);
+    opacity: 0;
+  }
+  28%,
+  78% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(72px, -64px);
+    opacity: 0;
+  }
+}
+@keyframes grp-3 {
+  0% {
+    transform: translate(-72px, 64px);
+    opacity: 0;
+  }
+  28%,
+  78% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-72px, 64px);
+    opacity: 0;
+  }
+}
+@keyframes grp-4 {
+  0% {
+    transform: translate(72px, 64px);
+    opacity: 0;
+  }
+  28%,
+  78% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(72px, 64px);
+    opacity: 0;
+  }
+}
+
+/* 💠 Генератор графиков — растущие столбики */
+.chart-bar {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: cc-bar 2.8s ease-in-out infinite;
+}
+.chart-bar--2 {
+  animation-delay: 0.35s;
+}
+.chart-bar--3 {
+  animation-delay: 0.7s;
+}
+.chart-bar--4 {
+  animation-delay: 1.05s;
+}
+@keyframes cc-bar {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* 🔄 PDF ↔ Word — переворот карточки */
+.p2w-flip {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: p2w-flip 4.2s ease-in-out infinite;
+}
+.p2w-pdf {
+  animation: p2w-pdf 4.2s ease-in-out infinite;
+}
+.p2w-word {
+  animation: p2w-word 4.2s ease-in-out infinite;
+}
+@keyframes p2w-flip {
+  0% {
+    transform: scaleX(0.06);
+  }
+  10%,
+  40% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(0.06);
+  }
+  60%,
+  90% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0.06);
+  }
+}
+@keyframes p2w-pdf {
+  0% {
+    opacity: 0;
+  }
+  10%,
+  44% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes p2w-word {
+  0%,
+  50% {
+    opacity: 0;
+  }
+  60%,
+  94% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 🖼️ JPG → PDF — картинки складываются в стопку */
+.j2p-img {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: j2p-drop 4.8s ease-in-out infinite;
+}
+.j2p-img--2 {
+  animation-delay: 0.5s;
+}
+.j2p-img--3 {
+  animation-delay: 1s;
+}
+.j2p-badge {
+  animation: j2p-badge 4.8s ease-in-out infinite;
+}
+@keyframes j2p-drop {
+  0% {
+    transform: translateY(-96px) rotate(-8deg);
+    opacity: 0;
+  }
+  22% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  82% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-96px) rotate(-8deg);
+    opacity: 0;
+  }
+}
+@keyframes j2p-badge {
+  0%,
+  55% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  70%,
+  90% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art-bob,
+  .cmp-scan,
+  .cmp2-cell,
+  .h2x-code,
+  .h2x-grid,
+  .s2p-vector,
+  .s2p-pixels,
+  .grp-sq,
+  .chart-bar,
+  .p2w-flip,
+  .p2w-pdf,
+  .p2w-word,
+  .j2p-img,
+  .j2p-badge {
+    animation: none;
+  }
+  .h2x-code,
+  .s2p-vector,
+  .p2w-pdf {
+    opacity: 1;
+  }
+  .h2x-grid,
+  .s2p-pixels,
+  .p2w-word,
+  .j2p-badge {
+    opacity: 0;
+  }
+}
+
 .hp-menu__detail-body {
   position: relative;
   z-index: 1;
@@ -1331,4 +1887,128 @@ body {
     flex-direction: row;
     overflow-x: auto;
   }
+}
+
+/* ╔══════════════════════════════════════════╗
+   ║              ТЁМНАЯ ТЕМА                  ║
+   ╚══════════════════════════════════════════╝ */
+:root[data-theme="dark"] {
+  --lg-glass-bg: rgba(40, 44, 56, 0.55);
+  --lg-glass-border: rgba(255, 255, 255, 0.1);
+  --lg-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --lg-text-primary: #f5f5f7;
+  --lg-text-secondary: #a1a1a6;
+  --lg-text-tertiary: #8e8e93;
+}
+[data-theme="dark"] body {
+  background: #0d0f16;
+}
+[data-theme="dark"] .lg-page {
+  background: linear-gradient(
+    160deg,
+    #0d0f16 0%,
+    #111420 35%,
+    #17121e 65%,
+    #0e1018 100%
+  );
+}
+/* приглушаем фоновые «орбы» и шум */
+[data-theme="dark"] .lg-ambient {
+  opacity: 0.45;
+}
+[data-theme="dark"] .lg-noise {
+  opacity: 0.05;
+}
+/* хедер / футер */
+[data-theme="dark"] .lg-header__glass {
+  background: rgba(22, 25, 34, 0.62);
+  border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+[data-theme="dark"] .lg-footer {
+  border-top-color: rgba(255, 255, 255, 0.08);
+  background: rgba(22, 25, 34, 0.5);
+}
+/* переключатель вида */
+[data-theme="dark"] .hp-switch {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+[data-theme="dark"] .hp-switch__btn.is-active {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+/* карточки «Сетка» */
+[data-theme="dark"] .lg-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 6px 20px rgba(0, 0, 0, 0.3);
+}
+[data-theme="dark"] .lg-card:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+[data-theme="dark"] .lg-card__icon {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+/* меню: рельс + деталь */
+[data-theme="dark"] .hp-menu__item {
+  background: rgba(255, 255, 255, 0.04);
+}
+[data-theme="dark"] .hp-menu__item:hover,
+[data-theme="dark"] .hp-menu__item.is-active {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+[data-theme="dark"] .hp-menu__ico {
+  background: rgba(255, 255, 255, 0.08);
+}
+[data-theme="dark"] .hp-menu__detail {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+[data-theme="dark"] .hp-menu__detail-bg {
+  background:
+    radial-gradient(
+      120% 120% at 85% 15%,
+      color-mix(in srgb, var(--accent) 32%, transparent) 0%,
+      transparent 55%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--accent) 16%, rgba(22, 25, 34, 0.7)) 0%,
+      rgba(22, 25, 34, 0.4) 60%
+    );
+}
+/* «скринкасты»: листы-бумага делаем тёмными пластинами */
+[data-theme="dark"] .art-card,
+[data-theme="dark"] .pdfart-sheet,
+[data-theme="dark"] .pdfart-page rect {
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+[data-theme="dark"] .pdfart-fold {
+  fill: color-mix(in srgb, var(--accent) 30%, rgba(255, 255, 255, 0.1));
+}
+/* список */
+[data-theme="dark"] .hp-list__row {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+[data-theme="dark"] .hp-list__row:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+[data-theme="dark"] .hp-list__ico {
+  background: rgba(255, 255, 255, 0.08);
+}
+/* логотипы Ex-EL и Unit Data Team (чёрная заливка → светлая) */
+[data-theme="dark"] [fill="#1d1d1f"] {
+  fill: #f5f5f7;
+}
+[data-theme="dark"] [stroke="#1d1d1f"] {
+  stroke: #f5f5f7;
 }

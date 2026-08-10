@@ -91,7 +91,7 @@ const PdfEditor: React.FC = () => {
 
   // ─── Сжатие ──────────────────────────────────────────────────────
   const [showCompress, setShowCompress] = useState(false);
-  const [compressQuality, setCompressQuality] = useState(0.85);
+  const [compressQuality, setCompressQuality] = useState(0.7);
   const [compressResult, setCompressResult] = useState<{
     originalSize: number;
     compressedSize: number;
@@ -1351,7 +1351,10 @@ const PdfEditor: React.FC = () => {
     quality: number,
     decorate = false,
   ): Promise<Uint8Array> => {
-    const dpi = 150;
+    // Ползунок «Качество» управляет и разрешением растеризации, и качеством
+    // JPEG. Понижаем разрешение вместе с качеством, чтобы сжатие реально
+    // уменьшало вес (при 150 DPI JPEG почти всегда крупнее исходника).
+    const dpi = Math.round(72 + quality * 60); // ~90…131 DPI
     const scale = dpi / 72;
     const maxDimension = 4096;
     const outPdf = await PDFDocument.create();
@@ -1419,11 +1422,16 @@ const PdfEditor: React.FC = () => {
     setCompressResult(null);
     try {
       const originalBytes = await buildMergedBytes(items, true);
-      const compressedBytes = await buildCompressedBytes(
+      let compressedBytes = await buildCompressedBytes(
         items,
         compressQuality,
         true,
       );
+      // Гарантия: не отдаём файл больше исходного — если растеризация не
+      // помогла (типично для текстовых PDF), возвращаем исходные байты.
+      if (compressedBytes.byteLength >= originalBytes.byteLength) {
+        compressedBytes = originalBytes;
+      }
       const originalSize = originalBytes.byteLength;
       const compressedSize = compressedBytes.byteLength;
       const url = URL.createObjectURL(
@@ -2067,13 +2075,14 @@ const PdfEditor: React.FC = () => {
                     >
                       {compressResult.ratio > 0
                         ? `Экономия ${compressResult.ratio}%`
-                        : `Файл не уменьшился (${compressResult.ratio}%)`}
+                        : "Уже оптимально — сохранён исходный файл"}
                     </div>
                   </div>
                   {compressResult.ratio <= 0 && (
                     <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                      Для текстовых PDF растеризация может не уменьшить размер.
-                      Попробуйте качество ниже или оставьте исходный файл.
+                      Растеризация не уменьшила вес (обычно так с текстовыми
+                      PDF), поэтому отдаём исходный файл без потерь. Для более
+                      сильного сжатия сканов снизьте качество.
                     </p>
                   )}
                 </div>
