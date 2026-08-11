@@ -1387,7 +1387,7 @@ const HtmlToExcelConverter: React.FC = () => {
               {converterType === "html" ? (
                 <>
                   {/* Переключатель режимов HTML */}
-                  <div className="mode-selector">
+                  <div className="mode-selector-html">
                     <label className="mode-option">
                       <input
                         type="radio"
