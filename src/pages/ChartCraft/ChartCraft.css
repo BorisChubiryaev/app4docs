@@ -52,7 +52,7 @@
 .cc-upload-title {
   font-size: 18px;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
   margin-bottom: 8px;
 }
 .cc-upload-subtitle {
@@ -108,7 +108,7 @@
 .cc-toolbar-file-name {
   font-size: 13px;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -121,7 +121,7 @@
 .cc-toolbar-chart-count {
   font-size: 12px;
   font-weight: 500;
-  color: #2c3e50;
+  color: var(--ink);
 }
 .cc-toolbar-divider {
   width: 1px;
@@ -345,7 +345,7 @@
 .cc-card-label {
   font-size: 12px;
   font-weight: 500;
-  color: #2c3e50;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -456,7 +456,7 @@
 }
 .cc-chart-title {
   text-align: center;
-  color: #2c3e50;
+  color: var(--ink);
   font-size: 16px;
   margin: 0 0 2px;
   flex-shrink: 0;
@@ -484,7 +484,7 @@
 .cc-tooltip-label {
   margin: 0 0 6px;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
   font-size: 13px;
 }
 .cc-tooltip-value {
@@ -529,7 +529,7 @@
 .cc-editor-header h2 {
   margin: 0;
   font-size: 16px;
-  color: #2c3e50;
+  color: var(--ink);
 }
 .cc-editor-close {
   background: #f0f0f0;
@@ -578,7 +578,7 @@
   transition: all 0.2s;
 }
 .cc-editor-tab:hover {
-  color: #2c3e50;
+  color: var(--ink);
   background: #f8f9fa;
 }
 .cc-editor-tab.active {
@@ -635,7 +635,7 @@
   display: block;
   font-size: 12px;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
   margin-bottom: 4px;
 }
 .cc-select {
@@ -644,7 +644,7 @@
   border: 2px solid #e0e0e0;
   border-radius: 8px;
   font-size: 13px;
-  color: #2c3e50;
+  color: var(--ink);
   background: white;
   cursor: pointer;
 }
@@ -658,7 +658,7 @@
   border: 2px solid #e0e0e0;
   border-radius: 8px;
   font-size: 13px;
-  color: #2c3e50;
+  color: var(--ink);
   box-sizing: border-box;
 }
 .cc-input:focus {
@@ -709,7 +709,7 @@
 .cc-checkbox-name {
   font-size: 12px;
   font-weight: 500;
-  color: #2c3e50;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -766,7 +766,7 @@
 .cc-type-label {
   font-size: 11px;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
 }
 .cc-type-desc {
   font-size: 9px;
@@ -804,7 +804,7 @@
 .cc-customizer-group-title {
   font-size: 12px;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
   margin: 0 0 8px;
 }
 .cc-colors-grid {
@@ -828,7 +828,7 @@
 }
 .cc-color-label {
   font-size: 10px;
-  color: #2c3e50;
+  color: var(--ink);
   max-width: 70px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -886,7 +886,7 @@
 }
 .cc-button-secondary {
   background: #f0f0f0;
-  color: #2c3e50;
+  color: var(--ink);
 }
 .cc-button-secondary:hover:not(:disabled) {
   background: #e0e0e0;
@@ -1053,7 +1053,7 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  color: #2c3e50;
+  color: var(--ink);
   user-select: none;
 }
 .cc-data-summary:hover {
@@ -1066,7 +1066,7 @@
   padding: 10px 16px;
   margin: 0;
   font-size: 13px;
-  color: #2c3e50;
+  color: var(--ink);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1090,14 +1090,14 @@
   padding: 6px 10px;
   text-align: left;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
   border-bottom: 2px solid #e0e0e0;
   white-space: nowrap;
 }
 .cc-data-table td {
   padding: 5px 10px;
   border-bottom: 1px solid #f0f0f0;
-  color: #34495e;
+  color: var(--ink);
   max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1183,7 +1183,7 @@
 }
 .cc-modal-title {
   font-size: 20px;
-  color: #2c3e50;
+  color: var(--ink);
   margin: 0 0 20px;
 }
 .cc-instructions-list {
@@ -1210,7 +1210,7 @@
   font-size: 13px;
 }
 .cc-instruction-item strong {
-  color: #2c3e50;
+  color: var(--ink);
   font-size: 14px;
 }
 .cc-instruction-item p {
@@ -1225,7 +1225,7 @@
 }
 .cc-shortcuts h4 {
   font-size: 14px;
-  color: #2c3e50;
+  color: var(--ink);
   margin-bottom: 10px;
 }
 .cc-shortcuts-grid {
@@ -1279,7 +1279,7 @@
   margin: 0 auto 14px;
 }
 .cc-loading-content p {
-  color: #2c3e50;
+  color: var(--ink);
   font-size: 14px;
   font-weight: 500;
   margin: 0;
