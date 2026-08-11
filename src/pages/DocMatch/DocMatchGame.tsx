@@ -441,6 +441,7 @@ const DocMatchGame: React.FC = () => {
       title="Документный Три-в-Ряд 🎮"
       subtitle={`Уровень ${level}: собери ${currentTarget} очков!`}
       fill
+      width="100%"
     >
 
         <div className="game-layout">
