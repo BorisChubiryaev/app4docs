@@ -313,6 +313,14 @@
 :root[data-theme="dark"] .svg2png-page {
   background: linear-gradient(135deg, #12131c 0%, #1a1d2b 100%) !important;
 }
+/* заголовок — градиентный text-clip, в light тёмный; перекрашиваем градиент
+   в светлый (только background-image, чтобы не сбросить background-clip: text) */
+:root[data-theme="dark"] .svg2png-header h1 {
+  background-image: linear-gradient(135deg, #e8e8ea 0%, #aab4ff 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
 :root[data-theme="dark"] .file-drop-zone,
 :root[data-theme="dark"] .file-preview-compact,
 :root[data-theme="dark"] .format-selector,
@@ -394,6 +402,14 @@
 :root[data-theme="dark"] .pdf-to-word-page {
   background: linear-gradient(135deg, #14151f 0%, #1a1d2b 100%) !important;
 }
+/* заголовок — градиентный text-clip, в light тёмно-синий; перекрашиваем градиент
+   в светлый (только background-image, чтобы не сбросить background-clip: text) */
+:root[data-theme="dark"] .header-title h1 {
+  background-image: linear-gradient(135deg, #e8e8ea 0%, #aab4ff 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+}
 :root[data-theme="dark"] .liquid-background {
   background: linear-gradient(135deg, #1a2233 0%, #0f1118 100%) !important;
 }
@@ -446,4 +462,314 @@
 }
 :root[data-theme="dark"] .game-tile:hover {
   background: rgba(255, 255, 255, 0.16) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+   ДОПОЛНЕНИЯ — элементы, оставшиеся не адаптированными под тёмную тему.
+   Порядок импорта не важен: [data-theme="dark"] повышает специфичность,
+   а !important гарантированно перебивает постраничные правила.
+   ════════════════════════════════════════════════════════════ */
+
+/* ── HTML/JSON → Excel: список таблиц, файлы, JSON-превью, мелкие кнопки ── */
+
+/* список найденных таблиц */
+:root[data-theme="dark"] .tables-list {
+  background: var(--dk-panel) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .table-item {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-bottom-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .table-item:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+}
+:root[data-theme="dark"] .table-item.active {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-left-color: var(--dk-text-2) !important;
+}
+:root[data-theme="dark"] .table-title,
+:root[data-theme="dark"] .table-checkbox,
+:root[data-theme="dark"] .table-number,
+:root[data-theme="dark"] .tables-header h3 {
+  color: var(--dk-text) !important;
+}
+:root[data-theme="dark"] .table-info small,
+:root[data-theme="dark"] .table-content-preview,
+:root[data-theme="dark"] .or-divider,
+:root[data-theme="dark"] .no-tables-found,
+:root[data-theme="dark"] .no-tables-found p {
+  color: var(--dk-text-2) !important;
+}
+:root[data-theme="dark"] .table-content-preview {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--dk-border) !important;
+}
+/* подсветка найденного текста в превью таблицы */
+:root[data-theme="dark"] .table-content-preview mark {
+  background: rgba(255, 193, 7, 0.28) !important;
+  color: #ffd24d !important;
+}
+/* разделитель «или» */
+:root[data-theme="dark"] .or-divider::before,
+:root[data-theme="dark"] .or-divider::after {
+  background: var(--dk-border) !important;
+}
+
+/* полоса имени загруженного файла + кнопка загрузки */
+:root[data-theme="dark"] .file-info {
+  background: rgba(40, 167, 69, 0.12) !important;
+  border-color: rgba(40, 167, 69, 0.3) !important;
+}
+:root[data-theme="dark"] .file-name {
+  color: #4cd964 !important;
+}
+:root[data-theme="dark"] .btn-file {
+  background: var(--dk-panel-2) !important;
+  color: var(--dk-text) !important;
+  border-color: var(--dk-border) !important;
+}
+/* нейтральные кнопки (Выбрать все / Очистить и пр.) внутри конвертера */
+:root[data-theme="dark"] .html-excel-converter .btn:not(.btn-primary):not(.btn-danger) {
+  background: var(--dk-panel-2) !important;
+  color: var(--dk-text) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .html-excel-converter .btn:not(.btn-primary):not(.btn-danger):hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+/* hover вторичной кнопки (Отмена и т.п.) — в light задан жёстко #ececf1 */
+:root[data-theme="dark"] .btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* JSON-режим конвертера */
+:root[data-theme="dark"] .json-preview-container,
+:root[data-theme="dark"] .json-keys-selector,
+:root[data-theme="dark"] .json-table-more,
+:root[data-theme="dark"] .json-raw-preview {
+  background: var(--dk-panel) !important;
+  border-color: var(--dk-border) !important;
+  color: var(--dk-text) !important;
+}
+:root[data-theme="dark"] .json-preview-header {
+  background: var(--dk-head) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .json-preview-info,
+:root[data-theme="dark"] .json-path-input label,
+:root[data-theme="dark"] .json-keys-header h4 {
+  color: var(--dk-text-2) !important;
+}
+:root[data-theme="dark"] .json-preview-info span {
+  background: var(--dk-panel-2) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .json-key-item {
+  color: var(--dk-text) !important;
+}
+:root[data-theme="dark"] .json-key-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+:root[data-theme="dark"] .json-table-preview td {
+  color: var(--dk-text-2) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .json-table-preview th {
+  background: var(--dk-head) !important;
+  color: #6cb8ff !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .json-table-preview tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+:root[data-theme="dark"] .path-input {
+  background: var(--dk-input) !important;
+  color: var(--dk-text) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .path-input:focus {
+  background: var(--dk-panel-2) !important;
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2) !important;
+}
+
+/* ── Модалка «Конструктор таблицы» (вся поверхность была светлой) ── */
+
+:root[data-theme="dark"] .constructor-modal-overlay {
+  background: rgba(0, 0, 0, 0.6) !important;
+}
+:root[data-theme="dark"] .constructor-modal {
+  background: linear-gradient(135deg, #1b1e28 0%, #161924 100%) !important;
+  border-color: var(--dk-border) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+:root[data-theme="dark"] .constructor-modal-header,
+:root[data-theme="dark"] .constructor-modal-footer,
+:root[data-theme="dark"] .constructor-preview-header {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: var(--dk-border) !important;
+}
+/* заголовок модалки — градиентный text-clip, меняем только background-image */
+:root[data-theme="dark"] .constructor-title h2 {
+  background-image: linear-gradient(135deg, #e8e8ea 0%, #aab4ff 100%) !important;
+}
+:root[data-theme="dark"] .constructor-title p,
+:root[data-theme="dark"] .constructor-header h3,
+:root[data-theme="dark"] .constructor-section-header h3,
+:root[data-theme="dark"] .constructor-preview-header h3,
+:root[data-theme="dark"] .control-header h4,
+:root[data-theme="dark"] .constructor-highlight-item,
+:root[data-theme="dark"] .constructor-row-label,
+:root[data-theme="dark"] .constructor-column-label,
+:root[data-theme="dark"] .constructor-no-preview,
+:root[data-theme="dark"] .column-label,
+:root[data-theme="dark"] .summary-item strong {
+  color: var(--dk-text) !important;
+}
+/* внутренние панели модалки */
+:root[data-theme="dark"] .table-constructor,
+:root[data-theme="dark"] .control-section,
+:root[data-theme="dark"] .constructor-summary,
+:root[data-theme="dark"] .constructor-controls-section,
+:root[data-theme="dark"] .constructor-preview-panel,
+:root[data-theme="dark"] .constructor-highlight-info,
+:root[data-theme="dark"] .constructor-preview-table {
+  background: var(--dk-panel) !important;
+  border-color: var(--dk-border) !important;
+  color: var(--dk-text) !important;
+}
+/* списки выбора строк/колонок */
+:root[data-theme="dark"] .constructor-rows-list,
+:root[data-theme="dark"] .constructor-columns-list,
+:root[data-theme="dark"] .rows-selector,
+:root[data-theme="dark"] .columns-selector {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .constructor-row-item,
+:root[data-theme="dark"] .constructor-column-item,
+:root[data-theme="dark"] .row-item,
+:root[data-theme="dark"] .column-item {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .constructor-row-item:hover,
+:root[data-theme="dark"] .constructor-column-item:hover,
+:root[data-theme="dark"] .row-item:hover,
+:root[data-theme="dark"] .column-item:hover {
+  background: rgba(33, 150, 243, 0.12) !important;
+}
+:root[data-theme="dark"] .constructor-row-number,
+:root[data-theme="dark"] .constructor-column-number {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--dk-text-2) !important;
+}
+:root[data-theme="dark"] .constructor-row-checkbox,
+:root[data-theme="dark"] .constructor-column-checkbox {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+/* контр-кнопки (Выбрать все / Очистить) и кнопка закрытия */
+:root[data-theme="dark"] .btn-constructor-control,
+:root[data-theme="dark"] .btn-close-constructor {
+  background: var(--dk-panel-2) !important;
+  color: var(--dk-text) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .btn-constructor-control:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+:root[data-theme="dark"] .btn-close-constructor:hover {
+  background: rgba(220, 53, 69, 0.15) !important;
+  color: #ff6b6b !important;
+}
+/* счётчик выбора */
+:root[data-theme="dark"] .constructor-selection-counter,
+:root[data-theme="dark"] .control-header .selection-counter {
+  background: rgba(33, 150, 243, 0.15) !important;
+  color: #6cb8ff !important;
+  border-color: rgba(33, 150, 243, 0.3) !important;
+}
+/* таблица-предпросмотр внутри модалки */
+:root[data-theme="dark"] .constructor-preview-table th {
+  background: rgba(33, 150, 243, 0.18) !important;
+  color: #6cb8ff !important;
+  border-bottom-color: rgba(33, 150, 243, 0.3) !important;
+}
+:root[data-theme="dark"] .constructor-preview-table td {
+  color: var(--dk-text) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .constructor-preview-table tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+/* тултип над колонкой */
+:root[data-theme="dark"] .column-tooltip {
+  background: rgba(33, 150, 243, 0.95) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+/* подсказки/предупреждения/успех */
+:root[data-theme="dark"] .constructor-warning,
+:root[data-theme="dark"] .constructor-warning-text {
+  color: #ffd24d !important;
+  background: rgba(255, 193, 7, 0.15) !important;
+  border-color: rgba(255, 193, 7, 0.3) !important;
+}
+:root[data-theme="dark"] .constructor-success-text {
+  color: #4cd964 !important;
+  background: rgba(40, 167, 69, 0.15) !important;
+  border-color: rgba(40, 167, 69, 0.3) !important;
+}
+
+/* ── WorkplaceCompare: лейблы фильтров и цветные action-кнопки ── */
+
+/* лейблы опций — это <span>/<div> с жёстким color, базовый текстовый
+   флип через :is(label) их не задевает; красим явно */
+:root[data-theme="dark"] .workplace-filter-label,
+:root[data-theme="dark"] .workplace-filter-tag,
+:root[data-theme="dark"] .workplace-filters-title h3,
+:root[data-theme="dark"] .workplace-filter-group h4 {
+  color: var(--dk-text) !important;
+}
+:root[data-theme="dark"] .workplace-filter-tag.highlight {
+  color: #c499ff !important;
+}
+:root[data-theme="dark"] .workplace-filter-group {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .workplace-filters-header {
+  border-bottom-color: var(--dk-border) !important;
+}
+/* чекбоксы — рамка на тёмном фоне */
+:root[data-theme="dark"] .workplace-filter-option input[type="checkbox"],
+:root[data-theme="dark"] .workplace-cell-checkbox input[type="checkbox"] {
+  background: var(--dk-input) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+/* цветные action-кнопки возвращаем градиент: базовый override
+   .workplace-filter-action-btn превращал их в серую панель */
+:root[data-theme="dark"] .workplace-filter-action-btn.export {
+  background: linear-gradient(135deg, #32D74B 0%, #30D158 100%) !important;
+  color: #fff !important;
+  border-color: rgba(50, 215, 75, 0.4) !important;
+}
+:root[data-theme="dark"] .workplace-filter-action-btn.fullscreen {
+  background: linear-gradient(135deg, #FF9F0A 0%, #FF9500 100%) !important;
+  color: #fff !important;
+  border-color: rgba(255, 159, 10, 0.4) !important;
+}
+/* бейдж-счётчик и статистика в футере */
+:root[data-theme="dark"] .workplace-filter-badge {
+  background: rgba(10, 132, 255, 0.18) !important;
+  color: #6cb8ff !important;
+  border-color: rgba(10, 132, 255, 0.35) !important;
+}
+:root[data-theme="dark"] .workplace-text-gray-400,
+:root[data-theme="dark"] .workplace-text-gray-500 {
+  color: var(--dk-text-2) !important;
+}
+/* приглушённая «вычеркнутая» строка */
+:root[data-theme="dark"] .workplace-row-checked {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--dk-text-2) !important;
 }
