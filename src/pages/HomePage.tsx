@@ -837,7 +837,7 @@ const HomePage = () => {
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadedFilename, setDownloadedFilename] = useState<string>("");
   const [layout, setLayout] = useState<string>(
-    () => localStorage.getItem("hp-layout") || "grid",
+    () => localStorage.getItem("hp-layout") || "menu",
   );
   const changeLayout = useCallback((id: string) => {
     setLayout(id);
@@ -925,7 +925,7 @@ const HomePage = () => {
             </p>
           </div>
 
-          <LayoutSwitcher value={layout} onChange={changeLayout} />
+          {/* <LayoutSwitcher value={layout} onChange={changeLayout} /> */}
 
           <div className="lg-header__right">
             <ThemeToggle />
