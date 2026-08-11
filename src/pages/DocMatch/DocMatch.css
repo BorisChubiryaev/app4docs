@@ -50,7 +50,7 @@
 .timer {
   font-size: 24px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--ink);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -86,11 +86,11 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  max-width: 700px;
   padding: 14px;
   position: relative;
   display: flex;
   flex-direction: column;
+  align-items: center; /* центр доски по горизонтали */
 }
 
 .game-board {
@@ -102,9 +102,13 @@
   padding: 12px;
   box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.05);
   position: relative;
-  /* Квадратная доска, вписанная в доступную высоту, по центру */
-  width: min(100%, calc(100vh - 180px));
-  margin: auto;
+  /* Квадрат, вписанный в доступную высоту (после прогресс-бара и хедера),
+     без магических чисел: flex задаёт высоту, aspect-ratio — ширину. */
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: 1;
+  max-width: 100%;
+  width: auto;
 }
 
 .game-tile {
@@ -233,23 +237,29 @@
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: auto; /* безопасный скролл только на низких экранах */
+}
+
+/* Внутри сайдбара отступы между карточками задаёт gap, поэтому
+   убираем дефолтный margin-bottom у .glass-card, иначе двойные отступы. */
+.game-sidebar .glass-card {
+  margin-bottom: 0;
 }
 
 .stats-card h3,
 .legend-card h3 {
-  margin: 0 0 16px 0;
-  color: #1e293b;
-  font-size: 1.2rem;
+  margin: 0 0 12px 0;
+  color: var(--ink);
+  font-size: 1.1rem;
 }
 
 .stat-block {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
+  padding: 8px 0;
   border-bottom: 1px solid rgba(203, 213, 225, 0.3);
 }
 
@@ -276,22 +286,30 @@
 
 .reset-btn {
   width: 100%;
-  padding: 16px;
+  padding: 12px;
   font-size: 16px;
 }
 
-.legend-card { padding: 20px; }
+.legend-card {
+  padding: 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+.legend-card h3 {
+  grid-column: 1 / -1;
+}
 
+/* Легенда в 2 колонки — компактнее, не вынуждает скролл сайдбара. */
 .legend-item-game {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  font-size: 14px;
+  gap: 8px;
+  font-size: 13px;
   color: #475569;
 }
 
-.legend-item-game span { font-size: 20px; width: 30px; text-align: center; }
+.legend-item-game span { font-size: 18px; width: 24px; text-align: center; }
 
 .special-legend span {
   color: #f59e0b;
