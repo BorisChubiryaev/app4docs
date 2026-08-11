@@ -235,9 +235,9 @@ body {
   width: 100%;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: minmax(0, 200px);
+  grid-auto-rows: minmax(0, clamp(128px, 21vh, 200px));
   align-content: center;
-  gap: 14px;
+  gap: clamp(10px, 1.4vh, 14px);
 }
 
 /* ╔══════════════════════════════════════════╗
@@ -1741,22 +1741,22 @@ body {
   }
 }
 .hp-menu__detail-icon {
-  font-size: 3.4rem;
+  font-size: clamp(2.2rem, 4.6vh, 3.4rem);
   line-height: 1;
-  margin-bottom: 14px;
+  margin-bottom: clamp(8px, 1.4vh, 14px);
 }
 .hp-menu__detail-title {
-  font-size: 5rem;
+  font-size: clamp(2.1rem, 7vh, 5rem);
   font-weight: 750;
   letter-spacing: -0.02em;
-  margin: 0 0 10px;
+  margin: 0 0 clamp(6px, 1.2vh, 10px);
   color: var(--lg-text-primary);
 }
 .hp-menu__detail-desc {
-  font-size: 2rem;
+  font-size: clamp(1.05rem, 2.6vh, 2rem);
   color: var(--lg-text-secondary);
-  line-height: 1.55;
-  margin: 0 0 18px;
+  line-height: 1.5;
+  margin: 0 0 clamp(12px, 2vh, 18px);
   max-width: 640px;
 }
 .hp-menu__detail-features {
