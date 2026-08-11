@@ -19,7 +19,7 @@
 }
 
 .pdf-editor-title {
-  color: #2c3e50;
+  color: var(--ink);
   margin-bottom: 12px;
   font-size: 28px;
   font-weight: 600;
@@ -65,7 +65,7 @@
 
 .upload-text {
   font-size: 18px;
-  color: #2c3e50;
+  color: var(--ink);
   margin-bottom: 8px;
   font-weight: 500;
 }
@@ -189,7 +189,7 @@
 .stat-value {
   font-size: 24px;
   font-weight: bold;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .stats-right {
@@ -215,7 +215,7 @@
 
 .pages-title {
   font-size: 20px;
-  color: #2c3e50;
+  color: var(--ink);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -362,7 +362,7 @@
 .page-number {
   font-size: 12px;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 /* Индикатор загрузки */
@@ -398,7 +398,7 @@
 }
 
 .loading-text {
-  color: #2c3e50;
+  color: var(--ink);
   font-size: 16px;
   font-weight: 500;
 }
@@ -430,7 +430,7 @@
 }
 
 .empty-title {
-  color: #2c3e50;
+  color: var(--ink);
   margin-bottom: 16px;
   font-size: 20px;
   font-weight: 600;
@@ -674,7 +674,7 @@
 
 .preview-modal-header h3 {
   margin: 0;
-  color: #2c3e50;
+  color: var(--ink);
   font-size: 18px;
 }
 
@@ -691,7 +691,7 @@
 
 .preview-modal-close:hover {
   background-color: #f0f0f0;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .preview-modal-body {
