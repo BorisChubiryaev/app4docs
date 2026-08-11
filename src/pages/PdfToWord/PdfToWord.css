@@ -154,7 +154,7 @@
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;
-  color: #1e293b;
+  color: var(--ink);
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
@@ -294,7 +294,7 @@
 .upload-info h3 {
   margin: 0 0 4px 0;
   font-size: 1.2rem;
-  color: #1e293b;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -442,7 +442,7 @@
 .settings-header h3 {
   margin: 0;
   font-size: 1.1rem;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .mode-badge {
@@ -521,7 +521,7 @@
 .option-content strong {
   display: block;
   font-size: 13px;
-  color: #1e293b;
+  color: var(--ink);
   margin-bottom: 2px;
 }
 
@@ -610,7 +610,7 @@
 .level-content strong {
   display: block;
   font-size: 14px;
-  color: #1e293b;
+  color: var(--ink);
   margin-bottom: 2px;
 }
 
@@ -664,7 +664,7 @@
 .option-value {
   font-size: 14px;
   font-weight: 500;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 /* Compress Button - Обновленный */
@@ -773,7 +773,7 @@
 .result-title h3 {
   margin: 0 0 4px 0;
   font-size: 1.2rem;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .result-subtitle {
@@ -823,7 +823,7 @@
   display: block;
   font-size: 18px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .stat-value.original {
@@ -898,7 +898,7 @@
 
 .placeholder-card h3 {
   margin: 0 0 12px 0;
-  color: #1e293b;
+  color: var(--ink);
   font-size: 1.3rem;
 }
 
@@ -952,7 +952,7 @@
 .history-title h3 {
   margin: 0;
   font-size: 1.1rem;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .history-count {
@@ -1014,7 +1014,7 @@
 
 .item-name {
   font-size: 13px;
-  color: #1e293b;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1101,7 +1101,7 @@
 .info-card h3 {
   margin: 0 0 20px 0;
   font-size: 1.1rem;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .info-content {
@@ -1129,7 +1129,7 @@
 .info-text strong {
   display: block;
   font-size: 14px;
-  color: #1e293b;
+  color: var(--ink);
   margin-bottom: 4px;
 }
 
@@ -1412,7 +1412,7 @@
 
 .toggle-label strong {
   font-size: 14px;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .toggle-label small {
@@ -1436,7 +1436,7 @@
 .settings-card .settings-header h3 {
   margin: 0;
   font-size: 1.1rem;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 /* Responsive для converter-content */
@@ -1539,7 +1539,7 @@
   gap: 8px; padding: 12px 24px;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px; color: #1e293b; font-size: 14px;
+  border-radius: 12px; color: var(--ink); font-size: 14px;
   font-weight: 500; cursor: pointer; transition: all 0.3s ease;
   position: relative; overflow: hidden; text-decoration: none;
 }
@@ -1592,7 +1592,7 @@
 }
 
 .upload-info h3 {
-  margin: 0 0 4px; font-size: 1.2rem; color: #1e293b;
+  margin: 0 0 4px; font-size: 1.2rem; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -1618,7 +1618,7 @@
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
 }
 
-.settings-card .settings-header h3 { margin: 0; font-size: 1.1rem; color: #1e293b; }
+.settings-card .settings-header h3 { margin: 0; font-size: 1.1rem; color: var(--ink); }
 
 .mode-selector { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 
@@ -1637,7 +1637,7 @@
 }
 
 .option-icon { font-size: 20px; display: block; margin-bottom: 6px; }
-.option-content strong { display: block; font-size: 13px; color: #1e293b; margin-bottom: 2px; }
+.option-content strong { display: block; font-size: 13px; color: var(--ink); margin-bottom: 2px; }
 .option-content small { font-size: 11px; color: #64748b; line-height: 1.2; }
 
 /* ========== Compress Button ========== */
@@ -1666,7 +1666,7 @@
   margin-bottom: 16px; flex-shrink: 0;
 }
 
-.files-list-header h3 { margin: 0; font-size: 1.1rem; color: #1e293b; }
+.files-list-header h3 { margin: 0; font-size: 1.1rem; color: var(--ink); }
 .files-list-actions { display: flex; gap: 8px; }
 
 .files-list {
@@ -1702,7 +1702,7 @@
 .file-row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 
 .file-row-name {
-  font-size: 14px; font-weight: 500; color: #1e293b;
+  font-size: 14px; font-weight: 500; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -1776,12 +1776,12 @@
 
 /* ========== Info / Warning Cards ========== */
 
-.info-card h3 { margin: 0 0 20px; font-size: 1.1rem; color: #1e293b; }
+.info-card h3 { margin: 0 0 20px; font-size: 1.1rem; color: var(--ink); }
 .info-content { display: flex; flex-direction: column; gap: 16px; }
 
 .info-item { display: flex; align-items: flex-start; gap: 12px; }
 .info-icon { font-size: 20px; flex-shrink: 0; opacity: 0.8; }
-.info-text strong { display: block; font-size: 14px; color: #1e293b; margin-bottom: 4px; }
+.info-text strong { display: block; font-size: 14px; color: var(--ink); margin-bottom: 4px; }
 .info-text p { margin: 0; font-size: 13px; color: #64748b; line-height: 1.4; }
 
 .security-note {
