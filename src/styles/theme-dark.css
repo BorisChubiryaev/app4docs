@@ -308,6 +308,24 @@
 :root[data-theme="dark"] .preview-table td {
   color: var(--dk-text) !important;
 }
+/* Confluence/Word: тёмный инлайн-цвет текста (rgb(51,51,51) / #333 / #000 и т.п.)
+   на вложенных <span>/<p>/<td> не виден на тёмном фоне превью таблицы → светлим.
+   Селекторы по атрибуту style нацелены именно на тёмные значения, чтобы не трогать
+   намеренно цветные (ссылки, «Done»/«Failed»). !important перебивает инлайн-стиль. */
+:root[data-theme="dark"] :is(.preview-table, .constructor-preview-table)
+  [style*="rgb(51,51"],
+:root[data-theme="dark"] :is(.preview-table, .constructor-preview-table)
+  [style*="rgb(51, 51"],
+:root[data-theme="dark"] :is(.preview-table, .constructor-preview-table)
+  [style*=":#333"],
+:root[data-theme="dark"] :is(.preview-table, .constructor-preview-table)
+  [style*=": #333"],
+:root[data-theme="dark"] :is(.preview-table, .constructor-preview-table)
+  [style*=":#000"],
+:root[data-theme="dark"] :is(.preview-table, .constructor-preview-table)
+  [style*=": #000"] {
+  color: var(--dk-text) !important;
+}
 
 /* ── SVG → PNG ── */
 :root[data-theme="dark"] .svg2png-page {
@@ -481,6 +499,11 @@
   background: rgba(255, 255, 255, 0.03) !important;
   border-bottom-color: var(--dk-border) !important;
 }
+:root[data-theme="dark"] .tables-list,
+:root[data-theme="dark"] .table-item {
+  background: var(--dk-panel) !important;
+  border-color: var(--dk-border) !important;
+}
 :root[data-theme="dark"] .table-item:hover {
   background: rgba(255, 255, 255, 0.07) !important;
 }
@@ -488,7 +511,6 @@
   background: rgba(255, 255, 255, 0.1) !important;
   border-left-color: var(--dk-text-2) !important;
 }
-:root[data-theme="dark"] .table-title,
 :root[data-theme="dark"] .table-checkbox,
 :root[data-theme="dark"] .table-number,
 :root[data-theme="dark"] .tables-header h3 {
