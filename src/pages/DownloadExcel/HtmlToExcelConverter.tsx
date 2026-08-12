@@ -1,8 +1,80 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import * as ExcelJS from "exceljs";
 import { handleUrlExcelDownload } from "../../utils/urlExcelDownloader";
 import "./HtmlToExcelConverter.css";
-import { Link } from "react-router-dom";
+import InstructionsModalShell from "../../components/InstructionsModal";
+import PageShell from "../../components/PageShell";
+import { useTheme } from "../../hooks/useTheme";
+
+// --- Подготовка HTML превью для тёмной темы ---
+// Confluence/Word вкладывают <span> друг в друга, и видимый цвет задаёт самый
+// глубокий. Дефолтные цвета их текста — тёмные или приглушённые серые/сероватые
+// (rgb(0,0,0), rgb(23,43,77)=#172B4D, rgb(51,51,51)=#333, rgb(122,134,154)…),
+// которые на тёмном фоне превью не видны. CSS не умеет вычислять яркость цвета,
+// поэтому чистим инлайн-цвета в JS: у элементов с «трудночитаемым на тёмном» color
+// убираем свойство, чтобы унаследовался светлый цвет ячейки от темы.
+// Цветные акценты (зелёный «Done», красный, ссылки) остаются нетронутыми.
+// Важно: работает с копией строки outerHTML — оригинальный DOM-узел previewTable
+// (используется для выгрузки в Excel) не меняется, цвета в файле сохраняются.
+type RgbColor = { r: number; g: number; b: number };
+
+/** Разобрать CSS-цвет в RGB. Браузер отдаёт style.color нормализованным (rgb()/rgba()). */
+function parseColor(raw: string): RgbColor | null {
+  const s = raw.trim().toLowerCase();
+  let m = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+  if (m) {
+    let hex = m[1];
+    if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+    };
+  }
+  m = s.match(/^rgba?\(\s*([\d.]+)\s*[,\s]\s*([\d.]+)\s*[,\s]\s*([\d.]+)/);
+  if (m) return { r: +m[1], g: +m[2], b: +m[3] };
+  return null;
+}
+
+/** HSV-насыщенность цвета (0..1): 0 — серый, 1 — чистый оттенок. */
+function saturationOf({ r, g, b }: RgbColor): number {
+  const max = Math.max(r, g, b);
+  return max === 0 ? 0 : (max - Math.min(r, g, b)) / max;
+}
+
+/**
+ * Цвет плохо читается на тёмном фоне, если он тёмный (низкая яркость) ИЛИ
+ * приглушённый нейтральный (серый/сероватый — типичный «текстовый» цвет
+ * Confluence/Word: rgb(0,0,0), #333, rgb(23,43,77), rgb(122,134,154)…).
+ * Насыщенные цвета (зелёный «Done», красный, ссылки) сохраняются.
+ */
+function isHardToReadOnDark(c: RgbColor): boolean {
+  const lum = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255;
+  return lum < 0.42 || saturationOf(c) < 0.3;
+}
+
+/** Убрать тёмные инлайн-цвета текста из HTML (для предпросмотра в тёмной теме). */
+function sanitizeHtmlForDarkTheme(html: string): string {
+  if (!html) return html;
+  try {
+    const doc = new DOMParser().parseFromString(
+      `<div id="__san-root">${html}</div>`,
+      "text/html",
+    );
+    const root = doc.getElementById("__san-root");
+    if (!root) return html;
+    root.querySelectorAll<HTMLElement>("[style]").forEach((el) => {
+      const color = el.style.color;
+      if (color) {
+        const rgb = parseColor(color);
+        if (rgb && isHardToReadOnDark(rgb)) el.style.removeProperty("color");
+      }
+    });
+    return root.innerHTML;
+  } catch {
+    return html;
+  }
+}
 
 const HtmlToExcelConverter: React.FC = () => {
   // Существующие состояния для HTML
@@ -38,6 +110,18 @@ const HtmlToExcelConverter: React.FC = () => {
     "table",
   );
   const [jsonArrayPath, setJsonArrayPath] = useState<string>("");
+
+  const [theme] = useTheme();
+
+  // HTML превью: в тёмной теме убираем тёмные инлайн-цвета текста Confluence/Word,
+  // чтобы они наследовали светлый цвет ячейки. Оригинал previewTable не трогаем.
+  const previewTableHtml = useMemo(
+    () =>
+      theme === "dark" && previewTable
+        ? sanitizeHtmlForDarkTheme(previewTable.outerHTML)
+        : previewTable?.outerHTML ?? "",
+    [theme, previewTable],
+  );
 
   useEffect(() => {
     handleUrlExcelDownload();
@@ -1191,7 +1275,12 @@ const HtmlToExcelConverter: React.FC = () => {
                     {customTablePreview ? (
                       <div
                         dangerouslySetInnerHTML={{
-                          __html: customTablePreview.outerHTML,
+                          __html:
+                            theme === "dark"
+                              ? sanitizeHtmlForDarkTheme(
+                                  customTablePreview.outerHTML,
+                                )
+                              : customTablePreview.outerHTML,
                         }}
                       />
                     ) : (
@@ -1245,91 +1334,69 @@ const HtmlToExcelConverter: React.FC = () => {
   };
 
   // Модальное окно инструкции
-  const InstructionsModal: React.FC = () => {
-    if (!showInstructions) return null;
-
-    return (
-      <div className="modal-overlay" onClick={() => setShowInstructions(false)}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header">
-            <h2>📋 Инструкция по использованию конвертера</h2>
-            <button
-              className="modal-close"
-              onClick={() => setShowInstructions(false)}
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="modal-body">
-            <div className="instructions-section">
-              <h3>🔄 Режимы конвертера</h3>
-              <p>Конвертер поддерживает два типа входных данных:</p>
-              <ul>
-                <li>
-                  <strong>HTML в Excel</strong> - конвертация HTML-таблиц
-                </li>
-                <li>
-                  <strong>JSON в Excel</strong> - конвертация JSON-данных
-                </li>
-              </ul>
-            </div>
-
-            <div className="instructions-section">
-              <h3>📊 JSON в Excel</h3>
-              <ol>
-                <li>Выберите вкладку "JSON в Excel"</li>
-                <li>
-                  Вставьте JSON-данные (массив объектов или объект с массивом)
-                </li>
-                <li>Выберите нужные колонки для экспорта</li>
-                <li>Нажмите "Скачать как Excel"</li>
-              </ol>
-              <p>
-                <strong>Поддерживаемые форматы JSON:</strong>
-              </p>
-              <ul>
-                <li>Вложенные объекты автоматически преобразуются в строку</li>
-              </ul>
-            </div>
-
-            <div className="instructions-section">
-              <h3>🛠️ Конструктор таблиц (HTML)</h3>
-              <p>
-                Для HTML-таблиц доступен конструктор для выбора строк и столбцов
-              </p>
-            </div>
-
-            <div className="instructions-section">
-              <h3>⚠️ Частые проблемы и решения</h3>
-              <ul>
-                <li>
-                  <strong>JSON не парсится:</strong> Убедитесь, что JSON валиден
-                </li>
-                <li>
-                  <strong>Не найден массив:</strong> Укажите путь к массиву в
-                  поле "Путь к массиву"
-                </li>
-                <li>
-                  <strong>Большой объем данных:</strong> Для больших массивов
-                  рекомендуется разбить на части
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="modal-footer">
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowInstructions(false)}
-            >
-              Понятно! Начать работу!
-            </button>
-          </div>
-        </div>
+  const InstructionsModal: React.FC = () => (
+    <InstructionsModalShell
+      isOpen={showInstructions}
+      onClose={() => setShowInstructions(false)}
+      title="📋 Инструкция по использованию конвертера"
+      footerLabel="Понятно! Начать работу!"
+    >
+      <div className="instructions-section">
+        <h3>🔄 Режимы конвертера</h3>
+        <p>Конвертер поддерживает два типа входных данных:</p>
+        <ul>
+          <li>
+            <strong>HTML в Excel</strong> - конвертация HTML-таблиц
+          </li>
+          <li>
+            <strong>JSON в Excel</strong> - конвертация JSON-данных
+          </li>
+        </ul>
       </div>
-    );
-  };
+
+      <div className="instructions-section">
+        <h3>📊 JSON в Excel</h3>
+        <ol>
+          <li>Выберите вкладку "JSON в Excel"</li>
+          <li>
+            Вставьте JSON-данные (массив объектов или объект с массивом)
+          </li>
+          <li>Выберите нужные колонки для экспорта</li>
+          <li>Нажмите "Скачать как Excel"</li>
+        </ol>
+        <p>
+          <strong>Поддерживаемые форматы JSON:</strong>
+        </p>
+        <ul>
+          <li>Вложенные объекты автоматически преобразуются в строку</li>
+        </ul>
+      </div>
+
+      <div className="instructions-section">
+        <h3>🛠️ Конструктор таблиц (HTML)</h3>
+        <p>
+          Для HTML-таблиц доступен конструктор для выбора строк и столбцов
+        </p>
+      </div>
+
+      <div className="instructions-section">
+        <h3>⚠️ Частые проблемы и решения</h3>
+        <ul>
+          <li>
+            <strong>JSON не парсится:</strong> Убедитесь, что JSON валиден
+          </li>
+          <li>
+            <strong>Не найден массив:</strong> Укажите путь к массиву в поле
+            "Путь к массиву"
+          </li>
+          <li>
+            <strong>Большой объем данных:</strong> Для больших массивов
+            рекомендуется разбить на части
+          </li>
+        </ul>
+      </div>
+    </InstructionsModalShell>
+  );
 
   return (
     <>
@@ -1348,23 +1415,11 @@ const HtmlToExcelConverter: React.FC = () => {
         style={{ display: "none" }}
       />
 
-      <div className="html-excel-converter">
-        <div className="converter-container">
-          <div className="converter-header">
-            <div className="header-content">
-              <Link to="/" className="home-button">
-                🏠 На главную
-              </Link>
-              <h1>Конвертер в Excel</h1>
-              <p>Преобразуйте HTML-таблицы и JSON-данные в файлы Excel</p>
-              <button
-                className="home-button instructions-button"
-                onClick={() => setShowInstructions(true)}
-              >
-                📚 Инструкция
-              </button>
-            </div>
-          </div>
+      <PageShell
+        title="Конвертер в Excel"
+        subtitle="Преобразуйте HTML-таблицы и JSON-данные в файлы Excel"
+        onShowInstructions={() => setShowInstructions(true)}
+      >
 
           <div className="converter-content">
             <div className="input-section">
@@ -1374,15 +1429,15 @@ const HtmlToExcelConverter: React.FC = () => {
               </div>
 
               {/* Переключатель типа конвертера */}
-              <div className="converter-type-selector">
+              <div className="ds-tabs ds-tabs--fill">
                 <button
-                  className={`converter-type-btn ${converterType === "html" ? "active" : ""}`}
+                  className={`ds-tab ${converterType === "html" ? "ds-tab--active" : ""}`}
                   onClick={() => handleConverterTypeChange("html")}
                 >
                   📄 HTML в Excel
                 </button>
                 <button
-                  className={`converter-type-btn ${converterType === "json" ? "active" : ""}`}
+                  className={`ds-tab ${converterType === "json" ? "ds-tab--active" : ""}`}
                   onClick={() => handleConverterTypeChange("json")}
                 >
                   📊 JSON в Excel
@@ -1420,7 +1475,7 @@ const HtmlToExcelConverter: React.FC = () => {
               {converterType === "html" ? (
                 <>
                   {/* Переключатель режимов HTML */}
-                  <div className="mode-selector">
+                  <div className="mode-selector-html">
                     <label className="mode-option">
                       <input
                         type="radio"
@@ -1721,7 +1776,7 @@ const HtmlToExcelConverter: React.FC = () => {
                   <div className="preview-table">
                     <div
                       dangerouslySetInnerHTML={{
-                        __html: previewTable.outerHTML,
+                        __html: previewTableHtml,
                       }}
                     />
                   </div>
@@ -1765,8 +1820,7 @@ const HtmlToExcelConverter: React.FC = () => {
               )}
             </div>
           </div>
-        </div>
-      </div>
+      </PageShell>
     </>
   );
 };
