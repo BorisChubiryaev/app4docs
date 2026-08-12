@@ -1,5 +1,5 @@
 // HomePage.jsx
-import { useEffect, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import {
   handleUrlExcelDownload,
   hasUrlDownloadData,
@@ -124,14 +124,27 @@ const FeedbackModal = memo(({ isOpen, onClose }) => {
 });
 
 // ─── Данные инструментов ───
-const tools = [
+type Tool = {
+  title: string;
+  path: string;
+  description: string;
+  icon: string;
+  features: string[];
+  note?: string;
+};
+
+const tools: Tool[] = [
   {
     title: "Сравнение Excel-файлов по рабочим местам",
     path: "/WorkplaceCompare",
     description:
       "Профессиональное сравнение файлов рабочих мест с расширенными фильтрами",
     icon: "🏢",
-    features: ["Расширенные фильтры", "Подсветка изменений", "Экспорт в Excel"],
+    features: [
+      "Гибкие фильтры по рабочим местам",
+      "Подсветка найденных изменений",
+      "Экспорт результата в Excel",
+    ],
   },
   {
     title: "Сравнение Excel/Word-файлов",
@@ -140,20 +153,20 @@ const tools = [
       "Точное сравнение файлов по позициям ячеек с визуальной подсветкой",
     icon: "📊",
     features: [
-      "Построчное сравнение",
-      "Визуальная подсветка",
-      "Side-by-side просмотр",
+      "Построчное сравнение по позициям ячеек",
+      "Цветовая подсветка изменений",
+      "Просмотр двух файлов рядом",
     ],
   },
   {
-    title: "Конвертер HTML/JSON-таблицы в Excel - 🆕",
+    title: "Конвертер HTML/JSON-таблицы в Excel",
     path: "/htmlToExcel",
     description: "Преобразование HTML/JSON-таблиц в файлы Excel одним кликом",
     icon: "🔧",
     features: [
-      "Предпросмотр таблицы",
-      "Поддержка стилей",
-      "Мгновенная конвертация",
+      "Живой предпросмотр перед выгрузкой",
+      "Сохранение стилей и форматирования",
+      "Конвертация HTML и JSON одним кликом",
     ],
   },
   {
@@ -162,7 +175,11 @@ const tools = [
     description:
       "Быстрая конвертация SVG изображений в PNG формат с настройками",
     icon: "🖼️",
-    features: ["Настройка размеров", "Выбор фона", "Сохранение пропорций"],
+    features: [
+      "Точная настройка ширины и высоты",
+      "Прозрачный фон или заливка цветом",
+      "Сохранение пропорций изображения",
+    ],
   },
   {
     title: "PDF Studio",
@@ -171,11 +188,10 @@ const tools = [
       "Всё для работы со страницами PDF в одном месте — объединение, порядок, повороты, сжатие",
     icon: "📄",
     features: [
-      "Объединение и разделение файлов",
-      "Перемещение и удаление страниц",
-      "Поворот страниц",
-      "Сжатие PDF (уменьшение веса)",
-      "✅ Работает офлайн, файлы не покидают устройство",
+      "Объединение и разделение PDF-файлов",
+      "Перемещение, удаление и поворот страниц",
+      "Сжатие PDF для уменьшения размера",
+      "Drag & Drop загрузка страниц",
     ],
   },
   {
@@ -185,9 +201,9 @@ const tools = [
       "Группировка данных из нескольких Excel-файлов с сохранением информации",
     icon: "✳️",
     features: [
-      "Конструктор группировки",
-      "Точное сопоставление данных",
-      "Проверка структуры",
+      "Конструктор правил группировки",
+      "Точное сопоставление данных из файлов",
+      "Проверка структуры и целостности",
     ],
   },
   {
@@ -196,24 +212,24 @@ const tools = [
     description: "Быстрое превращение таблиц в красивые графики",
     icon: "💠",
     features: [
-      "Конструктор графиков",
-      "Адаптивная расстановка",
+      "Конструктор графиков из таблиц",
+      "Адаптивная расстановка элементов",
       "Рисование и вставка объектов",
       "Экспорт в удобном формате",
     ],
   },
   {
-    title: "Конвертер документов - test",
+    title: "Конвертер документов",
     path: "/PdfToWord",
     description: "PDF ↔ Word — конвертируйте в обе стороны, прямо в браузере",
     icon: "🔄",
     features: [
-      "PDF в Word с сохранением форматирования",
-      "Word в PDF с точным разбиением по страницам",
-      "Три режима работы с изображениями",
+      "PDF → Word с сохранением форматирования",
+      "Word → PDF с разбиением по страницам",
+      "Три режима обработки изображений",
       "Пакетная обработка нескольких файлов",
-      "⚠️ - Недоступно для работы с таблицами",
     ],
+    note: "Не подходит для документов со сложными таблицами",
   },
   {
     title: "JPG в PDF",
@@ -223,11 +239,10 @@ const tools = [
     icon: "🖼️",
     features: [
       "Поддержка JPG, PNG, WebP, GIF, BMP, TIFF",
-      "Одиночный режим и режим сетки на странице",
+      "Одиночный режим и сетка на странице",
       "Настройка отступов, качества и ориентации",
       "Drag & Drop сортировка изображений",
       "Нумерация страниц и подписи к фото",
-      "✅ - Работает офлайн, файлы не покидают устройство",
     ],
   },
   //   {
@@ -718,6 +733,103 @@ const MENU_ART = {
   "/JpgToPdfPage": JpgToPdfArt,
 };
 
+// ─── Эффект «набора на клавиатуре» для описания инструмента ───
+function useTypedCount(total: number, speed: number, startDelay = 150) {
+  const reduceMotion = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
+  const [count, setCount] = useState(reduceMotion ? total : 0);
+  useEffect(() => {
+    if (reduceMotion) {
+      setCount(total);
+      return;
+    }
+    setCount(0);
+    let i = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      i += 1;
+      setCount(i);
+      if (i < total) timer = setTimeout(tick, speed);
+    };
+    const start = setTimeout(tick, startDelay);
+    return () => {
+      clearTimeout(start);
+      clearTimeout(timer);
+    };
+  }, [total, speed, startDelay, reduceMotion]);
+  return count;
+}
+
+const TypedDescription = memo(
+  ({ desc, features }: { desc: string; features: string[] }) => {
+    const segs = useMemo(() => [desc, ...features], [desc, features]);
+    const total = segs.reduce((n, s) => n + s.length, 0) || 1;
+    // скорость подбираем так, чтобы весь блок печатался ~за 1.3–1.7 с
+    const speed = Math.max(8, Math.min(26, Math.round(1300 / total)));
+    const count = useTypedCount(total, speed);
+
+    let remaining = count;
+    const taken = segs.map((s) => {
+      const take = Math.min(Math.max(remaining, 0), s.length);
+      remaining -= take;
+      return take;
+    });
+    // курсор стоит в последнем сегменте, до которого добралась печать
+    let cursorAt = -1;
+    for (let i = segs.length - 1; i >= 0; i--) {
+      if (taken[i] > 0) {
+        cursorAt = i;
+        break;
+      }
+    }
+    const typing = count < total;
+
+    return (
+      <>
+        <p className="hp-menu__detail-desc">
+          {desc.slice(0, taken[0])}
+          {cursorAt === 0 && typing && (
+            <span className="hp-menu__cursor" aria-hidden="true" />
+          )}
+          {/* невидимый «хвост» держит итоговую высоту — блок не прыгает при наборе */}
+          {taken[0] < desc.length && (
+            <span className="hp-menu__pending">{desc.slice(taken[0])}</span>
+          )}
+        </p>
+        <ul className="hp-menu__detail-features">
+          {features.map((full, i) => {
+            const ti = i + 1;
+            const take = taken[ti];
+            const started = take > 0;
+            return (
+              <li key={i}>
+                <span
+                  className="lg-card__check"
+                  style={{ visibility: started ? "visible" : "hidden" }}
+                >
+                  ✓
+                </span>
+                {full.slice(0, take)}
+                {cursorAt === ti && typing && (
+                  <span className="hp-menu__cursor" aria-hidden="true" />
+                )}
+                {/* невидимый остаток строки фиксирует высоту пункта заранее */}
+                {take < full.length && (
+                  <span className="hp-menu__pending">{full.slice(take)}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </>
+    );
+  },
+);
+
 // ─── Вариант «Меню»: рельс иконок + деталь при наведении ───
 const MenuLayout = memo(() => {
   const [active, setActive] = useState(0);
@@ -783,18 +895,19 @@ const MenuLayout = memo(() => {
         <div className="hp-menu__detail-body">
           <div className="hp-menu__detail-icon">{t.icon}</div>
           <h2 className="hp-menu__detail-title">{t.title}</h2>
-          <p className="hp-menu__detail-desc">{t.description}</p>
-          <ul className="hp-menu__detail-features">
-            {t.features.map((f, i) => (
-              <li key={i}>
-                <span className="lg-card__check">✓</span>
-                {f}
-              </li>
-            ))}
-          </ul>
+          <TypedDescription desc={t.description} features={t.features} />
+          {t.note && (
+            <p className="hp-menu__detail-note">
+              <span aria-hidden="true">⚠️</span> {t.note}
+            </p>
+          )}
           <Link to={t.path} className="lg-btn lg-btn--primary hp-menu__open">
             Открыть →
           </Link>
+          <p className="hp-menu__offline">
+            <span className="hp-menu__offline-ico" aria-hidden="true">🔒</span>
+            Работает офлайн · файлы не покидают устройство
+          </p>
         </div>
       </section>
     </main>
