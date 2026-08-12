@@ -1314,6 +1314,26 @@ body {
 .art-bob {
   animation: pdfart-bob 5.5s ease-in-out infinite;
 }
+/* Принудительная композиторная прослойка для анимированных SVG-групп.
+   Без неё Chrome/Edge на Windows часто не «тикают» CSS-анимации transform
+   внутри <g> — сценка выглядит статичной. will-change поднимает элемент
+   в отдельный слой, и анимация начинает проигрываться стабильно. */
+.pdfart-scene,
+.pdfart-merge,
+.pdfart-rotate,
+.pdfart-plus,
+.art-bob,
+.cmp-scan,
+.cmp2-cell,
+.h2x-code,
+.h2x-grid,
+.grp-sq,
+.chart-bar,
+.p2w-flip,
+.j2p-img,
+.j2p-badge {
+  will-change: transform;
+}
 
 /* 🏢 Сравнение по рабочим местам — сканирующая подсветка строк */
 .cmp-scan {
@@ -1777,6 +1797,73 @@ body {
 .hp-menu__open {
   align-self: flex-start;
   text-decoration: none;
+}
+.hp-menu__detail-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -10px 0 18px;
+  padding: 9px 13px;
+  border-radius: 10px;
+  max-width: 640px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: var(--lg-text-secondary);
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 34%, transparent);
+}
+.hp-menu__offline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin: 18px 0 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  max-width: 640px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--lg-text-secondary);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.hp-menu__offline-ico {
+  font-size: 1rem;
+  line-height: 1;
+}
+/* мигающая «каретка» для эффекта набора текста */
+.hp-menu__cursor {
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 3px;
+  border-radius: 1px;
+  background: var(--accent);
+  vertical-align: -0.12em;
+  animation: hp-blink 1.05s steps(2, start) infinite;
+}
+@keyframes hp-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+/* Невидимый текст-«заглушка» для эффекта набора: занимает место сразу,
+   поэтому описание и список имеют итоговую высоту с первого кадра и
+   заголовок/кнопка не дёргаются при побуквенном появлении текста. */
+.hp-menu__pending {
+  color: transparent;
+  user-select: none;
+}
+/* note и офлайн-бейдж проявляются после того, как текст «набран» */
+.hp-menu__detail-note,
+.hp-menu__offline {
+  animation: hp-fade 0.45s ease both;
+  animation-delay: 1.7s;
 }
 @keyframes hp-fade {
   from {
