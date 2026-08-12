@@ -1,9 +1,80 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import * as ExcelJS from "exceljs";
 import { handleUrlExcelDownload } from "../../utils/urlExcelDownloader";
 import "./HtmlToExcelConverter.css";
 import InstructionsModalShell from "../../components/InstructionsModal";
 import PageShell from "../../components/PageShell";
+import { useTheme } from "../../hooks/useTheme";
+
+// --- Подготовка HTML превью для тёмной темы ---
+// Confluence/Word вкладывают <span> друг в друга, и видимый цвет задаёт самый
+// глубокий. Дефолтные цвета их текста — тёмные или приглушённые серые/сероватые
+// (rgb(0,0,0), rgb(23,43,77)=#172B4D, rgb(51,51,51)=#333, rgb(122,134,154)…),
+// которые на тёмном фоне превью не видны. CSS не умеет вычислять яркость цвета,
+// поэтому чистим инлайн-цвета в JS: у элементов с «трудночитаемым на тёмном» color
+// убираем свойство, чтобы унаследовался светлый цвет ячейки от темы.
+// Цветные акценты (зелёный «Done», красный, ссылки) остаются нетронутыми.
+// Важно: работает с копией строки outerHTML — оригинальный DOM-узел previewTable
+// (используется для выгрузки в Excel) не меняется, цвета в файле сохраняются.
+type RgbColor = { r: number; g: number; b: number };
+
+/** Разобрать CSS-цвет в RGB. Браузер отдаёт style.color нормализованным (rgb()/rgba()). */
+function parseColor(raw: string): RgbColor | null {
+  const s = raw.trim().toLowerCase();
+  let m = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+  if (m) {
+    let hex = m[1];
+    if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+    };
+  }
+  m = s.match(/^rgba?\(\s*([\d.]+)\s*[,\s]\s*([\d.]+)\s*[,\s]\s*([\d.]+)/);
+  if (m) return { r: +m[1], g: +m[2], b: +m[3] };
+  return null;
+}
+
+/** HSV-насыщенность цвета (0..1): 0 — серый, 1 — чистый оттенок. */
+function saturationOf({ r, g, b }: RgbColor): number {
+  const max = Math.max(r, g, b);
+  return max === 0 ? 0 : (max - Math.min(r, g, b)) / max;
+}
+
+/**
+ * Цвет плохо читается на тёмном фоне, если он тёмный (низкая яркость) ИЛИ
+ * приглушённый нейтральный (серый/сероватый — типичный «текстовый» цвет
+ * Confluence/Word: rgb(0,0,0), #333, rgb(23,43,77), rgb(122,134,154)…).
+ * Насыщенные цвета (зелёный «Done», красный, ссылки) сохраняются.
+ */
+function isHardToReadOnDark(c: RgbColor): boolean {
+  const lum = (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255;
+  return lum < 0.42 || saturationOf(c) < 0.3;
+}
+
+/** Убрать тёмные инлайн-цвета текста из HTML (для предпросмотра в тёмной теме). */
+function sanitizeHtmlForDarkTheme(html: string): string {
+  if (!html) return html;
+  try {
+    const doc = new DOMParser().parseFromString(
+      `<div id="__san-root">${html}</div>`,
+      "text/html",
+    );
+    const root = doc.getElementById("__san-root");
+    if (!root) return html;
+    root.querySelectorAll<HTMLElement>("[style]").forEach((el) => {
+      const color = el.style.color;
+      if (color) {
+        const rgb = parseColor(color);
+        if (rgb && isHardToReadOnDark(rgb)) el.style.removeProperty("color");
+      }
+    });
+    return root.innerHTML;
+  } catch {
+    return html;
+  }
+}
 
 const HtmlToExcelConverter: React.FC = () => {
   // Существующие состояния для HTML
@@ -39,6 +110,18 @@ const HtmlToExcelConverter: React.FC = () => {
     "table",
   );
   const [jsonArrayPath, setJsonArrayPath] = useState<string>("");
+
+  const [theme] = useTheme();
+
+  // HTML превью: в тёмной теме убираем тёмные инлайн-цвета текста Confluence/Word,
+  // чтобы они наследовали светлый цвет ячейки. Оригинал previewTable не трогаем.
+  const previewTableHtml = useMemo(
+    () =>
+      theme === "dark" && previewTable
+        ? sanitizeHtmlForDarkTheme(previewTable.outerHTML)
+        : previewTable?.outerHTML ?? "",
+    [theme, previewTable],
+  );
 
   useEffect(() => {
     handleUrlExcelDownload();
@@ -1192,7 +1275,12 @@ const HtmlToExcelConverter: React.FC = () => {
                     {customTablePreview ? (
                       <div
                         dangerouslySetInnerHTML={{
-                          __html: customTablePreview.outerHTML,
+                          __html:
+                            theme === "dark"
+                              ? sanitizeHtmlForDarkTheme(
+                                  customTablePreview.outerHTML,
+                                )
+                              : customTablePreview.outerHTML,
                         }}
                       />
                     ) : (
@@ -1688,7 +1776,7 @@ const HtmlToExcelConverter: React.FC = () => {
                   <div className="preview-table">
                     <div
                       dangerouslySetInnerHTML={{
-                        __html: previewTable.outerHTML,
+                        __html: previewTableHtml,
                       }}
                     />
                   </div>
