@@ -9,6 +9,11 @@ import ThemeToggle from "../components/ThemeToggle";
 import { Link } from "react-router-dom";
 import "./HomePage.css";
 
+// ⬇️ ССЫЛКА НА ОПРОС CSI (удовлетворённость проектом).
+// Вставьте сюда реальный URL опроса — используется и в кнопке «Опрос»
+// в футере, и в одноразовом окне с просьбой пройти опрос.
+const SURVEY_URL = "#";
+
 const AnimatedBackground = memo(() => (
   <div className="lg-ambient">
     <div className="lg-orb lg-orb--1" />
@@ -115,6 +120,61 @@ const FeedbackModal = memo(({ isOpen, onClose }) => {
             </button>
             <button className="lg-btn lg-btn--ghost" onClick={onClose}>
               Закрыть
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// ─── Окно с просьбой пройти опрос CSI (показывается один раз) ───
+const CsiModal = memo(({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="lg-modal-overlay" onClick={onClose}>
+      <div className="lg-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="lg-modal__glass" />
+        <div className="lg-modal__shine" />
+
+        <div className="lg-modal__content">
+          <button className="lg-modal__close" onClick={onClose}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path
+                d="M4 4l10 10M14 4L4 14"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+
+          <div className="lg-modal__icon-wrap">
+            <span className="lg-modal__icon">⭐</span>
+          </div>
+
+          <h2 className="lg-modal__title">Оцените проект</h2>
+
+          <p className="lg-modal__text">
+            Помогите нам стать лучше — пройдите короткий опрос
+            удовлетворённости проектом{" "}
+            <span className="lg-gradient-text">EX-EL</span>. Это займёт пару
+            минут и очень поможет команде.
+          </p>
+
+          <div className="lg-modal__actions">
+            <a
+              className="lg-btn lg-btn--primary"
+              href={SURVEY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onClose}
+            >
+              ⭐ Пройти опрос
+            </a>
+            <button className="lg-btn lg-btn--ghost" onClick={onClose}>
+              Позже
             </button>
           </div>
         </div>
@@ -734,19 +794,12 @@ const MENU_ART = {
 };
 
 // ─── Эффект «набора на клавиатуре» для описания инструмента ───
+// Эффект декоративный и является частью задумки экрана, поэтому играем его
+// всегда — не завязываемся на системную настройку «уменьшить движение»
+// (на многих Windows-ноутбуках она включена и глушила анимацию).
 function useTypedCount(total: number, speed: number, startDelay = 150) {
-  const reduceMotion = useMemo(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    [],
-  );
-  const [count, setCount] = useState(reduceMotion ? total : 0);
+  const [count, setCount] = useState(0);
   useEffect(() => {
-    if (reduceMotion) {
-      setCount(total);
-      return;
-    }
     setCount(0);
     let i = 0;
     let timer: ReturnType<typeof setTimeout>;
@@ -760,7 +813,7 @@ function useTypedCount(total: number, speed: number, startDelay = 150) {
       clearTimeout(start);
       clearTimeout(timer);
     };
-  }, [total, speed, startDelay, reduceMotion]);
+  }, [total, speed, startDelay]);
   return count;
 }
 
@@ -947,6 +1000,7 @@ const ListLayout = memo(() => (
 // ─── Главная страница ───
 const HomePage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCsiOpen, setIsCsiOpen] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadedFilename, setDownloadedFilename] = useState<string>("");
   const [layout, setLayout] = useState<string>(
@@ -983,6 +1037,16 @@ const HomePage = () => {
   }, []);
 
   useEffect(() => {
+    // Один раз показываем окно опроса CSI. Пока не показан — приоритетнее
+    // окна обратной связи, чтобы модалки не накладывались друг на друга.
+    if (!localStorage.getItem("csiSurveyShown")) {
+      const timer = setTimeout(() => {
+        setIsCsiOpen(true);
+        localStorage.setItem("csiSurveyShown", "true");
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+    // CSI уже показывали — при необходимости показываем окно обратной связи.
     if (!localStorage.getItem("feedbackModalShown")) {
       const timer = setTimeout(() => {
         setIsModalOpen(true);
@@ -993,12 +1057,14 @@ const HomePage = () => {
   }, []);
 
   const closeModal = useCallback(() => setIsModalOpen(false), []);
+  const closeCsi = useCallback(() => setIsCsiOpen(false), []);
 
   return (
     <div className="lg-page">
       <AnimatedBackground />
 
       <FeedbackModal isOpen={isModalOpen} onClose={closeModal} />
+      <CsiModal isOpen={isCsiOpen} onClose={closeCsi} />
 
       {/* ─── Header ─── */}
       <header className="lg-header">
@@ -1186,6 +1252,17 @@ const HomePage = () => {
                 className="lg-btn__icon-img"
               />
               Документация
+            </a>
+
+            {/* ─── Кнопка опроса CSI ─── */}
+            <a
+              href={SURVEY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="lg-btn lg-btn--survey lg-footer__btn"
+              title="Пройти опрос удовлетворённости проектом"
+            >
+              ⭐ Опрос
             </a>
 
             {/* ─── Кнопка игры в футере ─── */}
