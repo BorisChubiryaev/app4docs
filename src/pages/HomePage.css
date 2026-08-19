@@ -399,6 +399,7 @@ body {
 
 .lg-footer__btn {
   flex-shrink: 0;
+  text-decoration: none;
 }
 
 /* ╔══════════════════════════════════════════╗
@@ -451,7 +452,6 @@ body {
   box-shadow:
     0 4px 16px rgba(245, 158, 11, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.15);
   text-decoration: none;
 }
 .lg-btn--survey:hover {
@@ -841,7 +841,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: var(--lg-space-sm);
-  padding: 12px 24px;
+  padding: 15px 24px;
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
   color: white;
   border: 1px solid rgba(255, 255, 255, 0.2);
