@@ -1,101 +1,101 @@
-.om-page {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 24px 16px 64px;
-  color: #1d1d1f;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-}
-.om-head h1 {
-  font-size: 24px;
-  font-weight: 700;
-  margin: 0 0 6px;
-}
-.om-head p {
-  color: #6e6e73;
-  font-size: 14px;
-  margin: 0 0 20px;
-}
-.om-steps {
+/* Модуль «Объединение изменений в Оферту».
+   Опирается на дизайн-систему EX-EL (tokens.css / components.css) и
+   переключатель темы (data-theme="dark"). Кастомные элементы окрашены
+   через токены (--ink/--muted/--line/--surface…), поэтому тёмная тема
+   работает автоматически; ниже — лишь точечные доопределения. */
+
+.om {
   display: flex;
-  gap: 8px;
-  list-style: none;
-  padding: 0;
-  margin: 0 0 20px;
-  font-size: 12px;
+  flex-direction: column;
+  gap: 16px;
 }
-.om-steps li {
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.06);
-  color: #6e6e73;
+
+/* Шаги: неинтерактивная сегмент-пилюля на основе .ds-tabs */
+.om-steps {
+  align-self: flex-start;
+  font-size: 0.85rem;
 }
-.om-steps li.active {
-  background: #007aff;
-  color: #fff;
+.om-steps .ds-tab {
+  cursor: default;
+}
+
+/* Подсказки / примечания */
+.om-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+.om-note {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
 }
 .om-section {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
+
+/* Баннеры статуса */
 .om-error {
-  background: rgba(255, 59, 48, 0.1);
+  background: rgba(255, 59, 48, 0.12);
   border: 1px solid rgba(255, 59, 48, 0.4);
   color: #c0392b;
   padding: 10px 14px;
-  border-radius: 10px;
-  font-size: 14px;
-  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
 }
 .om-ok {
-  background: rgba(52, 199, 89, 0.12);
+  background: rgba(52, 199, 89, 0.14);
   border: 1px solid rgba(52, 199, 89, 0.4);
+  color: var(--ink);
   padding: 10px 14px;
-  border-radius: 10px;
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.92rem;
 }
-.om-note {
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  padding: 10px 14px;
-  border-radius: 10px;
-  font-size: 14px;
-}
+
+/* Зона загрузки: .ds-dropzone, но компактнее и с выравниванием по левому краю */
 .om-drop {
-  display: block;
-  border: 2px dashed rgba(0, 0, 0, 0.15);
-  background: rgba(0, 0, 0, 0.02);
-  border-radius: 14px;
   padding: 18px;
-  cursor: pointer;
-  font-size: 14px;
-}
-.om-drop:hover {
-  border-color: rgba(0, 122, 255, 0.6);
+  text-align: left;
+  display: block;
 }
 .om-drop__label {
   font-weight: 600;
   margin-bottom: 8px;
+  color: var(--ink);
+}
+.om-drop input[type="file"] {
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 100%;
 }
 .om-drop__files {
   margin: 8px 0 0;
   padding-left: 18px;
-  color: #6e6e73;
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.8rem;
 }
+
+/* Кнопки */
 .om-btn {
   align-self: flex-start;
-  background: #007aff;
+  background: var(--brand-gradient);
   color: #fff;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 10px 18px;
-  font-size: 14px;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.15s, transform 0.05s;
 }
-.om-btn:hover {
-  background: #0056cc;
+.om-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.om-btn:active:not(:disabled) {
+  transform: translateY(1px);
 }
 .om-btn:disabled {
   opacity: 0.5;
@@ -104,28 +104,34 @@
 .om-link {
   background: none;
   border: none;
-  color: #6e6e73;
+  color: var(--muted);
   text-decoration: underline;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 0.85rem;
+  padding: 0;
 }
+
 .om-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--line);
   padding-top: 16px;
 }
-.om-actions select {
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.2);
+.om-hl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
 }
+.om-hl .ds-select {
+  width: auto;
+}
+
+/* Карточка операции (на базе .ds-panel) */
 .om-card {
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 14px;
-  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -137,32 +143,39 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 14px;
+  font-size: 0.9rem;
+  color: var(--ink);
 }
 .om-card__num {
   font-weight: 700;
   margin-right: 6px;
 }
 .om-card__type {
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 1px 6px;
-  font-size: 12px;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 .om-card__src {
-  color: #86868b;
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 .om-card__toggle {
-  font-size: 12px;
+  font-size: 0.78rem;
   white-space: nowrap;
   display: flex;
   gap: 4px;
   align-items: center;
+  color: var(--ink-soft);
 }
 .om-card__raw {
-  font-size: 12px;
-  color: #6e6e73;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.om-card__raw summary {
+  cursor: pointer;
 }
 .om-card__raw p {
   margin: 6px 0 0;
@@ -170,37 +183,50 @@
 }
 .om-card__warn {
   color: #b8860b;
-  font-size: 12px;
+  font-size: 0.8rem;
   margin: 0;
 }
 .om-card__rows {
-  font-size: 12px;
-  color: #6e6e73;
+  font-size: 0.8rem;
+  color: var(--muted);
   margin: 0;
 }
+
+/* Поля редактирования (label + .ds-input/.ds-textarea) */
 .om-field {
   display: block;
-  font-size: 12px;
+  font-size: 0.8rem;
 }
 .om-field span {
-  color: #86868b;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 2px;
 }
-.om-field input,
-.om-field textarea {
-  width: 100%;
-  margin-top: 2px;
-  padding: 6px 8px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  border-radius: 8px;
-  font: inherit;
-  background: #fff;
-}
+
 .om-results {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: 0.85rem;
+  color: var(--ink);
 }
 .om-results .fail {
-  color: #c0392b;
+  color: #e0564b;
+}
+
+/* ── Точечные доопределения для тёмной темы ── */
+:root[data-theme="dark"] .om-error {
+  background: rgba(255, 69, 58, 0.16);
+  border-color: rgba(255, 69, 58, 0.45);
+  color: #ff8a80;
+}
+:root[data-theme="dark"] .om-ok {
+  background: rgba(48, 209, 88, 0.16);
+  border-color: rgba(48, 209, 88, 0.4);
+}
+:root[data-theme="dark"] .om-card__warn {
+  color: #e8c66b;
+}
+:root[data-theme="dark"] .om-drop input[type="file"] {
+  color: var(--ink-soft);
 }

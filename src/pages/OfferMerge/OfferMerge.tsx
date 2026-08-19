@@ -3,6 +3,7 @@
 // компьютер, сервер и сеть не задействованы.
 import { useMemo, useState } from "react";
 import { saveAs } from "file-saver";
+import PageShell from "../../components/PageShell";
 import { parseAllChangeDocs, buildOutputs } from "./engine/pipeline";
 import type { Operation, HighlightMode } from "./engine/types";
 import "./OfferMerge.css";
@@ -41,6 +42,12 @@ function targetLabel(op: Operation): string {
 async function fileBytes(f: File): Promise<Uint8Array> {
   return new Uint8Array(await f.arrayBuffer());
 }
+
+const STEPS: [Stage, string][] = [
+  ["upload", "1. Загрузка"],
+  ["review", "2. Проверка"],
+  ["done", "3. Файлы"],
+];
 
 export default function OfferMerge() {
   const [stage, setStage] = useState<Stage>("upload");
@@ -127,128 +134,126 @@ export default function OfferMerge() {
   }
 
   return (
-    <div className="om-page">
-      <header className="om-head">
-        <h1>Объединение изменений в Оферту</h1>
-        <p>
-          Загрузите действующую Оферту (Приложение 7) и документы с изменениями —
-          на выходе объединённый файл изменений и текст Оферты с выделенными
-          правками. Обработка идёт полностью в браузере: документы никуда не
-          отправляются.
-        </p>
-      </header>
-
-      <ol className="om-steps">
-        {[
-          ["upload", "1. Загрузка"],
-          ["review", "2. Проверка"],
-          ["done", "3. Файлы"],
-        ].map(([k, t]) => (
-          <li key={k} className={stage === k ? "active" : ""}>
-            {t}
-          </li>
-        ))}
-      </ol>
-
-      {error && <div className="om-error">{error}</div>}
-
-      {stage === "upload" && (
-        <section className="om-section">
-          <FileField
-            label="Действующая Оферта (Приложение 7), .docx"
-            multiple={false}
-            files={offer ? [offer] : []}
-            onFiles={(f) => setOffer(f[0] ?? null)}
-          />
-          <FileField
-            label="Документы с изменениями (можно несколько), .docx"
-            multiple
-            files={changes}
-            onFiles={setChanges}
-          />
-          <button className="om-btn" disabled={busy} onClick={handleParse}>
-            {busy ? "Распознаём…" : "Распознать изменения →"}
-          </button>
-        </section>
-      )}
-
-      {stage === "review" && (
-        <section className="om-section">
-          <div className="om-note">
-            Распознано операций: <b>{operations.length}</b>. Разбор —
-            детерминированный алгоритм, без ИИ и без сети. Проверьте правки,
-            при необходимости отредактируйте текст или отключите ошибочные.
-          </div>
-
-          {operations.map((op, i) => (
-            <OpCard
-              key={op.id}
-              op={op}
-              index={i + 1}
-              included={!excluded[op.id]}
-              onToggle={(v) => setExcluded((s) => ({ ...s, [op.id]: !v }))}
-              onChange={(patch) => updateOp(op.id, patch)}
-            />
+    <PageShell
+      title="Объединение изменений в Оферту"
+      subtitle="Соберите изменения из нескольких документов и обновите текст оферты с выделением правок — прямо в браузере"
+      icon="📑"
+      width={900}
+    >
+      <div className="om">
+        <div className="ds-tabs om-steps" role="list">
+          {STEPS.map(([k, t]) => (
+            <span key={k} className={`ds-tab${stage === k ? " ds-tab--active" : ""}`} role="listitem">
+              {t}
+            </span>
           ))}
+        </div>
 
-          <div className="om-actions">
-            <label>
-              Выделение:{" "}
-              <select
-                value={highlightMode}
-                onChange={(e) => setHighlightMode(e.target.value as HighlightMode)}
-              >
-                <option value="color">цветом (как в образце)</option>
-                <option value="tracked">рецензирование (исправления)</option>
-                <option value="both">цветом + рецензирование</option>
-              </select>
-            </label>
-            <button
-              className="om-btn"
-              disabled={busy || includedOps.length === 0}
-              onClick={handleBuild}
-            >
-              {busy ? "Собираем…" : `Собрать файлы (${includedOps.length}) →`}
+        {error && <div className="om-error">{error}</div>}
+
+        {stage === "upload" && (
+          <section className="om-section">
+            <FileField
+              label="Действующая Оферта (Приложение 7), .docx"
+              multiple={false}
+              files={offer ? [offer] : []}
+              onFiles={(f) => setOffer(f[0] ?? null)}
+            />
+            <FileField
+              label="Документы с изменениями (можно несколько), .docx"
+              multiple
+              files={changes}
+              onFiles={setChanges}
+            />
+            <p className="om-hint">
+              Обработка идёт полностью в браузере: документы никуда не отправляются,
+              ИИ и сеть не задействованы.
+            </p>
+            <button className="om-btn" disabled={busy} onClick={handleParse}>
+              {busy ? "Распознаём…" : "Распознать изменения →"}
             </button>
+          </section>
+        )}
+
+        {stage === "review" && (
+          <section className="om-section">
+            <div className="ds-panel om-note">
+              Распознано операций: <b>{operations.length}</b>. Разбор —
+              детерминированный алгоритм, без ИИ и без сети. Проверьте правки,
+              при необходимости отредактируйте текст или отключите ошибочные.
+            </div>
+
+            {operations.map((op, i) => (
+              <OpCard
+                key={op.id}
+                op={op}
+                index={i + 1}
+                included={!excluded[op.id]}
+                onToggle={(v) => setExcluded((s) => ({ ...s, [op.id]: !v }))}
+                onChange={(patch) => updateOp(op.id, patch)}
+              />
+            ))}
+
+            <div className="om-actions">
+              <label className="om-hl">
+                Выделение:
+                <select
+                  className="ds-select"
+                  value={highlightMode}
+                  onChange={(e) => setHighlightMode(e.target.value as HighlightMode)}
+                >
+                  <option value="color">цветом (как в образце)</option>
+                  <option value="tracked">рецензирование (исправления)</option>
+                  <option value="both">цветом + рецензирование</option>
+                </select>
+              </label>
+              <button
+                className="om-btn"
+                disabled={busy || includedOps.length === 0}
+                onClick={handleBuild}
+              >
+                {busy ? "Собираем…" : `Собрать файлы (${includedOps.length}) →`}
+              </button>
+              <button className="om-link" onClick={reset}>
+                начать заново
+              </button>
+            </div>
+          </section>
+        )}
+
+        {stage === "done" && (
+          <section className="om-section">
+            <div className="om-ok">
+              Готово. Применено: {results.filter((r) => r.ok).length}/{results.length}.
+            </div>
+            <div className="om-actions">
+              <button
+                className="om-btn"
+                onClick={() => outCombined && download(outCombined, "Объединённые_изменения.docx")}
+              >
+                ↓ Объединённый файл изменений
+              </button>
+              <button
+                className="om-btn"
+                onClick={() => outOffer && download(outOffer, "Оферта_с_изменениями.docx")}
+              >
+                ↓ Оферта с выделенными изменениями
+              </button>
+            </div>
+            <div className="ds-panel om-results">
+              {results.map((r) => (
+                <div key={r.operationId} className={r.ok ? "ok" : "fail"}>
+                  {r.ok ? "✅" : "❌"} {r.message}
+                </div>
+              ))}
+            </div>
             <button className="om-link" onClick={reset}>
               начать заново
             </button>
-          </div>
-        </section>
-      )}
-
-      {stage === "done" && (
-        <section className="om-section">
-          <div className="om-ok">
-            Готово. Применено: {results.filter((r) => r.ok).length}/{results.length}.
-          </div>
-          <div className="om-actions">
-            <button
-              className="om-btn"
-              onClick={() => outCombined && download(outCombined, "Объединённые_изменения.docx")}
-            >
-              ↓ Объединённый файл изменений
-            </button>
-            <button
-              className="om-btn"
-              onClick={() => outOffer && download(outOffer, "Оферта_с_изменениями.docx")}
-            >
-              ↓ Оферта с выделенными изменениями
-            </button>
-          </div>
-          <div className="om-results">
-            {results.map((r) => (
-              <div key={r.operationId} className={r.ok ? "ok" : "fail"}>
-                {r.ok ? "✅" : "❌"} {r.message}
-              </div>
-            ))}
-          </div>
-          <button className="om-link" onClick={reset}>
-            начать заново
-          </button>
-        </section>
-      )}
-    </div>
+          </section>
+        )}
+      </div>
+    </PageShell>
   );
 }
 
@@ -264,7 +269,7 @@ function FileField({
   onFiles: (files: File[]) => void;
 }) {
   return (
-    <label className="om-drop">
+    <label className="ds-dropzone om-drop">
       <div className="om-drop__label">{label}</div>
       <input
         type="file"
@@ -297,7 +302,7 @@ function OpCard({
   onChange: (patch: Partial<Operation>) => void;
 }) {
   return (
-    <div className={`om-card${included ? "" : " off"}`}>
+    <div className={`ds-panel om-card${included ? "" : " off"}`}>
       <div className="om-card__head">
         <div>
           <span className="om-card__num">{index}.</span>
@@ -353,9 +358,9 @@ function Field({
     <label className="om-field">
       <span>{label}</span>
       {multiline ? (
-        <textarea value={value} rows={2} onChange={(e) => onChange(e.target.value)} />
+        <textarea className="ds-textarea" value={value} rows={2} onChange={(e) => onChange(e.target.value)} />
       ) : (
-        <input value={value} onChange={(e) => onChange(e.target.value)} />
+        <input className="ds-input" value={value} onChange={(e) => onChange(e.target.value)} />
       )}
     </label>
   );
