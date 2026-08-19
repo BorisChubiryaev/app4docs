@@ -12,7 +12,7 @@ import "./HomePage.css";
 // ⬇️ ССЫЛКА НА ОПРОС CSI (удовлетворённость проектом).
 // Вставьте сюда реальный URL опроса — используется и в кнопке «Опрос»
 // в футере, и в одноразовом окне с просьбой пройти опрос.
-const SURVEY_URL = "#";
+const SURVEY_URL = "https://public.oprosso.sber.ru/p/jgwgns80";
 
 const AnimatedBackground = memo(() => (
   <div className="lg-ambient">
@@ -73,7 +73,7 @@ const FeedbackModal = memo(({ isOpen, onClose }) => {
       "Здравствуйте!\n\nХочу поделиться обратной связью о работе приложения:\n\n[Опишите ваш опыт работы, предложения или идеи здесь]\n\n--\nОтправлено из приложения сравнения Excel-файлов",
     );
     window.open(
-      `mailto:LGBotsoeva@sberbank.ru,BSChubiryaev@sberbank.ru,AKZagoryanskiy@sberbank.ru?subject=${subject}&body=${body}`,
+      `mailto:LGBotsoeva@sberbank.ru,BSChubiryaev@sberbank.ru?subject=${subject}&body=${body}`,
     );
     onClose();
   }, [onClose]);
@@ -165,7 +165,7 @@ const CsiModal = memo(({ isOpen, onClose }) => {
 
           <div className="lg-modal__actions">
             <a
-              className="lg-btn lg-btn--primary"
+              className="lg-btn lg-btn--primary lg-footer__btn"
               href={SURVEY_URL}
               target="_blank"
               rel="noopener noreferrer"
