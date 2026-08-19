@@ -11,7 +11,7 @@ export function xmlText(fragment: string): string {
   let m: RegExpExecArray | null;
   WT_RE.lastIndex = 0;
   while ((m = WT_RE.exec(fragment)) !== null) parts.push(decodeXml(m[1]));
-  return parts.join("").replace(/ /g, " ").trim();
+  return parts.join("").replace(/\u00A0/g, " ").trim();
 }
 
 /** Все абзацы документа как массив строк (пустые отфильтрованы). */
