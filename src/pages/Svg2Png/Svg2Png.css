@@ -19,7 +19,7 @@
 .svg2png-header h1 {
   font-size: 2.2rem;
   font-weight: 700;
-  color: #1d1d1f;
+  color: var(--ink);
   margin: 0 0 8px 0;
   letter-spacing: -0.5px;
   background: linear-gradient(135deg, #1d1d1f 0%, #424245 100%);
@@ -59,52 +59,12 @@
 }
 
 /* Стиль стекла Apple */
-.glass-card {
-  background: rgba(255, 255, 255, 0.25);
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  padding: 20px;
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
+/* .glass-card — канонический стиль в src/styles/components.css */
 
 .glass-card:hover {
   box-shadow: 
     0 12px 40px rgba(0, 0, 0, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-/* Вкладки */
-.input-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 0;
-}
-
-.tab-button {
-  flex: 1;
-  padding: 12px 16px;
-  border: none;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 12px;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 0.875rem;
-  transition: all 0.3s ease;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  
-}
-
-.tab-button:hover {
-  background: rgba(255, 255, 255, 0.5);
-}
-
-.tab-button.active {
-  background: rgba(59, 130, 246, 0.2);
-  color: #1e40af;
-  border-color: rgba(59, 130, 246, 0.3);
 }
 
 /* Область загрузки - компактная */
@@ -135,7 +95,7 @@
 .upload-area h3 {
   font-size: 1rem;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   margin: 0;
 }
 
@@ -208,7 +168,7 @@
 .basic-settings h3 {
   font-size: 1rem;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   margin: 0 0 16px 0;
 }
 
@@ -228,7 +188,7 @@
 .setting-group-compact label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -410,7 +370,7 @@
 .conversion-result h3 {
   font-size: 1rem;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   margin: 0 0 12px 0;
 }
 
@@ -450,7 +410,7 @@
 }
 
 .info-item span:last-child {
-  color: #1d1d1f;
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -479,7 +439,7 @@
 .conversion-history h3 {
   font-size: 1rem;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   margin: 0 0 12px 0;
 }
 
@@ -506,7 +466,7 @@
 .history-info-compact .file-name {
   font-size: 0.8rem;
   font-weight: 500;
-  color: #1d1d1f;
+  color: var(--ink);
   margin-bottom: 2px;
 }
 
@@ -549,22 +509,8 @@
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-.btn-primary {
-  background: rgba(59, 130, 246, 0.1);
-  color: #1e40af;
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.btn-secondary {
-  background: rgba(255, 255, 255, 0.5);
-  color: #1d1d1f;
-}
-
-.btn-danger {
-  background: rgba(239, 68, 68, 0.1);
-  color: #dc2626;
-  border-color: rgba(239, 68, 68, 0.2);
-}
+/* .btn-primary / .btn-secondary / .btn-danger — канонический бренд-стиль
+   в src/styles/components.css */
 
 .btn-link {
   background: transparent;
@@ -601,32 +547,7 @@
 .alert-content {
   flex: 1;
   font-size: 0.8rem;
-  color: #1d1d1f;
-}
-
-.home-button {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.7);
-  color: #1d1d1f;
-  text-decoration: none;
-  border-radius: 10px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  
-}
-
-.instructions-button {
-  left: auto !important;
-  right: 0;
-  cursor: help;
+  color: var(--ink);
 }
 
 /* Адаптивность */
@@ -650,101 +571,9 @@
     gap: 12px;
   }
   
-  .input-tabs {
-    flex-direction: column;
-  }
-  
-  .home-button {
-    position: static;
-    transform: none;
-    margin-bottom: 10px;
-  }
-  
   .svg2png-header {
     text-align: center;
   }
-}
-
-/* Анимированный фон */
-.animated-background {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: -1;
-  overflow: hidden;
-}
-
-.bg-shapes {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-}
-
-.shape {
-  position: absolute;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.01) 0%, rgba(59, 130, 246, 0.05) 100%);
-  animation: float 20s infinite linear;
-}
-
-.shape-1 {
-  width: 300px;
-  height: 300px;
-  top: 10%;
-  left: 5%;
-  animation-delay: 0s;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%);
-}
-
-.shape-2 {
-  width: 200px;
-  height: 200px;
-  top: 60%;
-  right: 10%;
-  animation-delay: -5s;
-  animation-duration: 25s;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(59, 130, 246, 0.03) 100%);
-}
-
-.shape-3 {
-  width: 150px;
-  height: 150px;
-  bottom: 20%;
-  left: 15%;
-  animation-delay: -10s;
-  animation-duration: 30s;
-}
-
-.shape-4 {
-  width: 250px;
-  height: 250px;
-  top: 30%;
-  right: 5%;
-  animation-delay: -15s;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(59, 130, 246, 0.02) 100%);
-}
-
-.shape-5 {
-  width: 180px;
-  height: 180px;
-  bottom: 10%;
-  right: 20%;
-  animation-delay: -7s;
-  animation-duration: 35s;
-}
-
-.bg-grid {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  background-image: 
-    linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px);
-  background-size: 50px 50px;
-  animation: gridMove 40s infinite linear;
 }
 
 /* Плейсхолдер для результата */
@@ -808,7 +637,7 @@
 .placeholder-content h3 {
   font-size: 1.2rem;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   margin: 0 0 8px 0;
 }
 
@@ -894,7 +723,7 @@
 
 .btn-download-overlay {
   background: white;
-  color: #1d1d1f;
+  color: var(--ink);
   border: none;
   padding: 8px 16px;
   border-radius: 8px;
@@ -1030,7 +859,7 @@
 .setting-label {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 4px;
@@ -1065,7 +894,7 @@
 .format-btn-improved.active {
   background: white;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  color: #1d1d1f;
+  color: var(--ink);
 }
 
 .format-icon {
@@ -1234,7 +1063,7 @@
   gap: 8px;
   cursor: pointer;
   font-size: 0.8rem;
-  color: #1d1d1f;
+  color: var(--ink);
   padding: 8px 0;
 }
 
@@ -1410,7 +1239,7 @@
 .code-title h3 {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   margin: 0 0 4px 0;
 }
 
@@ -1494,7 +1323,7 @@
   background: rgba(0, 0, 0, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.6);
   transition: all 0.3s ease;
-  color: #1d1d1f;
+  color: var(--ink);
 }
 
 .svg-code-textarea-improved:focus {
@@ -1562,7 +1391,7 @@
 .preview-header h4 {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   margin: 0;
   display: flex;
   align-items: center;
@@ -1817,7 +1646,7 @@
 .preview-header h4 {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   margin: 0;
   display: flex;
   align-items: center;

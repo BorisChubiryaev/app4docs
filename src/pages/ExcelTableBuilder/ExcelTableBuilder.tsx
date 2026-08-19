@@ -5,8 +5,8 @@ import React, {
   useRef,
   useEffect,
 } from "react";
-import * as XLSX from "xlsx";
-import Header from "../../components/header/Header";
+import * as ExcelJS from "exceljs";
+import PageShell from "../../components/PageShell";
 import "./ExcelTableBuilder.css";
 
 // Типы данных
@@ -18,15 +18,51 @@ interface ColumnConfig {
   index: number;
 }
 
+// Диапазон объединения (0-based, как в SheetJS)
+type CellRange = { s: { r: number; c: number }; e: { r: number; c: number } };
+
 interface ExcelFileData {
   fileName: string;
   headers: string[];
   rows: string[][];
   allRows: string[][];
   headerRowIndex: number;
-  merges?: XLSX.Range[];
-  worksheet?: XLSX.WorkSheet;
+  merges?: CellRange[];
+  colWidths?: (number | undefined)[];
 }
+
+// Буквенный адрес колонки → 1-based номер (A→1, AA→27)
+const colToNum = (letters: string): number =>
+  letters
+    .toUpperCase()
+    .split("")
+    .reduce((n, ch) => n * 26 + (ch.charCodeAt(0) - 64), 0);
+
+// "A1:B2" → 0-based диапазон
+const parseMergeRef = (ref: string): CellRange | null => {
+  const m = ref.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/i);
+  if (!m) return null;
+  return {
+    s: { r: parseInt(m[2], 10) - 1, c: colToNum(m[1]) - 1 },
+    e: { r: parseInt(m[4], 10) - 1, c: colToNum(m[3]) - 1 },
+  };
+};
+
+// Сырое строковое значение ячейки ExcelJS
+const rawCellString = (cell: ExcelJS.Cell | undefined): string => {
+  const v = cell?.value;
+  if (v === null || v === undefined) return "";
+  if (v instanceof Date) return v.toLocaleDateString();
+  if (typeof v === "object") {
+    const anyV = v as unknown as Record<string, unknown>;
+    if ("result" in anyV && anyV.result != null) return String(anyV.result);
+    if ("richText" in anyV && Array.isArray(anyV.richText))
+      return (anyV.richText as { text: string }[]).map((rt) => rt.text).join("");
+    if ("text" in anyV && anyV.text != null) return String(anyV.text);
+    return cell?.text ?? "";
+  }
+  return String(v);
+};
 
 interface GroupedItem {
   value: string;
@@ -87,46 +123,37 @@ const ExcelTableBuilder: React.FC = () => {
 
         reader.onload = async (e) => {
           try {
-            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            const data = e.target?.result as ArrayBuffer;
 
-            const workbook = XLSX.read(data, {
-              type: "array",
-              cellDates: true,
-            });
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.load(data);
 
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-
+            const worksheet = workbook.worksheets[0];
             if (!worksheet) {
               reject(new Error(`Файл ${file.name} не содержит листов`));
               return;
             }
 
-            const merges = worksheet["!merges"] || [];
-            const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1");
+            const merges: CellRange[] = (
+              (worksheet.model?.merges as string[] | undefined) ?? []
+            )
+              .map(parseMergeRef)
+              .filter((r): r is CellRange => r !== null);
+
+            const colWidths: (number | undefined)[] = worksheet.columns.map(
+              (col) => col?.width,
+            );
+
+            const maxRow = worksheet.rowCount;
+            const maxCol = worksheet.columnCount;
 
             const allRows: string[][] = [];
 
-            for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let R = 1; R <= maxRow; ++R) {
               const row: string[] = [];
-
-              for (let C = range.s.c; C <= range.e.c; ++C) {
-                const addr = XLSX.utils.encode_cell({ r: R, c: C });
-                const cell = worksheet[addr];
-
-                let value = "";
-
-                if (cell) {
-                  if (cell.v instanceof Date) {
-                    value = cell.v.toLocaleDateString();
-                  } else {
-                    value = String(cell.v ?? "");
-                  }
-                }
-
-                row.push(value);
+              for (let C = 1; C <= maxCol; ++C) {
+                row.push(rawCellString(worksheet.getCell(R, C)));
               }
-
               allRows.push(row);
 
               if (R % 2000 === 0) {
@@ -152,7 +179,7 @@ const ExcelTableBuilder: React.FC = () => {
               allRows,
               headerRowIndex: headerRowIdx,
               merges,
-              worksheet,
+              colWidths,
             });
           } catch (err) {
             reject(err);
@@ -609,30 +636,55 @@ const ExcelTableBuilder: React.FC = () => {
 
     try {
       const headers = columnConfigs.map((c) => c.name);
-      const data = [headers, ...groupedData];
 
-      const worksheet = XLSX.utils.aoa_to_sheet(data);
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Сгруппированные данные");
 
-      if (excelData.length > 0) {
-        worksheet["!merges"] = excelData[0].merges || [];
+      worksheet.addRow(headers);
+      for (const row of groupedData) {
+        worksheet.addRow(row);
       }
 
-      if (excelData.length > 0) {
-        worksheet["!cols"] = excelData[0].worksheet?.["!cols"];
+      // Объединения из первого исходного файла (0-based → 1-based)
+      const merges = excelData[0]?.merges;
+      if (merges) {
+        merges.forEach((m) => {
+          if (m.e.r > m.s.r || m.e.c > m.s.c) {
+            try {
+              worksheet.mergeCells(
+                m.s.r + 1,
+                m.s.c + 1,
+                m.e.r + 1,
+                m.e.c + 1,
+              );
+            } catch (mergeErr) {
+              console.warn("Не удалось объединить ячейки:", mergeErr);
+            }
+          }
+        });
       }
 
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(
-        workbook,
-        worksheet,
-        "Сгруппированные данные",
-      );
+      // Ширины колонок из первого исходного файла
+      const widths = excelData[0]?.colWidths;
+      if (widths) {
+        widths.forEach((w, i) => {
+          if (w) worksheet.getColumn(i + 1).width = w;
+        });
+      }
 
       const fileName = `grouped_${new Date().toISOString().slice(0, 10)}.xlsx`;
-
-      XLSX.writeFile(workbook, fileName, {
-        compression: true,
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка при экспорте");
     }
@@ -708,34 +760,29 @@ const ExcelTableBuilder: React.FC = () => {
   };
 
   return (
-    <div className="conference-builder">
-      <header className="app-header">
-        <Header
-          title="Excel группиратор"
-          description="Группировка данных из нескольких Excel-файлов с сохранением информации о файлах"
-          showHomeButton={true}
-          showInstructionsButton={true}
-          onShowInstructions={() => setShowInstructions(true)}
-        />
-      </header>
+    <PageShell
+      title="Excel группиратор"
+      subtitle="Группировка данных из нескольких Excel-файлов с сохранением информации о файлах"
+      onShowInstructions={() => setShowInstructions(true)}
+    >
 
       {/* Навигация */}
-      <nav className="app-navigation">
+      <nav className="ds-tabs ds-tabs--fill">
         <button
-          className={`nav-tab ${activeTab === "upload" ? "active" : ""}`}
+          className={`ds-tab ${activeTab === "upload" ? "ds-tab--active" : ""}`}
           onClick={() => setActiveTab("upload")}
         >
           📁 Загрузка файлов {files.length > 0 && `(${files.length})`}
         </button>
         <button
-          className={`nav-tab ${activeTab === "configure" ? "active" : ""}`}
+          className={`ds-tab ${activeTab === "configure" ? "ds-tab--active" : ""}`}
           onClick={() => setActiveTab("configure")}
           disabled={excelData.length === 0}
         >
           ⚙️ Настройка
         </button>
         <button
-          className={`nav-tab ${activeTab === "result" ? "active" : ""}`}
+          className={`ds-tab ${activeTab === "result" ? "ds-tab--active" : ""}`}
           onClick={() => setActiveTab("result")}
           disabled={groupedData.length === 0}
         >
@@ -1734,7 +1781,7 @@ const ExcelTableBuilder: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 };
 

@@ -1,0 +1,222 @@
+/* Редактор-слой страницы PDF */
+.pa-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 18, 28, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.pa-window {
+  width: 100%;
+  max-width: 1100px;
+  height: 92vh;
+  background: var(--surface, #fff);
+  border-radius: var(--radius-lg, 20px);
+  box-shadow: var(--shadow-lg, 0 30px 80px rgba(0, 0, 0, 0.3));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+
+/* Тулбар */
+.pa-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+}
+.pa-tools {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2, #f5f6f8);
+  border-radius: 12px;
+}
+.pa-tool {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pa-tool:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.pa-tool.is-active {
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.pa-props {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pa-prop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted, #6b7280);
+}
+.pa-prop input[type="color"] {
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+.pa-prop input[type="range"] {
+  width: 90px;
+}
+.pa-danger {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 59, 48, 0.25);
+  background: rgba(255, 59, 48, 0.08);
+  border-radius: 9px;
+  cursor: pointer;
+}
+.pa-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+}
+
+/* Сцена */
+.pa-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--surface-2, #eef0f3);
+}
+.pa-stage {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  touch-action: none;
+  user-select: none;
+}
+.pa-bg {
+  display: block;
+  max-width: 100%;
+  max-height: 84vh;
+  pointer-events: none;
+}
+
+/* Живой черновик прямоугольника/выделения */
+.pa-draft {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Текст: обёртка + ручка перетаскивания */
+.pa-textwrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.pa-drag {
+  position: absolute;
+  top: -18px;
+  left: 0;
+  width: 20px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  color: #fff;
+  background: var(--brand-2, #515dad);
+  border-radius: 5px 5px 0 0;
+  cursor: move;
+}
+/* Курсоры по инструменту */
+.pa-stage.pa-tool-text,
+.pa-stage.pa-tool-image {
+  cursor: crosshair;
+}
+.pa-stage.pa-tool-draw,
+.pa-stage.pa-tool-rect,
+.pa-stage.pa-tool-highlight,
+.pa-stage.pa-tool-line,
+.pa-stage.pa-tool-arrow {
+  cursor: crosshair;
+}
+
+.pa-vector {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.pa-vector path,
+.pa-vector line {
+  pointer-events: stroke;
+}
+
+/* Объекты */
+.pa-obj {
+  outline: 1px dashed transparent;
+}
+.pa-obj.is-selected {
+  outline: 1.5px dashed var(--brand-2, #515dad);
+}
+.pa-fill {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.pa-img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+.pa-text {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  resize: none;
+  outline: none;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  line-height: 1.2;
+  padding: 0;
+}
+
+.pa-loading {
+  background: #fff;
+  padding: 18px 30px;
+  border-radius: 14px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--ink, #1d1d1f);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}

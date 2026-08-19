@@ -1,0 +1,281 @@
+/* ============================================================
+   InstructionsModal — единый стиль для всех окон-инструкций.
+   Классы префиксованы im-*, чтобы не пересекаться со стилями страниц.
+   Контент секций (section/h3/ul/li/...) стилизуется внутри .im-body,
+   поэтому страницы могут передавать разметку как есть.
+   ============================================================ */
+
+.im-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 1000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 18, 28, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: im-fade 0.18s ease;
+}
+
+.im-modal {
+  width: 100%;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #fff);
+  color: var(--ink, #1d1d1f);
+  border-radius: var(--radius-lg, 22px);
+  box-shadow: var(--shadow-lg, 0 30px 80px rgba(0, 0, 0, 0.28));
+  overflow: hidden;
+  animation: im-rise 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: var(--font-sans);
+}
+
+/* ── Шапка ── */
+.im-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+}
+.im-header::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--brand-gradient);
+}
+.im-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink, #1d1d1f);
+}
+.im-close {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2, #f5f6f8);
+  color: var(--muted, #6b7280);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+}
+.im-close:hover {
+  background: #ffe3ec;
+  color: var(--brand-4, #ff1c77);
+  transform: rotate(90deg);
+}
+
+/* ── Тело ── */
+.im-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  line-height: 1.6;
+  font-size: 0.95rem;
+  color: var(--ink-soft, #3a3a3c);
+}
+
+/* Секции внутри тела (любые обёртки) */
+.im-body section,
+.im-body .instructions-section,
+.im-body .instruction-section {
+  margin: 0 0 20px;
+}
+.im-body section:last-child,
+.im-body .instructions-section:last-child,
+.im-body .instruction-section:last-child {
+  margin-bottom: 0;
+}
+
+.im-body h2,
+.im-body h3,
+.im-body h4 {
+  margin: 0 0 10px;
+  font-weight: 700;
+  color: var(--ink, #1d1d1f);
+  line-height: 1.35;
+}
+.im-body h3 {
+  font-size: 1.02rem;
+}
+.im-body h4 {
+  font-size: 0.95rem;
+}
+
+.im-body p {
+  margin: 0 0 10px;
+}
+
+.im-body ul,
+.im-body ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+.im-body li {
+  margin: 4px 0;
+}
+.im-body ul ul,
+.im-body ul ol {
+  margin: 6px 0;
+}
+
+.im-body strong {
+  color: var(--ink, #1d1d1f);
+  font-weight: 600;
+}
+
+.im-body code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--surface-2, #f5f6f8);
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+.im-body pre {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-2, #f5f6f8);
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  overflow-x: auto;
+  font-size: 0.85rem;
+}
+
+/* ── Выноски / советы ── */
+.im-body .instruction-tip,
+.im-body .info-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 14px 0 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-md, 14px);
+  background: linear-gradient(135deg, #eef4ff, #f6eefe);
+  border: 1px solid rgba(81, 93, 173, 0.2);
+  color: var(--ink-soft, #3a3a3c);
+}
+.im-body .tip-icon {
+  font-size: 1.1rem;
+  line-height: 1.4;
+}
+
+/* ── Бейджи статусов (WorkplaceCompare) ── */
+.im-body .workplace-status-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+.im-body .workplace-status-badge.old {
+  background: #eceef1;
+  color: #4b5563;
+}
+.im-body .workplace-status-badge.new {
+  background: #dcfce7;
+  color: #15803d;
+}
+.im-body .workplace-status-badge.added {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.im-body .workplace-status-badge.deleted {
+  background: #ffe4d6;
+  color: #c2410c;
+}
+
+/* ── Цветовые точки-легенды ── */
+.im-body .color-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 2px;
+  vertical-align: middle;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+.im-body .color-dot.old-dot {
+  background: #eceef1;
+}
+.im-body .color-dot.new-dot {
+  background: #dcfce7;
+}
+.im-body .color-dot.added-dot {
+  background: #dbeafe;
+}
+.im-body .color-dot.deleted-dot {
+  background: #ffe4d6;
+}
+
+/* ── Футер ── */
+.im-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+}
+.im-btn {
+  padding: 10px 22px;
+  border: none;
+  border-radius: var(--radius-md, 14px);
+  background: var(--brand-gradient);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(81, 93, 173, 0.3);
+  transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+}
+.im-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 12px 26px rgba(130, 83, 170, 0.38);
+}
+.im-btn:active {
+  transform: translateY(0);
+}
+
+@keyframes im-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes im-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 640px) {
+  .im-header,
+  .im-body,
+  .im-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .im-title {
+    font-size: 1.05rem;
+  }
+}

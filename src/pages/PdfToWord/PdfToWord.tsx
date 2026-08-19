@@ -19,7 +19,7 @@ import { saveAs } from "file-saver";
 
 import { PdfToWordInstructionsModal } from "./components/PdfToWordInstructionsModal";
 
-import Header from "../../components/header/Header";
+import PageShell from "../../components/PageShell";
 import "./PdfToWord.css";
 
 import pdfWorkerContent from "pdfjs-dist/build/pdf.worker.mjs?raw";
@@ -1166,32 +1166,22 @@ const PdfToWord: React.FC = () => {
   );
 
   return (
-    <div className="pdf-to-word-page">
-      <div className="liquid-background">
-        <div className="liquid-shape liquid-1"></div>
-        <div className="liquid-shape liquid-2"></div>
-        <div className="liquid-grid"></div>
-      </div>
-
-      <div className="pdf-to-word-container">
-        <Header
-          title="Конвертер документов"
-          description="PDF ↔ Word — конвертируйте в обе стороны, прямо в браузере"
-          showHomeButton={true}
-          showInstructionsButton={true}
-          onShowInstructions={() => setIsInstructionsOpen(true)}
-        />
+    <PageShell
+      title="Конвертер документов"
+      subtitle="PDF ↔ Word — конвертируйте в обе стороны, прямо в браузере"
+      onShowInstructions={() => setIsInstructionsOpen(true)}
+    >
 
         {/* Табы */}
-        <div className="mode-tabs">
+        <div className="ds-tabs ds-tabs--fill">
           <button
-            className={`mode-tab ${mode === "pdf-to-word" ? "active" : ""}`}
+            className={`ds-tab ${mode === "pdf-to-word" ? "ds-tab--active" : ""}`}
             onClick={() => switchMode("pdf-to-word")}
           >
             <span className="tab-label">PDF → Word</span>
           </button>
           <button
-            className={`mode-tab ${mode === "word-to-pdf" ? "active" : ""}`}
+            className={`ds-tab ${mode === "word-to-pdf" ? "ds-tab--active" : ""}`}
             onClick={() => switchMode("word-to-pdf")}
           >
             <span className="tab-label">Word → PDF</span>
@@ -1567,12 +1557,11 @@ const PdfToWord: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
       <PdfToWordInstructionsModal
         isOpen={isInstructionsOpen}
         onClose={() => setIsInstructionsOpen(false)}
       />
-    </div>
+    </PageShell>
   );
 };
 

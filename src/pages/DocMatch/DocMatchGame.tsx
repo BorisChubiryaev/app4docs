@@ -1,10 +1,18 @@
 // DocMatchGame.tsx
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Link } from "react-router-dom";
-import Header from "../../components/header/Header";
+import React, {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef,
+} from "react";
+import PageShell from "../../components/PageShell";
 import "./DocMatch.css";
 
-const BOARD_SIZE = 8;
+// Прямоугольная доска: число строк фиксировано, число столбцов подбирается
+// под ширину экрана (см. измерение в компоненте). Заполняет любой монитор.
+const ROWS = 8;
+const DEFAULT_COLS = 12;
 const ICONS = ["📄", "📘", "📗", "📊", "📁", "🗃️"];
 
 // --- Types ---
@@ -39,11 +47,11 @@ const getLevelTarget = (level: number): number => {
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-const createBoard = (): Tile[][] => {
+const createBoard = (cols: number = DEFAULT_COLS): Tile[][] => {
   let board: Tile[][] = [];
-  for (let r = 0; r < BOARD_SIZE; r++) {
+  for (let r = 0; r < ROWS; r++) {
     board[r] = [];
-    for (let c = 0; c < BOARD_SIZE; c++) {
+    for (let c = 0; c < cols; c++) {
       board[r][c] = {
         id: generateId(),
         icon: ICONS[Math.floor(Math.random() * ICONS.length)],
@@ -54,8 +62,8 @@ const createBoard = (): Tile[][] => {
       };
     }
   }
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    for (let c = 0; c < BOARD_SIZE; c++) {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < cols; c++) {
       while (checkMatchesAt(board, r, c).length > 0) {
         board[r][c].icon = ICONS[Math.floor(Math.random() * ICONS.length)];
       }
@@ -88,8 +96,8 @@ const checkMatchesAt = (board: Tile[][], r: number, c: number): string[] => {
 
 const findAllMatches = (board: Tile[][]): Set<string> => {
   const matchedIds = new Set<string>();
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    for (let c = 0; c < BOARD_SIZE; c++) {
+  for (let r = 0; r < board.length; r++) {
+    for (let c = 0; c < board[r].length; c++) {
       const matches = checkMatchesAt(board, r, c);
       matches.forEach((id) => matchedIds.add(id));
     }
@@ -99,7 +107,12 @@ const findAllMatches = (board: Tile[][]): Set<string> => {
 
 // --- Main Component ---
 const DocMatchGame: React.FC = () => {
-  const [board, setBoard] = useState<Tile[][]>(createBoard);
+  // Адаптивная сетка: число столбцов и размер плитки считаются из размеров
+  // доступной области (см. useLayoutEffect ниже).
+  const [cols, setCols] = useState(DEFAULT_COLS);
+  const [tile, setTile] = useState(48);
+  const colsRef = useRef(DEFAULT_COLS);
+  const [board, setBoard] = useState<Tile[][]>(() => createBoard(DEFAULT_COLS));
   const [selected, setSelected] = useState<Tile | null>(null);
   const [totalScore, setTotalScore] = useState(0); // Общий счёт за все уровни
   const [levelScore, setLevelScore] = useState(0); // Счёт текущего уровня (для прогресс-бара)
@@ -119,6 +132,58 @@ const DocMatchGame: React.FC = () => {
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // --- Адаптивная сетка под размер экрана ---
+  // Плитка масштабируется по доступной высоте (ROWS строк), число столбцов —
+  // сколько влезает по ширине. При изменении числа столбцов доска
+  // пересоздаётся (счёт/уровень/время сохраняются).
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const GAP = 8;
+    const PAD = 12;
+
+    const recompute = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w <= 0 || h <= 0) return;
+      const t = Math.max(
+        28,
+        Math.floor((h - PAD * 2 - (ROWS - 1) * GAP) / ROWS),
+      );
+      const c = Math.max(
+        6,
+        Math.min(30, Math.floor((w - PAD * 2 + GAP) / (t + GAP))),
+      );
+      setTile(t);
+      if (c !== colsRef.current) {
+        colsRef.current = c;
+        setCols(c);
+        setBoard(createBoard(c));
+        setSelected(null);
+        setIsProcessing(false);
+        setParticles([]);
+        setScorePopups([]);
+      }
+    };
+
+    let raf = 0;
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(recompute);
+    };
+
+    recompute();
+    const ro = new ResizeObserver(schedule);
+    ro.observe(el);
+    window.addEventListener("resize", schedule);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", schedule);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   const currentTarget = getLevelTarget(level);
 
@@ -261,9 +326,11 @@ const DocMatchGame: React.FC = () => {
       await new Promise((resolve) => setTimeout(resolve, 250));
 
       // Gravity
-      for (let c = 0; c < BOARD_SIZE; c++) {
+      const gRows = currentBoard.length;
+      const gCols = currentBoard[0].length;
+      for (let c = 0; c < gCols; c++) {
         let emptySpaces = 0;
-        for (let r = BOARD_SIZE - 1; r >= 0; r--) {
+        for (let r = gRows - 1; r >= 0; r--) {
           if (currentBoard[r][c].isMatched) {
             emptySpaces++;
           } else if (emptySpaces > 0) {
@@ -315,9 +382,11 @@ const DocMatchGame: React.FC = () => {
 
   // --- Hint System ---
   const findHint = useCallback((): { tile1: Tile; tile2: Tile } | null => {
-    for (let r = 0; r < BOARD_SIZE; r++) {
-      for (let c = 0; c < BOARD_SIZE; c++) {
-        if (c < BOARD_SIZE - 1) {
+    const rows = board.length;
+    const cols = board[0].length;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (c < cols - 1) {
           const testBoard = board.map((row) => row.map((t) => ({ ...t })));
           const temp = testBoard[r][c].icon;
           testBoard[r][c].icon = testBoard[r][c + 1].icon;
@@ -326,7 +395,7 @@ const DocMatchGame: React.FC = () => {
             return { tile1: board[r][c], tile2: board[r][c + 1] };
           }
         }
-        if (r < BOARD_SIZE - 1) {
+        if (r < rows - 1) {
           const testBoard = board.map((row) => row.map((t) => ({ ...t })));
           const temp = testBoard[r][c].icon;
           testBoard[r][c].icon = testBoard[r + 1][c].icon;
@@ -409,7 +478,7 @@ const DocMatchGame: React.FC = () => {
     setLevel(nextLvl);
     setLevelScore(0); // Сбрасываем счёт уровня!
     setTimeLeft(LEVEL_TIME + nextLvl * 3); // Немного больше времени на сложных уровнях
-    setBoard(createBoard());
+    setBoard(createBoard(colsRef.current));
     setLevelComplete(false);
     setGameOver(false);
     setComboCount(0);
@@ -421,7 +490,7 @@ const DocMatchGame: React.FC = () => {
   };
 
   const resetGame = () => {
-    setBoard(createBoard());
+    setBoard(createBoard(colsRef.current));
     setTotalScore(0);
     setLevelScore(0);
     setMoves(0);
@@ -438,20 +507,12 @@ const DocMatchGame: React.FC = () => {
   };
 
   return (
-    <div className="doc-match-page">
-      <div className="liquid-background">
-        <div className="liquid-shape liquid-1"></div>
-        <div className="liquid-shape liquid-2"></div>
-        <div className="liquid-grid"></div>
-      </div>
-
-      <div className="doc-match-container">
-        <Header
-          title="Документный Три-в-Ряд 🎮"
-          description={`Уровень ${level}: собери ${currentTarget} очков!`}
-          showHomeButton={true}
-          showInstructionsButton={false}
-        />
+    <PageShell
+      title="Документный Три-в-Ряд 🎮"
+      subtitle={`Уровень ${level}: собери ${currentTarget} очков!`}
+      fill
+      width="100%"
+    >
 
         <div className="game-layout">
           <div className="glass-card game-board-wrapper" ref={boardRef}>
@@ -478,7 +539,17 @@ const DocMatchGame: React.FC = () => {
             </div>
 
             {/* Game Board */}
-            <div className="game-board">
+            <div
+              ref={gridRef}
+              className="game-board"
+              style={
+                {
+                  gridTemplateColumns: `repeat(${cols}, ${tile}px)`,
+                  gridTemplateRows: `repeat(${ROWS}, ${tile}px)`,
+                  "--tile-font": `${Math.round(tile * 0.6)}px`,
+                } as React.CSSProperties
+              }
+            >
               {board.map((row) =>
                 row.map((tile) => (
                   <div
@@ -632,8 +703,7 @@ const DocMatchGame: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </PageShell>
   );
 };
 

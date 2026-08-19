@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useEffect,
 } from "react";
-import Header from "../../components/header/Header";
+import PageShell from "../../components/PageShell";
 import FileUploader from "./components/FileUploader";
 import ChartCard from "./components/ChartCard";
 import ChartEditor from "./components/ChartEditor";
@@ -341,14 +341,11 @@ const ChartCraft: React.FC = () => {
     : null;
 
   return (
-    <div className="chartcraft-container">
-      <Header
-        title="Генератор графиков"
-        description="Превращайте таблицы в красивые графики"
-        onShowInstructions={() => setShowInstructions(true)}
-        showHomeButton={true}
-        showInstructionsButton={true}
-      />
+    <PageShell
+      title="Генератор графиков"
+      subtitle="Превращайте таблицы в красивые графики"
+      onShowInstructions={() => setShowInstructions(true)}
+    >
 
       {showInstructions && (
         <div
@@ -596,7 +593,7 @@ const ChartCraft: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 };
 
