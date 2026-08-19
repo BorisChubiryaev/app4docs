@@ -513,7 +513,122 @@
   }
 }
 
+/* ── Навигатор: пейджер «предыдущее/следующее» ── */
+.om-nav__pager {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.om-pager-btn {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+.om-pager-btn:hover:not(:disabled) {
+  border-color: var(--brand-2);
+  color: var(--ink);
+}
+.om-pager-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.om-nav__pos {
+  font-size: 0.72rem;
+  color: var(--muted);
+  min-width: 30px;
+  text-align: center;
+}
+.om-nav__item.current {
+  background: rgba(81, 93, 173, 0.1);
+  box-shadow: inset 2px 0 0 var(--brand-2);
+}
+
+/* ── Предпросмотр места правки ── */
+.om-preview {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 8px 10px;
+}
+.om-preview__label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.om-preview__doc {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink);
+  word-break: break-word;
+}
+.om-ctx {
+  color: var(--muted);
+}
+.om-mark {
+  background: rgba(255, 196, 0, 0.38);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 600;
+}
+.om-new {
+  background: rgba(52, 199, 89, 0.22);
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 600;
+}
+.om-old {
+  color: var(--muted);
+  text-decoration: line-through;
+  margin-right: 6px;
+}
+.om-preview__ctx {
+  color: var(--muted);
+}
+.om-preview--miss {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(255, 149, 0, 0.1);
+  border-color: rgba(255, 149, 0, 0.4);
+}
+.om-preview__badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #b8860b;
+}
+.om-preview__note {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 /* ── Точечные доопределения для тёмной темы ── */
+:root[data-theme="dark"] .om-nav__item.current {
+  background: rgba(130, 150, 255, 0.14);
+  box-shadow: inset 2px 0 0 #8296ff;
+}
+:root[data-theme="dark"] .om-mark {
+  background: rgba(255, 209, 102, 0.28);
+}
+:root[data-theme="dark"] .om-new {
+  background: rgba(48, 209, 88, 0.24);
+}
+:root[data-theme="dark"] .om-preview--miss {
+  background: rgba(255, 159, 10, 0.12);
+  border-color: rgba(255, 159, 10, 0.4);
+}
+:root[data-theme="dark"] .om-preview__badge {
+  color: #e8c66b;
+}
 :root[data-theme="dark"] .om-error {
   background: rgba(255, 69, 58, 0.16);
   border-color: rgba(255, 69, 58, 0.45);

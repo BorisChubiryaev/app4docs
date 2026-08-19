@@ -5,6 +5,8 @@ import { useMemo, useRef, useState } from "react";
 import { saveAs } from "file-saver";
 import PageShell from "../../components/PageShell";
 import { parseAllChangeDocs, buildOutputs } from "./engine/pipeline";
+import { loadDocx } from "./engine/docx";
+import { previewOperation, type PreviewSnippet } from "./engine/preview";
 import type { Operation, HighlightMode } from "./engine/types";
 import "./OfferMerge.css";
 
@@ -86,6 +88,7 @@ export default function OfferMerge() {
   const [error, setError] = useState<string | null>(null);
 
   const [offerBytes, setOfferBytes] = useState<Uint8Array | null>(null);
+  const [offerParts, setOfferParts] = useState<{ document: string; footnotes: string | null } | null>(null);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("color");
@@ -93,12 +96,23 @@ export default function OfferMerge() {
   const [outOffer, setOutOffer] = useState<Uint8Array | null>(null);
   const [outCombined, setOutCombined] = useState<Uint8Array | null>(null);
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [current, setCurrent] = useState(0);
   const flashTimer = useRef<number | null>(null);
 
   const includedOps = useMemo(
     () => operations.filter((o) => !excluded[o.id]),
     [operations, excluded],
   );
+
+  // Предпросмотр «места правки» для каждой операции (пересчитывается при правках).
+  const previews = useMemo(() => {
+    const map = new Map<string, PreviewSnippet>();
+    if (!offerParts) return map;
+    for (const op of operations) {
+      map.set(op.id, previewOperation(offerParts.document, offerParts.footnotes, op));
+    }
+    return map;
+  }, [operations, offerParts]);
 
   // Доступность этапов для переключения.
   const canReview = operations.length > 0;
@@ -118,6 +132,12 @@ export default function OfferMerge() {
     flashTimer.current = window.setTimeout(() => setFlashId(null), 1300);
   }
 
+  function goToIndex(i: number) {
+    if (i < 0 || i >= operations.length) return;
+    setCurrent(i);
+    goToOp(operations[i].id);
+  }
+
   function addChanges(files: File[]) {
     const docx = files.filter((f) => f.name.toLowerCase().endsWith(".docx"));
     setChanges((prev) => {
@@ -134,12 +154,16 @@ export default function OfferMerge() {
     setError(null);
     setBusy(true);
     try {
-      setOfferBytes(await fileBytes(offer));
+      const bytes = await fileBytes(offer);
+      setOfferBytes(bytes);
+      const parts = await loadDocx(bytes);
+      setOfferParts({ document: parts.document, footnotes: parts.footnotes });
       const docs = [];
       for (const c of changes) docs.push({ name: c.name, data: await fileBytes(c) });
       const { operations: ops } = await parseAllChangeDocs(docs);
       setOperations(ops);
       setExcluded({});
+      setCurrent(0);
       setStage("review");
     } catch (e) {
       setError((e as Error).message);
@@ -259,23 +283,53 @@ export default function OfferMerge() {
             <aside className="om-nav">
               <div className="om-nav__title">
                 Изменения <span className="om-nav__count">{operations.length}</span>
+                <div className="om-nav__pager">
+                  <button
+                    type="button"
+                    className="om-pager-btn"
+                    disabled={current <= 0}
+                    onClick={() => goToIndex(current - 1)}
+                    aria-label="Предыдущее изменение"
+                  >
+                    ◀
+                  </button>
+                  <span className="om-nav__pos">
+                    {operations.length ? current + 1 : 0}/{operations.length}
+                  </span>
+                  <button
+                    type="button"
+                    className="om-pager-btn"
+                    disabled={current >= operations.length - 1}
+                    onClick={() => goToIndex(current + 1)}
+                    aria-label="Следующее изменение"
+                  >
+                    ▶
+                  </button>
+                </div>
               </div>
               <ul className="om-nav__list">
-                {operations.map((op, i) => (
-                  <li key={op.id}>
-                    <button
-                      type="button"
-                      className={`om-nav__item${excluded[op.id] ? " off" : ""}`}
-                      onClick={() => goToOp(op.id)}
-                      title={targetLabel(op)}
-                    >
-                      <span className="om-nav__num">{i + 1}</span>
-                      <span className="om-nav__ico">{OP_TYPE_ICON[op.type]}</span>
-                      <span className="om-nav__lbl">{targetShort(op)}</span>
-                      {op.warnings?.length ? <span className="om-nav__warn">⚠</span> : null}
-                    </button>
-                  </li>
-                ))}
+                {operations.map((op, i) => {
+                  const pv = previews.get(op.id);
+                  return (
+                    <li key={op.id}>
+                      <button
+                        type="button"
+                        className={`om-nav__item${excluded[op.id] ? " off" : ""}${current === i ? " current" : ""}`}
+                        onClick={() => goToIndex(i)}
+                        title={targetLabel(op)}
+                      >
+                        <span className="om-nav__num">{i + 1}</span>
+                        <span className="om-nav__ico">{OP_TYPE_ICON[op.type]}</span>
+                        <span className="om-nav__lbl">{targetShort(op)}</span>
+                        {pv && !pv.ok ? (
+                          <span className="om-nav__warn" title="место правки не найдено">⚠</span>
+                        ) : op.warnings?.length ? (
+                          <span className="om-nav__warn">⚠</span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             </aside>
 
@@ -292,6 +346,7 @@ export default function OfferMerge() {
                   op={op}
                   index={i + 1}
                   flash={flashId === op.id}
+                  preview={previews.get(op.id)}
                   included={!excluded[op.id]}
                   onToggle={(v) => setExcluded((s) => ({ ...s, [op.id]: !v }))}
                   onChange={(patch) => updateOp(op.id, patch)}
@@ -471,6 +526,7 @@ function OpCard({
   op,
   index,
   flash,
+  preview,
   included,
   onToggle,
   onChange,
@@ -478,6 +534,7 @@ function OpCard({
   op: Operation;
   index: number;
   flash: boolean;
+  preview?: PreviewSnippet;
   included: boolean;
   onToggle: (v: boolean) => void;
   onChange: (patch: Partial<Operation>) => void;
@@ -513,6 +570,8 @@ function OpCard({
         </p>
       ))}
 
+      {preview && <PreviewBlock preview={preview} />}
+
       {op.anchor !== undefined && (
         <Field label="После слов (якорь)" value={op.anchor} onChange={(v) => onChange({ anchor: v })} />
       )}
@@ -525,6 +584,46 @@ function OpCard({
         />
       )}
       {op.rows && <p className="om-card__rows">Строк таблицы к добавлению: {op.rows.length}</p>}
+    </div>
+  );
+}
+
+function PreviewBlock({ preview }: { preview: PreviewSnippet }) {
+  if (!preview.ok && preview.kind === "none") {
+    return (
+      <div className="om-preview om-preview--miss">
+        <span className="om-preview__badge">📍 место не найдено</span>
+        <span className="om-preview__note">
+          {preview.note ?? "не удалось показать место правки"} — правка всё равно будет
+          применена по указанным данным
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="om-preview">
+      <div className="om-preview__label">
+        📍 Предпросмотр места правки{preview.note ? ` · ${preview.note}` : ""}
+      </div>
+      <div className="om-preview__doc">
+        {preview.kind === "replace" ? (
+          <>
+            {preview.removed && <span className="om-old">{preview.removed}</span>}
+            <span className="om-new">{preview.hit}</span>
+          </>
+        ) : preview.kind === "table" ? (
+          <>
+            <span className="om-new">{preview.hit}</span>
+            {preview.after && <span className="om-preview__ctx"> — {preview.after}</span>}
+          </>
+        ) : (
+          <>
+            <span className="om-ctx">{preview.before}</span>
+            <mark className="om-mark">{preview.hit}</mark>
+            <span className="om-ctx">{preview.after}</span>
+          </>
+        )}
+      </div>
     </div>
   );
 }
