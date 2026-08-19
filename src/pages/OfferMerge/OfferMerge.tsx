@@ -1,7 +1,7 @@
 // Модуль «Объединение изменений в Оферту».
 // Полностью браузерная обработка (algorithm-only): документы не покидают
 // компьютер, сервер и сеть не задействованы.
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { saveAs } from "file-saver";
 import PageShell from "../../components/PageShell";
 import { parseAllChangeDocs, buildOutputs } from "./engine/pipeline";
@@ -23,6 +23,13 @@ const OP_TYPE_LABEL: Record<Operation["type"], string> = {
   delete: "исключить",
 };
 
+const OP_TYPE_ICON: Record<Operation["type"], string> = {
+  insert_after: "➕",
+  replace: "✏️",
+  append_table_rows: "▤",
+  delete: "🗑️",
+};
+
 function targetLabel(op: Operation): string {
   const t = op.target;
   switch (t.kind) {
@@ -39,14 +46,36 @@ function targetLabel(op: Operation): string {
   }
 }
 
+function targetShort(op: Operation): string {
+  const t = op.target;
+  switch (t.kind) {
+    case "footnote":
+      return `Сноска ${t.number}`;
+    case "term":
+      return `Термин «${t.term}»`;
+    case "point":
+      return `Пункт ${t.point}`;
+    case "appendix_point":
+      return `Прил. ${t.appendix} · п. ${t.point}`;
+    case "appendix_table":
+      return `Таблица · Прил. ${t.appendix}`;
+  }
+}
+
 async function fileBytes(f: File): Promise<Uint8Array> {
   return new Uint8Array(await f.arrayBuffer());
 }
 
-const STEPS: [Stage, string][] = [
-  ["upload", "1. Загрузка"],
-  ["review", "2. Проверка"],
-  ["done", "3. Файлы"],
+function fmtSize(bytes: number): string {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} КБ`
+    : `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+}
+
+const STEPS: { key: Stage; label: string }[] = [
+  { key: "upload", label: "1. Загрузка" },
+  { key: "review", label: "2. Проверка" },
+  { key: "done", label: "3. Файлы" },
 ];
 
 export default function OfferMerge() {
@@ -63,11 +92,39 @@ export default function OfferMerge() {
   const [results, setResults] = useState<ApplyResult[]>([]);
   const [outOffer, setOutOffer] = useState<Uint8Array | null>(null);
   const [outCombined, setOutCombined] = useState<Uint8Array | null>(null);
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const flashTimer = useRef<number | null>(null);
 
   const includedOps = useMemo(
     () => operations.filter((o) => !excluded[o.id]),
     [operations, excluded],
   );
+
+  // Доступность этапов для переключения.
+  const canReview = operations.length > 0;
+  const canDone = !!outOffer && !!outCombined;
+  function goStage(s: Stage) {
+    if (s === "review" && !canReview) return;
+    if (s === "done" && !canDone) return;
+    setStage(s);
+  }
+
+  function goToOp(id: string) {
+    const el = document.getElementById(`om-op-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setFlashId(id);
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlashId(null), 1300);
+  }
+
+  function addChanges(files: File[]) {
+    const docx = files.filter((f) => f.name.toLowerCase().endsWith(".docx"));
+    setChanges((prev) => {
+      const names = new Set(prev.map((p) => p.name + p.size));
+      return [...prev, ...docx.filter((f) => !names.has(f.name + f.size))];
+    });
+  }
 
   async function handleParse() {
     if (!offer || changes.length === 0) {
@@ -138,35 +195,57 @@ export default function OfferMerge() {
       title="Объединение изменений в Оферту"
       subtitle="Соберите изменения из нескольких документов и обновите текст оферты с выделением правок — прямо в браузере"
       icon="📑"
-      width={900}
+      width={1040}
     >
       <div className="om">
-        <div className="ds-tabs om-steps" role="list">
-          {STEPS.map(([k, t]) => (
-            <span key={k} className={`ds-tab${stage === k ? " ds-tab--active" : ""}`} role="listitem">
-              {t}
-            </span>
-          ))}
+        <div className="om-steps" role="tablist">
+          {STEPS.map((s, i) => {
+            const disabled =
+              (s.key === "review" && !canReview) || (s.key === "done" && !canDone);
+            return (
+              <button
+                key={s.key}
+                type="button"
+                role="tab"
+                aria-selected={stage === s.key}
+                className={`om-step${stage === s.key ? " is-active" : ""}`}
+                disabled={disabled}
+                onClick={() => goStage(s.key)}
+              >
+                {s.label}
+                {i < STEPS.length - 1 && <span className="om-step__arrow">›</span>}
+              </button>
+            );
+          })}
         </div>
 
         {error && <div className="om-error">{error}</div>}
 
         {stage === "upload" && (
           <section className="om-section">
-            <FileField
-              label="Действующая Оферта (Приложение 7), .docx"
+            <DropZone
+              icon="📄"
+              label="Действующая Оферта (Приложение 7)"
+              hint="Один файл .docx — базовый текст оферты"
               multiple={false}
               files={offer ? [offer] : []}
-              onFiles={(f) => setOffer(f[0] ?? null)}
+              onAdd={(f) => {
+                const d = f.find((x) => x.name.toLowerCase().endsWith(".docx"));
+                if (d) setOffer(d);
+              }}
+              onRemove={() => setOffer(null)}
             />
-            <FileField
-              label="Документы с изменениями (можно несколько), .docx"
+            <DropZone
+              icon="🗂️"
+              label="Документы с изменениями"
+              hint="Можно несколько .docx — каждый со своим перечнем правок"
               multiple
               files={changes}
-              onFiles={setChanges}
+              onAdd={addChanges}
+              onRemove={(i) => setChanges((prev) => prev.filter((_, idx) => idx !== i))}
             />
             <p className="om-hint">
-              Обработка идёт полностью в браузере: документы никуда не отправляются,
+              🔒 Обработка идёт полностью в браузере: документы никуда не отправляются,
               ИИ и сеть не задействованы.
             </p>
             <button className="om-btn" disabled={busy} onClick={handleParse}>
@@ -176,47 +255,73 @@ export default function OfferMerge() {
         )}
 
         {stage === "review" && (
-          <section className="om-section">
-            <div className="ds-panel om-note">
-              Распознано операций: <b>{operations.length}</b>. Разбор —
-              детерминированный алгоритм, без ИИ и без сети. Проверьте правки,
-              при необходимости отредактируйте текст или отключите ошибочные.
-            </div>
+          <section className="om-review">
+            <aside className="om-nav">
+              <div className="om-nav__title">
+                Изменения <span className="om-nav__count">{operations.length}</span>
+              </div>
+              <ul className="om-nav__list">
+                {operations.map((op, i) => (
+                  <li key={op.id}>
+                    <button
+                      type="button"
+                      className={`om-nav__item${excluded[op.id] ? " off" : ""}`}
+                      onClick={() => goToOp(op.id)}
+                      title={targetLabel(op)}
+                    >
+                      <span className="om-nav__num">{i + 1}</span>
+                      <span className="om-nav__ico">{OP_TYPE_ICON[op.type]}</span>
+                      <span className="om-nav__lbl">{targetShort(op)}</span>
+                      {op.warnings?.length ? <span className="om-nav__warn">⚠</span> : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </aside>
 
-            {operations.map((op, i) => (
-              <OpCard
-                key={op.id}
-                op={op}
-                index={i + 1}
-                included={!excluded[op.id]}
-                onToggle={(v) => setExcluded((s) => ({ ...s, [op.id]: !v }))}
-                onChange={(patch) => updateOp(op.id, patch)}
-              />
-            ))}
+            <div className="om-review__main">
+              <div className="ds-panel om-note">
+                Распознано операций: <b>{operations.length}</b>. Разбор —
+                детерминированный алгоритм, без ИИ и без сети. Проверьте правки,
+                при необходимости отредактируйте текст или отключите ошибочные.
+              </div>
 
-            <div className="om-actions">
-              <label className="om-hl">
-                Выделение:
-                <select
-                  className="ds-select"
-                  value={highlightMode}
-                  onChange={(e) => setHighlightMode(e.target.value as HighlightMode)}
+              {operations.map((op, i) => (
+                <OpCard
+                  key={op.id}
+                  op={op}
+                  index={i + 1}
+                  flash={flashId === op.id}
+                  included={!excluded[op.id]}
+                  onToggle={(v) => setExcluded((s) => ({ ...s, [op.id]: !v }))}
+                  onChange={(patch) => updateOp(op.id, patch)}
+                />
+              ))}
+
+              <div className="om-actions">
+                <label className="om-hl">
+                  Выделение:
+                  <select
+                    className="ds-select"
+                    value={highlightMode}
+                    onChange={(e) => setHighlightMode(e.target.value as HighlightMode)}
+                  >
+                    <option value="color">цветом (как в образце)</option>
+                    <option value="tracked">рецензирование (исправления)</option>
+                    <option value="both">цветом + рецензирование</option>
+                  </select>
+                </label>
+                <button
+                  className="om-btn"
+                  disabled={busy || includedOps.length === 0}
+                  onClick={handleBuild}
                 >
-                  <option value="color">цветом (как в образце)</option>
-                  <option value="tracked">рецензирование (исправления)</option>
-                  <option value="both">цветом + рецензирование</option>
-                </select>
-              </label>
-              <button
-                className="om-btn"
-                disabled={busy || includedOps.length === 0}
-                onClick={handleBuild}
-              >
-                {busy ? "Собираем…" : `Собрать файлы (${includedOps.length}) →`}
-              </button>
-              <button className="om-link" onClick={reset}>
-                начать заново
-              </button>
+                  {busy ? "Собираем…" : `Собрать файлы (${includedOps.length}) →`}
+                </button>
+                <button className="om-link" onClick={() => goStage("upload")}>
+                  ← к загрузке
+                </button>
+              </div>
             </div>
           </section>
         )}
@@ -226,18 +331,28 @@ export default function OfferMerge() {
             <div className="om-ok">
               Готово. Применено: {results.filter((r) => r.ok).length}/{results.length}.
             </div>
-            <div className="om-actions">
+            <div className="om-downloads">
               <button
-                className="om-btn"
+                className="om-dl"
                 onClick={() => outCombined && download(outCombined, "Объединённые_изменения.docx")}
               >
-                ↓ Объединённый файл изменений
+                <span className="om-dl__ico">📋</span>
+                <span>
+                  <b>Объединённый файл изменений</b>
+                  <small>перечень правок в порядке следования пунктов Оферты</small>
+                </span>
+                <span className="om-dl__arrow">↓</span>
               </button>
               <button
-                className="om-btn"
+                className="om-dl"
                 onClick={() => outOffer && download(outOffer, "Оферта_с_изменениями.docx")}
               >
-                ↓ Оферта с выделенными изменениями
+                <span className="om-dl__ico">📝</span>
+                <span>
+                  <b>Оферта с выделенными изменениями</b>
+                  <small>текст оферты с применёнными правками</small>
+                </span>
+                <span className="om-dl__arrow">↓</span>
               </button>
             </div>
             <div className="ds-panel om-results">
@@ -247,9 +362,14 @@ export default function OfferMerge() {
                 </div>
               ))}
             </div>
-            <button className="om-link" onClick={reset}>
-              начать заново
-            </button>
+            <div className="om-actions">
+              <button className="om-link" onClick={() => goStage("review")}>
+                ← к проверке
+              </button>
+              <button className="om-link" onClick={reset}>
+                начать заново
+              </button>
+            </div>
           </section>
         )}
       </div>
@@ -257,56 +377,122 @@ export default function OfferMerge() {
   );
 }
 
-function FileField({
+function DropZone({
+  icon,
   label,
+  hint,
   multiple,
   files,
-  onFiles,
+  onAdd,
+  onRemove,
 }: {
+  icon: string;
   label: string;
+  hint: string;
   multiple: boolean;
   files: File[];
-  onFiles: (files: File[]) => void;
+  onAdd: (files: File[]) => void;
+  onRemove: (index: number) => void;
 }) {
+  const [over, setOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
-    <label className="ds-dropzone om-drop">
-      <div className="om-drop__label">{label}</div>
-      <input
-        type="file"
-        accept=".docx"
-        multiple={multiple}
-        onChange={(e) => onFiles(Array.from(e.target.files ?? []))}
-      />
+    <div className="om-dz-wrap">
+      <div
+        className={`om-dz${over ? " is-over" : ""}${files.length ? " has-files" : ""}`}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          onAdd(Array.from(e.dataTransfer.files));
+        }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+        }}
+      >
+        <div className="om-dz__icon">{icon}</div>
+        <div className="om-dz__text">
+          <div className="om-dz__label">{label}</div>
+          <div className="om-dz__hint">{hint}</div>
+          <div className="om-dz__cta">
+            Перетащите файл сюда или <span>выберите</span>
+          </div>
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".docx"
+          multiple={multiple}
+          hidden
+          onChange={(e) => {
+            onAdd(Array.from(e.target.files ?? []));
+            e.target.value = "";
+          }}
+        />
+      </div>
+
       {files.length > 0 && (
-        <ul className="om-drop__files">
-          {files.map((f) => (
-            <li key={f.name}>📄 {f.name}</li>
+        <ul className="om-files">
+          {files.map((f, i) => (
+            <li key={f.name + f.size} className="om-chip">
+              <span className="om-chip__ico">📄</span>
+              <span className="om-chip__name" title={f.name}>
+                {f.name}
+              </span>
+              <span className="om-chip__size">{fmtSize(f.size)}</span>
+              <button
+                type="button"
+                className="om-chip__x"
+                aria-label="Убрать файл"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(i);
+                }}
+              >
+                ✕
+              </button>
+            </li>
           ))}
         </ul>
       )}
-    </label>
+    </div>
   );
 }
 
 function OpCard({
   op,
   index,
+  flash,
   included,
   onToggle,
   onChange,
 }: {
   op: Operation;
   index: number;
+  flash: boolean;
   included: boolean;
   onToggle: (v: boolean) => void;
   onChange: (patch: Partial<Operation>) => void;
 }) {
   return (
-    <div className={`ds-panel om-card${included ? "" : " off"}`}>
+    <div
+      id={`om-op-${op.id}`}
+      className={`ds-panel om-card${included ? "" : " off"}${flash ? " flash" : ""}`}
+    >
       <div className="om-card__head">
         <div>
           <span className="om-card__num">{index}.</span>
-          <span className="om-card__type">{OP_TYPE_LABEL[op.type]}</span>{" "}
+          <span className="om-card__type">
+            {OP_TYPE_ICON[op.type]} {OP_TYPE_LABEL[op.type]}
+          </span>{" "}
           <b>{targetLabel(op)}</b>
           <span className="om-card__src"> · {op.sourceDoc}</span>
         </div>
