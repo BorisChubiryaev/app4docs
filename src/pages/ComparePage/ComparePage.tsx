@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import * as ExcelJS from "exceljs";
-import { Link } from "react-router-dom";
 import mammoth from "mammoth";
+import InstructionsModalShell from "../../components/InstructionsModal";
+import PageShell from "../../components/PageShell";
 
 import "./ComparePage.css";
 
@@ -1103,21 +1104,21 @@ const ComparePage: React.FC = () => {
           </div>
         </div>
 
-        <div className="word-comparison-tabs">
+        <div className="ds-tabs ds-tabs--fill">
           <button
-            className={`comparison-tab ${activeWordTab === "all" ? "active" : ""}`}
+            className={`ds-tab ${activeWordTab === "all" ? "ds-tab--active" : ""}`}
             onClick={() => setActiveWordTab("all")}
           >
             Все элементы ({wordDifferences.length})
           </button>
           <button
-            className={`comparison-tab ${activeWordTab === "differences" ? "active" : ""}`}
+            className={`ds-tab ${activeWordTab === "differences" ? "ds-tab--active" : ""}`}
             onClick={() => setActiveWordTab("differences")}
           >
             Различия ({differentItems.length})
           </button>
           <button
-            className={`comparison-tab ${activeWordTab === "identical" ? "active" : ""}`}
+            className={`ds-tab ${activeWordTab === "identical" ? "ds-tab--active" : ""}`}
             onClick={() => setActiveWordTab("identical")}
           >
             Идентичные ({identicalItems.length})
@@ -1224,115 +1225,94 @@ const ComparePage: React.FC = () => {
     );
   };
 
-  const InstructionsModal: React.FC = () => {
-    if (!showInstructions) return null;
-
-    return (
-      <div className="modal-overlay" onClick={() => setShowInstructions(false)}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header">
-            <h2>📋 Инструкция по использованию Compare Files</h2>
-            <button
-              className="modal-close"
-              onClick={() => setShowInstructions(false)}
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="modal-body">
-            <div className="instructions-section">
-              <h3>🎯 Что такое Compare Files?</h3>
-              <p>
-                Compare Files - это мощный инструмент для точного сравнения
-                Excel и Word файлов. Для Word документов используется
-                специальный режим сравнения с анализом параграфов и таблиц.
-              </p>
-            </div>
-
-            <div className="instructions-section">
-              <h3>📝 Поддерживаемые форматы</h3>
-              <p>
-                <strong>Excel файлы:</strong>
-              </p>
-              <ul>
-                <li>.xlsx (Excel Workbook)</li>
-                <li>.xls (Excel 97-2003)</li>
-                <li>Сравнение по ячейкам с подсветкой</li>
-              </ul>
-
-              <p>
-                <strong>Word файлы:</strong>
-              </p>
-              <ul>
-                <li>.docx (Word Document)</li>
-                <li>.doc (Word 97-2003)</li>
-                <li>Сравнение параграфов и таблиц</li>
-                <li>Детальный анализ различий</li>
-              </ul>
-            </div>
-
-            <div className="instructions-section">
-              <h3>🔄 Режимы сравнения Word</h3>
-              <ul>
-                <li>
-                  <strong>Сравнение параграфов:</strong> Анализ каждого
-                  параграфа по отдельности
-                </li>
-                <li>
-                  <strong>Сравнение таблиц:</strong> Проверка наличия и
-                  содержания таблиц
-                </li>
-                <li>
-                  <strong>Параллельный просмотр:</strong> Side-by-side
-                  отображение обоих документов
-                </li>
-                <li>
-                  <strong>Детальная таблица:</strong> Поэлементное сравнение с
-                  указанием статуса
-                </li>
-              </ul>
-            </div>
-
-            <div className="instructions-section">
-              <h3>🎨 Особенности Word сравнения</h3>
-              <ul>
-                <li>
-                  <strong>Интеллектуальное разбиение:</strong> Автоматическое
-                  определение параграфов и таблиц
-                </li>
-                <li>
-                  <strong>Цветовая кодировка:</strong> Различия подсвечиваются
-                  красным, идентичные элементы - зеленым
-                </li>
-                <li>
-                  <strong>Статистика:</strong> Отображение количества
-                  параграфов, таблиц и символов
-                </li>
-                <li>
-                  <strong>Предпросмотр:</strong> Возможность увидеть содержимое
-                  каждого документа
-                </li>
-                <li>
-                  <strong>Фильтрация:</strong> Просмотр только различий или
-                  только идентичных элементов
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="modal-footer">
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowInstructions(false)}
-            >
-              Понятно! Начать работу!
-            </button>
-          </div>
-        </div>
+  const InstructionsModal: React.FC = () => (
+    <InstructionsModalShell
+      isOpen={showInstructions}
+      onClose={() => setShowInstructions(false)}
+      title="📋 Инструкция по использованию Compare Files"
+      footerLabel="Понятно! Начать работу!"
+      maxWidth={820}
+    >
+      <div className="instructions-section">
+        <h3>🎯 Что такое Compare Files?</h3>
+        <p>
+          Compare Files - это мощный инструмент для точного сравнения Excel и
+          Word файлов. Для Word документов используется специальный режим
+          сравнения с анализом параграфов и таблиц.
+        </p>
       </div>
-    );
-  };
+
+      <div className="instructions-section">
+        <h3>📝 Поддерживаемые форматы</h3>
+        <p>
+          <strong>Excel файлы:</strong>
+        </p>
+        <ul>
+          <li>.xlsx (Excel Workbook)</li>
+          <li>.xls (Excel 97-2003)</li>
+          <li>Сравнение по ячейкам с подсветкой</li>
+        </ul>
+
+        <p>
+          <strong>Word файлы:</strong>
+        </p>
+        <ul>
+          <li>.docx (Word Document)</li>
+          <li>.doc (Word 97-2003)</li>
+          <li>Сравнение параграфов и таблиц</li>
+          <li>Детальный анализ различий</li>
+        </ul>
+      </div>
+
+      <div className="instructions-section">
+        <h3>🔄 Режимы сравнения Word</h3>
+        <ul>
+          <li>
+            <strong>Сравнение параграфов:</strong> Анализ каждого параграфа по
+            отдельности
+          </li>
+          <li>
+            <strong>Сравнение таблиц:</strong> Проверка наличия и содержания
+            таблиц
+          </li>
+          <li>
+            <strong>Параллельный просмотр:</strong> Side-by-side отображение
+            обоих документов
+          </li>
+          <li>
+            <strong>Детальная таблица:</strong> Поэлементное сравнение с
+            указанием статуса
+          </li>
+        </ul>
+      </div>
+
+      <div className="instructions-section">
+        <h3>🎨 Особенности Word сравнения</h3>
+        <ul>
+          <li>
+            <strong>Интеллектуальное разбиение:</strong> Автоматическое
+            определение параграфов и таблиц
+          </li>
+          <li>
+            <strong>Цветовая кодировка:</strong> Различия подсвечиваются
+            красным, идентичные элементы - зеленым
+          </li>
+          <li>
+            <strong>Статистика:</strong> Отображение количества параграфов,
+            таблиц и символов
+          </li>
+          <li>
+            <strong>Предпросмотр:</strong> Возможность увидеть содержимое каждого
+            документа
+          </li>
+          <li>
+            <strong>Фильтрация:</strong> Просмотр только различий или только
+            идентичных элементов
+          </li>
+        </ul>
+      </div>
+    </InstructionsModalShell>
+  );
 
   const FullScreenModal = () => {
     if (!fullScreenMode) return null;
@@ -1536,27 +1516,15 @@ const ComparePage: React.FC = () => {
       <FullScreenModal />
       <InstructionsModal />
 
-      <div className="compare-page">
-        <div className="compare-container">
-          <div className="compare-header">
-            <div className="header-content">
-              <Link to="/" className="home-button">
-                🏠 На главную
-              </Link>
-              <h1>Сравнение Excel и Word файлов</h1>
-              <p>
-                {fileType1 === "word"
-                  ? "Интеллектуальное сравнение Word документов по параграфам и таблицам"
-                  : "Точное сравнение Excel файлов по ячейкам с визуальной подсветкой"}
-              </p>
-              <button
-                className="instructions-button home-button"
-                onClick={() => setShowInstructions(true)}
-              >
-                📚 Инструкция
-              </button>
-            </div>
-          </div>
+      <PageShell
+        title="Сравнение Excel и Word файлов"
+        subtitle={
+          fileType1 === "word"
+            ? "Интеллектуальное сравнение Word документов по параграфам и таблицам"
+            : "Точное сравнение Excel файлов по ячейкам с визуальной подсветкой"
+        }
+        onShowInstructions={() => setShowInstructions(true)}
+      >
 
           <div className="upload-section">
             {/* Файл 1 */}
@@ -1814,8 +1782,7 @@ const ComparePage: React.FC = () => {
                 </div>
               </div>
             )}
-        </div>
-      </div>
+      </PageShell>
     </>
   );
 };

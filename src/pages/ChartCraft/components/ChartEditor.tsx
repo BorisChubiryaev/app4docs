@@ -56,7 +56,7 @@ const ChartEditor: React.FC<Props> = ({
         </div>
         <div className="cc-editor-body">
           <div className="cc-editor-settings">
-            <div className="cc-editor-tabs">
+            <div className="ds-tabs ds-tabs--fill cc-editor-tabs">
               {(
                 [
                   ["columns", "📋 Данные"],
@@ -66,7 +66,7 @@ const ChartEditor: React.FC<Props> = ({
               ).map(([k, l]) => (
                 <button
                   key={k}
-                  className={`cc-editor-tab ${tab === k ? "active" : ""}`}
+                  className={`ds-tab ${tab === k ? "ds-tab--active" : ""}`}
                   onClick={() => setTab(k)}
                 >
                   {l}

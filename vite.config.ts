@@ -7,6 +7,9 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   base: './',
+  server: process.env.PORT
+    ? { port: Number(process.env.PORT), strictPort: true }
+    : undefined,
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

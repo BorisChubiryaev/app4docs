@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import JpgToPdfInstructions from "./components/JpgToPdfInstructions";
+import PageShell from "../../components/PageShell";
 import "./JpgToPdfPage.css";
 
 interface ImageFile {
@@ -1092,26 +1092,11 @@ const JpgToPdfPage: React.FC = () => {
   }, [settings.layoutMode]);
 
   return (
-    <div className="jpg-to-pdf-page">
-      <div className="jpg-to-pdf-container">
-        <div className="jpg-to-pdf-header">
-          <div className="header-content">
-            <Link to="/" className="home-button">
-              🏠 На главную
-            </Link>
-            <h1>Конвертация JPG в PDF</h1>
-            <p>
-              Гибкая конвертация изображений в PDF с настройкой компоновки.
-              Поддерживается одиночный режим и режим сетки.
-            </p>
-            <button
-              className="instructions-button home-button"
-              onClick={() => setShowInstructions(true)}
-            >
-              📚 Инструкция
-            </button>
-          </div>
-        </div>
+    <PageShell
+      title="Конвертация JPG в PDF"
+      subtitle="Гибкая конвертация изображений в PDF с настройкой компоновки. Поддерживается одиночный режим и режим сетки."
+      onShowInstructions={() => setShowInstructions(true)}
+    >
 
         {/* Зона загрузки */}
         <div
@@ -1822,12 +1807,11 @@ const JpgToPdfPage: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
       <JpgToPdfInstructions
         isOpen={showInstructions}
         onClose={() => setShowInstructions(false)}
       />
-    </div>
+    </PageShell>
   );
 };
 

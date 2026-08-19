@@ -123,12 +123,6 @@
   margin-bottom: 40px;
 }
 
-.header-content {
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-
 .header-title {
   text-align: center;
   flex: 1;
@@ -160,7 +154,7 @@
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;
-  color: #1e293b;
+  color: var(--ink);
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
@@ -193,7 +187,7 @@
 }
 
 .glass-button.primary {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  background: var(--brand-gradient);
   color: white;
   border: none;
 }
@@ -224,17 +218,7 @@
 }
 
 /* Glass Card */
-.glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 20px;
-  padding: 24px;
-  margin-bottom: 20px;
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  transition: all 0.3s ease;
-}
+/* .glass-card — канонический стиль в src/styles/components.css */
 
 .glass-card:hover {
   box-shadow: 
@@ -310,7 +294,7 @@
 .upload-info h3 {
   margin: 0 0 4px 0;
   font-size: 1.2rem;
-  color: #1e293b;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -458,7 +442,7 @@
 .settings-header h3 {
   margin: 0;
   font-size: 1.1rem;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .mode-badge {
@@ -537,7 +521,7 @@
 .option-content strong {
   display: block;
   font-size: 13px;
-  color: #1e293b;
+  color: var(--ink);
   margin-bottom: 2px;
 }
 
@@ -626,7 +610,7 @@
 .level-content strong {
   display: block;
   font-size: 14px;
-  color: #1e293b;
+  color: var(--ink);
   margin-bottom: 2px;
 }
 
@@ -680,7 +664,7 @@
 .option-value {
   font-size: 14px;
   font-weight: 500;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 /* Compress Button - Обновленный */
@@ -789,7 +773,7 @@
 .result-title h3 {
   margin: 0 0 4px 0;
   font-size: 1.2rem;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .result-subtitle {
@@ -839,7 +823,7 @@
   display: block;
   font-size: 18px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .stat-value.original {
@@ -914,7 +898,7 @@
 
 .placeholder-card h3 {
   margin: 0 0 12px 0;
-  color: #1e293b;
+  color: var(--ink);
   font-size: 1.3rem;
 }
 
@@ -968,7 +952,7 @@
 .history-title h3 {
   margin: 0;
   font-size: 1.1rem;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .history-count {
@@ -1030,7 +1014,7 @@
 
 .item-name {
   font-size: 13px;
-  color: #1e293b;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1117,7 +1101,7 @@
 .info-card h3 {
   margin: 0 0 20px 0;
   font-size: 1.1rem;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .info-content {
@@ -1145,7 +1129,7 @@
 .info-text strong {
   display: block;
   font-size: 14px;
-  color: #1e293b;
+  color: var(--ink);
   margin-bottom: 4px;
 }
 
@@ -1265,12 +1249,6 @@
   
   .header-title h1 {
     font-size: 2rem;
-  }
-  
-  .header-content {
-    flex-direction: column;
-    gap: 16px;
-    text-align: center;
   }
   
   .glass-card {
@@ -1434,7 +1412,7 @@
 
 .toggle-label strong {
   font-size: 14px;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 .toggle-label small {
@@ -1458,7 +1436,7 @@
 .settings-card .settings-header h3 {
   margin: 0;
   font-size: 1.1rem;
-  color: #1e293b;
+  color: var(--ink);
 }
 
 /* Responsive для converter-content */
@@ -1537,31 +1515,7 @@
   66% { transform: translate(-20px, 20px) rotate(240deg); }
 }
 
-/* ========== Табы режимов ========== */
-
-.mode-tabs {
-  display: flex; gap: 4px; margin-bottom: 28px;
-  background: rgba(255, 255, 255, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 16px; padding: 4px;
-  max-width: 500px; margin-left: auto; margin-right: auto;
-}
-
-.mode-tab {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  gap: 8px; padding: 14px 20px; border: none; border-radius: 12px;
-  background: transparent; color: #64748b; font-size: 15px;
-  font-weight: 500; cursor: pointer; transition: all 0.3s ease;
-}
-
-.mode-tab:hover { color: #1e293b; background: rgba(255, 255, 255, 0.3); }
-
-.mode-tab.active {
-  background: rgba(255, 255, 255, 0.8); color: #1e293b; font-weight: 600;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
-}
-
-.tab-icon { font-size: 16px; }
+/* ========== Табы режимов (.mode-tabs заменены на .ds-tabs) ========== */
 .tab-label { font-size: 14px; }
 
 /* ========== Glass Card ========== */
@@ -1585,7 +1539,7 @@
   gap: 8px; padding: 12px 24px;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 12px; color: #1e293b; font-size: 14px;
+  border-radius: 12px; color: var(--ink); font-size: 14px;
   font-weight: 500; cursor: pointer; transition: all 0.3s ease;
   position: relative; overflow: hidden; text-decoration: none;
 }
@@ -1606,7 +1560,7 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
-.glass-button.primary { background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white; border: none; }
+.glass-button.primary { background: var(--brand-gradient); color: white; border: none; }
 .glass-button.secondary { background: rgba(255, 255, 255, 0.2); color: #475569; }
 .glass-button.small { padding: 8px 16px; font-size: 13px; }
 .glass-button.disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
@@ -1638,7 +1592,7 @@
 }
 
 .upload-info h3 {
-  margin: 0 0 4px; font-size: 1.2rem; color: #1e293b;
+  margin: 0 0 4px; font-size: 1.2rem; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -1664,7 +1618,7 @@
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
 }
 
-.settings-card .settings-header h3 { margin: 0; font-size: 1.1rem; color: #1e293b; }
+.settings-card .settings-header h3 { margin: 0; font-size: 1.1rem; color: var(--ink); }
 
 .mode-selector { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 
@@ -1683,7 +1637,7 @@
 }
 
 .option-icon { font-size: 20px; display: block; margin-bottom: 6px; }
-.option-content strong { display: block; font-size: 13px; color: #1e293b; margin-bottom: 2px; }
+.option-content strong { display: block; font-size: 13px; color: var(--ink); margin-bottom: 2px; }
 .option-content small { font-size: 11px; color: #64748b; line-height: 1.2; }
 
 /* ========== Compress Button ========== */
@@ -1712,7 +1666,7 @@
   margin-bottom: 16px; flex-shrink: 0;
 }
 
-.files-list-header h3 { margin: 0; font-size: 1.1rem; color: #1e293b; }
+.files-list-header h3 { margin: 0; font-size: 1.1rem; color: var(--ink); }
 .files-list-actions { display: flex; gap: 8px; }
 
 .files-list {
@@ -1748,7 +1702,7 @@
 .file-row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 
 .file-row-name {
-  font-size: 14px; font-weight: 500; color: #1e293b;
+  font-size: 14px; font-weight: 500; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
@@ -1822,12 +1776,12 @@
 
 /* ========== Info / Warning Cards ========== */
 
-.info-card h3 { margin: 0 0 20px; font-size: 1.1rem; color: #1e293b; }
+.info-card h3 { margin: 0 0 20px; font-size: 1.1rem; color: var(--ink); }
 .info-content { display: flex; flex-direction: column; gap: 16px; }
 
 .info-item { display: flex; align-items: flex-start; gap: 12px; }
 .info-icon { font-size: 20px; flex-shrink: 0; opacity: 0.8; }
-.info-text strong { display: block; font-size: 14px; color: #1e293b; margin-bottom: 4px; }
+.info-text strong { display: block; font-size: 14px; color: var(--ink); margin-bottom: 4px; }
 .info-text p { margin: 0; font-size: 13px; color: #64748b; line-height: 1.4; }
 
 .security-note {

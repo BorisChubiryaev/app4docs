@@ -1,0 +1,50 @@
+/* ============================================================
+   EX-EL — глобальные дизайн-токены
+   Подключается один раз в src/index.tsx.
+   Только переменные + безопасная база (без глобального
+   box-sizing-ресета, чтобы не ломать вёрстку существующих страниц).
+   ============================================================ */
+
+:root {
+  /* Фирменный градиент (логотип Qlik / EX-EL) */
+  --brand-1: #0087cd;
+  --brand-2: #515dad;
+  --brand-3: #8253aa;
+  --brand-4: #ff1c77;
+  --brand-gradient: linear-gradient(
+    135deg,
+    var(--brand-1) 0%,
+    var(--brand-2) 30%,
+    var(--brand-3) 64%,
+    var(--brand-4) 100%
+  );
+
+  /* Нейтральные */
+  --ink: #1d1d1f;
+  --ink-soft: #3a3a3c;
+  --muted: #6b7280;
+  --line: rgba(0, 0, 0, 0.1);
+  --surface: #ffffff;
+  --surface-2: #f5f6f8;
+
+  /* Радиусы */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+
+  /* Тени */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.14);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.28);
+
+  /* Слои */
+  --z-modal: 1000;
+
+  /* Типографика */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* Стеклянная поверхность (используется на нескольких страницах) */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.6);
+}

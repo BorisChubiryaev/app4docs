@@ -1,5 +1,5 @@
 // src/workers/exportWorker.ts
-import * as XLSX from "xlsx";
+import * as ExcelJS from "exceljs";
 import type { ColumnConfig } from "../types/excel.types";
 import type { OutputMerge } from "../hooks/useMergeCalculator";
 
@@ -13,74 +13,75 @@ interface ExportMessage {
   };
 }
 
-self.onmessage = (e: MessageEvent<ExportMessage>) => {
+self.onmessage = async (e: MessageEvent<ExportMessage>) => {
   if (e.data.type !== "EXPORT") return;
 
   const { groupedData, columnConfigs, merges, fileCount } = e.data.payload;
 
   try {
-    self.postMessage({ type: "PROGRESS", payload: { status: "Создание книги..." } });
+    self.postMessage({
+      type: "PROGRESS",
+      payload: { status: "Создание книги..." },
+    });
 
-    const workbook = XLSX.utils.book_new();
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Сгруппированные данные", {
+      // Заморозка строки заголовка
+      views: [{ state: "frozen", ySplit: 1 }],
+    });
 
-    // ── Данные ───────────────────────────────────────────────────────────────
-    // Заголовки + строки
-    const sheetData: string[][] = [
-      columnConfigs.map((c) => c.name),
-      ...groupedData,
-    ];
-
-    const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
+    // ── Данные: заголовок + строки ────────────────────────────────────────────
+    worksheet.addRow(columnConfigs.map((c) => c.name));
+    for (const row of groupedData) {
+      worksheet.addRow(row);
+    }
 
     // ── Объединения ячеек ─────────────────────────────────────────────────────
-    // В sheetData строка 0 = заголовок, строка 1 = первая дата
-    // merge.startRow/endRow — 0-indexed без заголовка
-    // => в sheet: row = merge.startRow + 1 (за заголовок)
-    if (!worksheet["!merges"]) worksheet["!merges"] = [];
-
+    // merge.startRow/endRow — 0-indexed без заголовка.
+    // В книге строка 1 = заголовок, поэтому строка данных (1-based) = startRow + 2.
     merges.forEach((merge) => {
-      worksheet["!merges"]!.push({
-        s: { r: merge.startRow + 1, c: merge.col },
-        e: { r: merge.endRow + 1, c: merge.col },
-      });
+      const top = merge.startRow + 2;
+      const bottom = merge.endRow + 2;
+      const col = merge.col + 1;
+      if (bottom > top) {
+        try {
+          worksheet.mergeCells(top, col, bottom, col);
+        } catch (mergeErr) {
+          console.warn("Не удалось объединить ячейки:", mergeErr);
+        }
+      }
     });
 
     // ── Ширина колонок ────────────────────────────────────────────────────────
     const SAMPLE = Math.min(groupedData.length, 300);
-    const colWidths = columnConfigs.map((config, colIdx) => {
+    columnConfigs.forEach((config, colIdx) => {
       let max = config.name.length;
       for (let i = 0; i < SAMPLE; i++) {
         const len = groupedData[i]?.[colIdx]?.length ?? 0;
         if (len > max) max = len;
       }
       const isGroup = config.groupBy;
-      return { wch: Math.min(max + 4, isGroup ? 80 : 40) };
-    });
-    worksheet["!cols"] = colWidths;
-
-    // ── Фиксация заголовка (freeze) ────────────────────────────────────────────
-    // В SheetJS freeze задаётся через !freeze
-    worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
-
-    self.postMessage({ type: "PROGRESS", payload: { status: "Запись файла..." } });
-
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Сгруппированные данные");
-
-    // Записываем в буфер
-    const buffer = XLSX.write(workbook, {
-      type: "array",
-      bookType: "xlsx",
-      compression: true,
+      worksheet.getColumn(colIdx + 1).width = Math.min(
+        max + 4,
+        isGroup ? 80 : 40,
+      );
     });
 
-    // Передаём буфер в main thread без копирования
+    self.postMessage({
+      type: "PROGRESS",
+      payload: { status: "Запись файла..." },
+    });
+
+    // ExcelJS в браузере возвращает ArrayBuffer
+    const buffer = (await workbook.xlsx.writeBuffer()) as ArrayBuffer;
+
     self.postMessage(
       {
         type: "SUCCESS",
         payload: { buffer, fileCount },
       },
-      // @ts-ignore — transferable
-      [buffer.buffer],
+      // @ts-expect-error — transferable ArrayBuffer в worker-контексте
+      [buffer],
     );
   } catch (err) {
     self.postMessage({

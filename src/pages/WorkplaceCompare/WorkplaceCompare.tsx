@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import * as ExcelJS from "exceljs";
 import { Link } from "react-router-dom";
 import { WorkplaceInstructionsModal } from "./components/WorkplaceInstructionsModal";
+import ThemeToggle from "../../components/ThemeToggle";
 import "./WorkplaceCompare.css";
 
 export default function Page() {
@@ -645,12 +646,15 @@ export default function Page() {
                 </Link>
                 <h1>Сравнение Excel-файлов по рабочим местам</h1>
               </div>
-              <button
-                className="instructions-button home-button"
-                onClick={() => setShowInstructions(true)}
-              >
-                📚 Инструкция
-              </button>
+              <div className="workplace-header-actions">
+                <ThemeToggle />
+                <button
+                  className="instructions-button home-button"
+                  onClick={() => setShowInstructions(true)}
+                >
+                  📚 Инструкция
+                </button>
+              </div>
             </div>
           )}
 

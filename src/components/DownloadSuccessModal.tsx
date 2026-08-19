@@ -36,15 +36,9 @@ const toolsPromo = [
     path: "/Svg2Png",
   },
   {
-    icon: "📦",
-    title: "PDF Компрессор",
-    desc: "Уменьшение размера PDF с картинками",
-    path: "/PdfCompressor",
-  },
-  {
-    icon: "✂️",
-    title: "PDF Редактор",
-    desc: "Перестановка, удаление, объединение страниц",
+    icon: "📄",
+    title: "PDF Studio",
+    desc: "Порядок, повороты, объединение, разделение и сжатие",
     path: "/PdfEditor",
   },
   {

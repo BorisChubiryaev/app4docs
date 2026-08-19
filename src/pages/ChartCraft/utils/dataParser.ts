@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import * as ExcelJS from "exceljs";
 import type { ParsedData, ColumnInfo, ColumnType, ChartType } from "../types";
 
 export async function parseFile(file: File): Promise<ParsedData> {
@@ -8,31 +8,138 @@ export async function parseFile(file: File): Promise<ParsedData> {
   throw new Error(`Неподдерживаемый формат: .${ext}`);
 }
 
+// ── CSV ──────────────────────────────────────────────────────────────────────
+
+/** Разбор строки CSV с учётом кавычек и заданного разделителя */
+function csvToRows(text: string, delimiter: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === delimiter) {
+      row.push(field);
+      field = "";
+    } else if (ch === "\r") {
+      // пропускаем
+    } else if (ch === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  if (field !== "" || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
+/** Автоопределение разделителя по первой строке (,/;/tab) */
+function detectDelimiter(text: string): string {
+  const firstLine = text.split(/\r?\n/, 1)[0] || "";
+  const counts: Record<string, number> = {
+    ",": (firstLine.match(/,/g) || []).length,
+    ";": (firstLine.match(/;/g) || []).length,
+    "\t": (firstLine.match(/\t/g) || []).length,
+  };
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+}
+
 async function parseCSV(file: File): Promise<ParsedData> {
   const text = await file.text();
-  const wb = XLSX.read(text, { type: "string" });
-  return processWorkbook(wb, file.name);
+  const grid = csvToRows(text, detectDelimiter(text));
+  return processGrid(grid, file.name, "CSV");
+}
+
+// ── XLSX через ExcelJS ────────────────────────────────────────────────────────
+
+/** Значение ячейки: числа/булевы — как есть, даты — строкой, прочее — строка */
+function cellValue(cell: ExcelJS.Cell): unknown {
+  const v = cell.value;
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "number" || typeof v === "boolean") return v;
+  if (v instanceof Date) return v.toLocaleDateString();
+  if (typeof v === "object") {
+    const anyV = v as unknown as Record<string, unknown>;
+    if ("result" in anyV && anyV.result != null) return anyV.result;
+    if ("richText" in anyV && Array.isArray(anyV.richText))
+      return (anyV.richText as { text: string }[]).map((rt) => rt.text).join("");
+    if ("text" in anyV && anyV.text != null) return anyV.text;
+    return cell.text || null;
+  }
+  return String(v);
 }
 
 async function parseExcel(file: File): Promise<ParsedData> {
   const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array" });
-  return processWorkbook(wb, file.name);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.worksheets[0];
+  if (!ws) throw new Error("Файл пуст");
+
+  const maxCol = ws.columnCount;
+  const grid: unknown[][] = [];
+  for (let r = 1; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r);
+    const cells: unknown[] = [];
+    for (let c = 1; c <= maxCol; c++) cells.push(cellValue(row.getCell(c)));
+    grid.push(cells);
+  }
+  return processGrid(grid, file.name, ws.name || "Sheet1");
 }
 
-function processWorkbook(wb: XLSX.WorkBook, fileName: string): ParsedData {
-  const sn = wb.SheetNames[0];
-  const rows = XLSX.utils.sheet_to_json<Record<string, any>>(wb.Sheets[sn], {
-    defval: null,
-    raw: false,
-  });
-  if (!rows.length) throw new Error("Файл пуст");
-  const cleaned = cleanData(rows);
+// ── Общая обработка сетки (заголовок + строки) → объекты ──────────────────────
+
+function processGrid(
+  grid: unknown[][],
+  fileName: string,
+  sheetName: string,
+): ParsedData {
+  if (!grid.length) throw new Error("Файл пуст");
+
+  const headerRow = grid[0];
+  const headers = headerRow.map(
+    (h, i) => (h != null && String(h).trim()) || `Column${i + 1}`,
+  );
+
+  const objects: Record<string, any>[] = [];
+  for (let r = 1; r < grid.length; r++) {
+    const cells = grid[r];
+    if (cells.every((c) => c == null || c === "")) continue;
+    const obj: Record<string, any> = {};
+    headers.forEach((key, i) => {
+      const val = cells[i];
+      obj[key] = val === undefined || val === "" ? null : val;
+    });
+    objects.push(obj);
+  }
+
+  if (!objects.length) throw new Error("Файл пуст");
+  const cleaned = cleanData(objects);
   return {
     headers: Object.keys(cleaned[0]),
     rows: cleaned,
     fileName,
-    sheetName: sn,
+    sheetName,
     totalRows: cleaned.length,
   };
 }

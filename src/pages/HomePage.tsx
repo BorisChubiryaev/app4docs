@@ -1,12 +1,18 @@
 // HomePage.jsx
-import { useEffect, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import {
   handleUrlExcelDownload,
   hasUrlDownloadData,
 } from "../utils/urlExcelDownloader";
 import DownloadSuccessModal from "../components/DownloadSuccessModal";
+import ThemeToggle from "../components/ThemeToggle";
 import { Link } from "react-router-dom";
 import "./HomePage.css";
+
+// ⬇️ ССЫЛКА НА ОПРОС CSI (удовлетворённость проектом).
+// Вставьте сюда реальный URL опроса — используется и в кнопке «Опрос»
+// в футере, и в одноразовом окне с просьбой пройти опрос.
+const SURVEY_URL = "https://public.oprosso.sber.ru/p/jgwgns80";
 
 const AnimatedBackground = memo(() => (
   <div className="lg-ambient">
@@ -19,54 +25,41 @@ const AnimatedBackground = memo(() => (
   </div>
 ));
 
-// ─── Карточка инструмента ───
+// ─── Карточка инструмента (компактная плитка) ───
 const ToolCard = memo(({ tool, index }) => (
   <Link
     to={tool.path}
     className="lg-card"
-    style={{ "--card-delay": `${index * 0.06}s` }}
+    style={{ "--card-delay": `${index * 0.04}s` }}
   >
-    {/* Стеклянные слои */}
-    <div className="lg-card__glass" />
-    <div className="lg-card__shine" />
-    <div className="lg-card__edge" />
-
-    {/* Контент */}
-    <div className="lg-card__body">
-      <div className="lg-card__top">
-        <span className="lg-card__icon">{tool.icon}</span>
-        <span className="lg-card__num">
-          {String(index + 1).padStart(2, "0")}
-        </span>
-      </div>
-
-      <h3 className="lg-card__title">{tool.title}</h3>
-      <p className="lg-card__desc">{tool.description}</p>
-
-      <ul className="lg-card__features">
-        {tool.features.map((f, i) => (
-          <li key={i} className="lg-card__feature">
-            <span className="lg-card__check">✓</span>
-            {f}
-          </li>
-        ))}
-      </ul>
-
-      <div className="lg-card__action">
-        <span className="lg-card__cta">
-          Открыть
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M6 3l5 5-5 5"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
-      </div>
+    <div className="lg-card__head">
+      <span className="lg-card__icon">{tool.icon}</span>
+      <svg
+        className="lg-card__arrow"
+        width="18"
+        height="18"
+        viewBox="0 0 16 16"
+        fill="none"
+      >
+        <path
+          d="M6 3l5 5-5 5"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
     </div>
+    <h3 className="lg-card__title">{tool.title}</h3>
+    <p className="lg-card__desc">{tool.description}</p>
+    <ul className="lg-card__tags">
+      {tool.features.slice(0, 2).map((f, i) => (
+        <li key={i} className="lg-card__tag">
+          <span className="lg-card__check">✓</span>
+          {f}
+        </li>
+      ))}
+    </ul>
   </Link>
 ));
 
@@ -80,7 +73,7 @@ const FeedbackModal = memo(({ isOpen, onClose }) => {
       "Здравствуйте!\n\nХочу поделиться обратной связью о работе приложения:\n\n[Опишите ваш опыт работы, предложения или идеи здесь]\n\n--\nОтправлено из приложения сравнения Excel-файлов",
     );
     window.open(
-      `mailto:LGBotsoeva@sberbank.ru,BSChubiryaev@sberbank.ru,AKZagoryanskiy@sberbank.ru?subject=${subject}&body=${body}`,
+      `mailto:LGBotsoeva@sberbank.ru,BSChubiryaev@sberbank.ru?subject=${subject}&body=${body}`,
     );
     onClose();
   }, [onClose]);
@@ -135,15 +128,83 @@ const FeedbackModal = memo(({ isOpen, onClose }) => {
   );
 });
 
+// ─── Окно с просьбой пройти опрос CSI (показывается один раз) ───
+const CsiModal = memo(({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="lg-modal-overlay" onClick={onClose}>
+      <div className="lg-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="lg-modal__glass" />
+        <div className="lg-modal__shine" />
+
+        <div className="lg-modal__content">
+          <button className="lg-modal__close" onClick={onClose}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path
+                d="M4 4l10 10M14 4L4 14"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+
+          <div className="lg-modal__icon-wrap">
+            <span className="lg-modal__icon">⭐</span>
+          </div>
+
+          <h2 className="lg-modal__title">Оцените проект</h2>
+
+          <p className="lg-modal__text">
+            Помогите нам стать лучше — пройдите короткий опрос
+            удовлетворённости проектом{" "}
+            <span className="lg-gradient-text">EX-EL</span>. Это займёт пару
+            минут и очень поможет команде.
+          </p>
+
+          <div className="lg-modal__actions">
+            <a
+              className="lg-btn lg-btn--primary lg-footer__btn"
+              href={SURVEY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onClose}
+            >
+              ⭐ Пройти опрос
+            </a>
+            <button className="lg-btn lg-btn--ghost" onClick={onClose}>
+              Позже
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 // ─── Данные инструментов ───
-const tools = [
+type Tool = {
+  title: string;
+  path: string;
+  description: string;
+  icon: string;
+  features: string[];
+  note?: string;
+};
+
+const tools: Tool[] = [
   {
     title: "Сравнение Excel-файлов по рабочим местам",
     path: "/WorkplaceCompare",
     description:
       "Профессиональное сравнение файлов рабочих мест с расширенными фильтрами",
     icon: "🏢",
-    features: ["Расширенные фильтры", "Подсветка изменений", "Экспорт в Excel"],
+    features: [
+      "Гибкие фильтры по рабочим местам",
+      "Подсветка найденных изменений",
+      "Экспорт результата в Excel",
+    ],
   },
   {
     title: "Сравнение Excel/Word-файлов",
@@ -152,20 +213,20 @@ const tools = [
       "Точное сравнение файлов по позициям ячеек с визуальной подсветкой",
     icon: "📊",
     features: [
-      "Построчное сравнение",
-      "Визуальная подсветка",
-      "Side-by-side просмотр",
+      "Построчное сравнение по позициям ячеек",
+      "Цветовая подсветка изменений",
+      "Просмотр двух файлов рядом",
     ],
   },
   {
-    title: "Конвертер HTML/JSON-таблицы в Excel - 🆕",
+    title: "Конвертер HTML/JSON-таблицы в Excel",
     path: "/htmlToExcel",
     description: "Преобразование HTML/JSON-таблиц в файлы Excel одним кликом",
     icon: "🔧",
     features: [
-      "Предпросмотр таблицы",
-      "Поддержка стилей",
-      "Мгновенная конвертация",
+      "Живой предпросмотр перед выгрузкой",
+      "Сохранение стилей и форматирования",
+      "Конвертация HTML и JSON одним кликом",
     ],
   },
   {
@@ -174,24 +235,23 @@ const tools = [
     description:
       "Быстрая конвертация SVG изображений в PNG формат с настройками",
     icon: "🖼️",
-    features: ["Настройка размеров", "Выбор фона", "Сохранение пропорций"],
-  },
-  {
-    title: "PDF компрессор",
-    path: "/PdfCompressor",
-    description: "Уменьшение конечного веса PDF-файла",
-    icon: "🗜️",
-    features: ["Уменьшение веса файла", "Минимальная потеря качества"],
-  },
-  {
-    title: "PDF редактор",
-    path: "/PdfEditor",
-    description: "Редактор PDF-файлов",
-    icon: "📝",
     features: [
-      "Перемещение страниц",
-      "Удаление страниц",
-      "Сохранение изменений",
+      "Точная настройка ширины и высоты",
+      "Прозрачный фон или заливка цветом",
+      "Сохранение пропорций изображения",
+    ],
+  },
+  {
+    title: "PDF Studio",
+    path: "/PdfEditor",
+    description:
+      "Всё для работы со страницами PDF в одном месте — объединение, порядок, повороты, сжатие",
+    icon: "📄",
+    features: [
+      "Объединение и разделение PDF-файлов",
+      "Перемещение, удаление и поворот страниц",
+      "Сжатие PDF для уменьшения размера",
+      "Drag & Drop загрузка страниц",
     ],
   },
   {
@@ -201,9 +261,9 @@ const tools = [
       "Группировка данных из нескольких Excel-файлов с сохранением информации",
     icon: "✳️",
     features: [
-      "Конструктор группировки",
-      "Точное сопоставление данных",
-      "Проверка структуры",
+      "Конструктор правил группировки",
+      "Точное сопоставление данных из файлов",
+      "Проверка структуры и целостности",
     ],
   },
   {
@@ -212,24 +272,24 @@ const tools = [
     description: "Быстрое превращение таблиц в красивые графики",
     icon: "💠",
     features: [
-      "Конструктор графиков",
-      "Адаптивная расстановка",
+      "Конструктор графиков из таблиц",
+      "Адаптивная расстановка элементов",
       "Рисование и вставка объектов",
       "Экспорт в удобном формате",
     ],
   },
   {
-    title: "Конвертер документов - test",
+    title: "Конвертер документов",
     path: "/PdfToWord",
     description: "PDF ↔ Word — конвертируйте в обе стороны, прямо в браузере",
     icon: "🔄",
     features: [
-      "PDF в Word с сохранением форматирования",
-      "Word в PDF с точным разбиением по страницам",
-      "Три режима работы с изображениями",
+      "PDF → Word с сохранением форматирования",
+      "Word → PDF с разбиением по страницам",
+      "Три режима обработки изображений",
       "Пакетная обработка нескольких файлов",
-      "⚠️ - Недоступно для работы с таблицами",
     ],
+    note: "Не подходит для документов со сложными таблицами",
   },
   {
     title: "JPG в PDF",
@@ -239,11 +299,10 @@ const tools = [
     icon: "🖼️",
     features: [
       "Поддержка JPG, PNG, WebP, GIF, BMP, TIFF",
-      "Одиночный режим и режим сетки на странице",
+      "Одиночный режим и сетка на странице",
       "Настройка отступов, качества и ориентации",
       "Drag & Drop сортировка изображений",
       "Нумерация страниц и подписи к фото",
-      "✅ - Работает офлайн, файлы не покидают устройство",
     ],
   },
   //   {
@@ -258,11 +317,700 @@ const tools = [
   // },
 ];
 
+// ─── Переключатель вида ───
+const LAYOUTS = [
+  { id: "grid", label: "Сетка", icon: "▦" },
+  { id: "menu", label: "Меню", icon: "☰" },
+  { id: "list", label: "Список", icon: "≣" },
+];
+
+const LayoutSwitcher = ({ value, onChange }) => (
+  <div className="hp-switch" role="tablist" aria-label="Вид главной страницы">
+    {LAYOUTS.map((l) => (
+      <button
+        key={l.id}
+        type="button"
+        role="tab"
+        aria-selected={value === l.id}
+        className={`hp-switch__btn ${value === l.id ? "is-active" : ""}`}
+        onClick={() => onChange(l.id)}
+        title={`Вид: ${l.label}`}
+      >
+        <span className="hp-switch__ico">{l.icon}</span>
+        <span className="hp-switch__label">{l.label}</span>
+      </button>
+    ))}
+  </div>
+);
+
+// ─── Вариант «Сетка» ───
+const GridLayout = memo(() => (
+  <main className="lg-main">
+    <div className="lg-grid">
+      {tools.map((tool, i) => (
+        <ToolCard key={tool.path} tool={tool} index={i} />
+      ))}
+    </div>
+  </main>
+));
+
+// Акцентные цвета для «живого» фона детали (по индексу инструмента)
+const MENU_ACCENTS = [
+  "#4f7cff",
+  "#22b8a6",
+  "#f59e0b",
+  "#a855f7",
+  "#ef4444",
+  "#10b981",
+  "#06b6d4",
+  "#6366f1",
+  "#ec4899",
+];
+
+// Анимированный SVG-«скринкаст» для PDF Studio:
+// страница влетает и объединяется в стопку, верхняя страница поворачивается.
+const PdfStudioArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    {/* лёгкое покачивание всей сцены */}
+    <g className="pdfart-scene">
+      {/* задние листы стопки (результат объединения) */}
+      <g className="pdfart-page pdfart-page--back">
+        <rect x="168" y="128" width="120" height="150" rx="10" />
+      </g>
+      <g className="pdfart-page pdfart-page--mid">
+        <rect x="156" y="116" width="120" height="150" rx="10" />
+      </g>
+
+      {/* влетающая страница — объединение */}
+      <g className="pdfart-merge">
+        <rect
+          className="pdfart-sheet"
+          x="144"
+          y="104"
+          width="120"
+          height="150"
+          rx="10"
+        />
+        <rect className="pdfart-line" x="160" y="126" width="80" height="7" rx="3.5" />
+        <rect className="pdfart-line" x="160" y="144" width="88" height="7" rx="3.5" />
+        <rect className="pdfart-line" x="160" y="162" width="62" height="7" rx="3.5" />
+        <rect className="pdfart-line" x="160" y="180" width="80" height="7" rx="3.5" />
+      </g>
+
+      {/* верхняя страница — поворот */}
+      <g className="pdfart-rotate">
+        <rect
+          className="pdfart-sheet pdfart-sheet--top"
+          x="144"
+          y="104"
+          width="120"
+          height="150"
+          rx="10"
+        />
+        {/* загнутый уголок */}
+        <path className="pdfart-fold" d="M244 104 h20 v20 z" />
+        <rect className="pdfart-line" x="160" y="150" width="72" height="7" rx="3.5" />
+        <rect className="pdfart-line" x="160" y="168" width="88" height="7" rx="3.5" />
+        <rect className="pdfart-line" x="160" y="186" width="56" height="7" rx="3.5" />
+      </g>
+
+      {/* значок «+» объединения */}
+      <g className="pdfart-plus">
+        <circle cx="118" cy="150" r="20" />
+        <path d="M118 141 v18 M109 150 h18" />
+      </g>
+    </g>
+  </svg>
+));
+
+// 🏢 Сравнение по рабочим местам — таблица со сканирующей diff-подсветкой
+const WorkplaceCompareArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <rect className="art-card" x="140" y="86" width="216" height="188" rx="14" />
+      <rect className="art-soft" x="140" y="86" width="216" height="36" rx="14" />
+      <rect className="cmp-scan" x="148" y="130" width="200" height="26" rx="7" />
+      {[0, 1, 2, 3].map((i) => (
+        <g key={i}>
+          <rect
+            className="art-line"
+            x="160"
+            y={137 + i * 30}
+            width="76"
+            height="10"
+            rx="5"
+          />
+          <rect
+            className="art-line"
+            x="256"
+            y={137 + i * 30}
+            width="84"
+            height="10"
+            rx="5"
+          />
+        </g>
+      ))}
+    </g>
+  </svg>
+));
+
+// 📊 Сравнение Excel/Word — два документа, изменённая ячейка мигает
+const CompareDocsArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <rect className="art-card" x="110" y="100" width="120" height="164" rx="12" />
+      <rect className="art-card" x="256" y="100" width="120" height="164" rx="12" />
+      {[0, 1, 2, 3].map((i) => (
+        <rect
+          key={`l${i}`}
+          className="art-line"
+          x="126"
+          y={124 + i * 30}
+          width={i === 1 ? 60 : 88}
+          height="9"
+          rx="4.5"
+        />
+      ))}
+      {[0, 2, 3].map((i) => (
+        <rect
+          key={`r${i}`}
+          className="art-line"
+          x="272"
+          y={124 + i * 30}
+          width={88}
+          height="9"
+          rx="4.5"
+        />
+      ))}
+      {/* изменённая ячейка */}
+      <rect
+        className="cmp2-cell art-accent"
+        x="272"
+        y="151"
+        width="88"
+        height="16"
+        rx="4"
+      />
+    </g>
+  </svg>
+));
+
+// 🔧 HTML/JSON → Excel — код превращается в таблицу
+const HtmlToExcelArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <text
+        className="h2x-code art-code"
+        x="242"
+        y="200"
+        fontSize="92"
+        textAnchor="middle"
+      >
+        {"</>"}
+      </text>
+      <g className="h2x-grid">
+        {[0, 1, 2].map((r) =>
+          [0, 1, 2].map((c) => (
+            <rect
+              key={`${r}-${c}`}
+              className={r === 0 || c === 0 ? "art-accent" : "art-line"}
+              x={172 + c * 50}
+              y={112 + r * 50}
+              width="44"
+              height="44"
+              rx="6"
+            />
+          )),
+        )}
+      </g>
+    </g>
+  </svg>
+));
+
+// 🖼️ SVG → PNG — вектор становится пикселями
+const Svg2PngArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <path
+        className="s2p-vector art-accent"
+        d="M242 96l30 61 67 10-48 47 11 67-60-31-60 31 11-67-48-47 67-10z"
+      />
+      <g className="s2p-pixels">
+        {[
+          [1, 0],
+          [2, 0],
+          [1, 1],
+          [2, 1],
+          [3, 1],
+          [0, 2],
+          [1, 2],
+          [2, 2],
+          [3, 2],
+          [4, 2],
+          [1, 3],
+          [2, 3],
+          [3, 3],
+          [0, 4],
+          [4, 4],
+        ].map(([c, r], i) => (
+          <rect
+            key={i}
+            className={(c + r) % 2 ? "art-accent" : "art-line"}
+            x={172 + c * 30}
+            y={112 + r * 30}
+            width="28"
+            height="28"
+            rx="3"
+          />
+        ))}
+      </g>
+    </g>
+  </svg>
+));
+
+// ✳️ Группиратор — блоки слетаются в общую сетку
+const GrouperArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <rect
+        className="grp-sq grp-sq--1 art-accent"
+        x="186"
+        y="122"
+        width="60"
+        height="60"
+        rx="10"
+      />
+      <rect
+        className="grp-sq grp-sq--2 art-line"
+        x="256"
+        y="122"
+        width="60"
+        height="60"
+        rx="10"
+      />
+      <rect
+        className="grp-sq grp-sq--3 art-line"
+        x="186"
+        y="192"
+        width="60"
+        height="60"
+        rx="10"
+      />
+      <rect
+        className="grp-sq grp-sq--4 art-accent"
+        x="256"
+        y="192"
+        width="60"
+        height="60"
+        rx="10"
+      />
+    </g>
+  </svg>
+));
+
+// 💠 Генератор графиков — растущие столбики
+const ChartCraftArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <path className="art-stroke" d="M156 108 v150 h164" strokeWidth="4" />
+      <rect
+        className="chart-bar chart-bar--1 art-accent"
+        x="176"
+        y="128"
+        width="34"
+        height="130"
+        rx="6"
+      />
+      <rect
+        className="chart-bar chart-bar--2 art-line"
+        x="222"
+        y="128"
+        width="34"
+        height="130"
+        rx="6"
+      />
+      <rect
+        className="chart-bar chart-bar--3 art-accent"
+        x="268"
+        y="128"
+        width="34"
+        height="130"
+        rx="6"
+      />
+      <rect
+        className="chart-bar chart-bar--4 art-line"
+        x="314"
+        y="128"
+        width="34"
+        height="130"
+        rx="6"
+      />
+    </g>
+  </svg>
+));
+
+// 🔄 PDF ↔ Word — переворот карточки
+const PdfToWordArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <g className="p2w-flip">
+        <rect className="art-card" x="182" y="106" width="120" height="150" rx="12" />
+        <text
+          className="p2w-pdf art-label"
+          x="242"
+          y="192"
+          fontSize="34"
+          textAnchor="middle"
+        >
+          PDF
+        </text>
+        <text
+          className="p2w-word art-label"
+          x="242"
+          y="192"
+          fontSize="40"
+          textAnchor="middle"
+        >
+          W
+        </text>
+      </g>
+      <path
+        className="art-stroke"
+        d="M150 300 h100 m0 0 l-16 -12 m16 12 l-16 12"
+        strokeWidth="4"
+      />
+    </g>
+  </svg>
+));
+
+// 🖼️ JPG → PDF — картинки складываются в стопку
+const JpgToPdfArt = memo(() => {
+  const ImgCard = ({ cls, x, y }) => (
+    <g className={cls}>
+      <rect
+        className="art-card"
+        x={x}
+        y={y}
+        width="150"
+        height="112"
+        rx="12"
+      />
+      <circle className="art-accent" cx={x + 34} cy={y + 34} r="14" />
+      <path
+        className="art-line"
+        d={`M${x + 12} ${y + 96} L${x + 58} ${y + 54} L${x + 92} ${y + 88} L${x + 116} ${y + 66} L${x + 138} ${y + 96} Z`}
+      />
+    </g>
+  );
+  return (
+    <svg
+      className="hp-menu__art"
+      viewBox="0 0 400 360"
+      fill="none"
+      aria-hidden="true"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <g className="art-bob">
+        <ImgCard cls="j2p-img j2p-img--1" x={168} y={112} />
+        <ImgCard cls="j2p-img j2p-img--2" x={188} y={138} />
+        <ImgCard cls="j2p-img j2p-img--3" x={208} y={164} />
+        <g className="j2p-badge">
+          <rect className="art-accent" x="286" y="228" width="72" height="40" rx="10" />
+          <text
+            className="art-label"
+            x="322"
+            y="256"
+            fontSize="22"
+            textAnchor="middle"
+            fill="#fff"
+          >
+            PDF
+          </text>
+        </g>
+      </g>
+    </svg>
+  );
+});
+
+// Кастомные «скринкасты» по инструментам (иначе — эмодзи-водяной знак)
+const MENU_ART = {
+  "/WorkplaceCompare": WorkplaceCompareArt,
+  "/compare": CompareDocsArt,
+  "/htmlToExcel": HtmlToExcelArt,
+  "/Svg2Png": Svg2PngArt,
+  "/PdfEditor": PdfStudioArt,
+  "/ExcelTableBuilder": GrouperArt,
+  "/ChartCraft": ChartCraftArt,
+  "/PdfToWord": PdfToWordArt,
+  "/JpgToPdfPage": JpgToPdfArt,
+};
+
+// ─── Эффект «набора на клавиатуре» для описания инструмента ───
+// Эффект декоративный и является частью задумки экрана, поэтому играем его
+// всегда — не завязываемся на системную настройку «уменьшить движение»
+// (на многих Windows-ноутбуках она включена и глушила анимацию).
+function useTypedCount(total: number, speed: number, startDelay = 150) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    setCount(0);
+    let i = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      i += 1;
+      setCount(i);
+      if (i < total) timer = setTimeout(tick, speed);
+    };
+    const start = setTimeout(tick, startDelay);
+    return () => {
+      clearTimeout(start);
+      clearTimeout(timer);
+    };
+  }, [total, speed, startDelay]);
+  return count;
+}
+
+const TypedDescription = memo(
+  ({ desc, features }: { desc: string; features: string[] }) => {
+    const segs = useMemo(() => [desc, ...features], [desc, features]);
+    const total = segs.reduce((n, s) => n + s.length, 0) || 1;
+    // скорость подбираем так, чтобы весь блок печатался ~за 1.3–1.7 с
+    const speed = Math.max(8, Math.min(26, Math.round(1300 / total)));
+    const count = useTypedCount(total, speed);
+
+    let remaining = count;
+    const taken = segs.map((s) => {
+      const take = Math.min(Math.max(remaining, 0), s.length);
+      remaining -= take;
+      return take;
+    });
+    // курсор стоит в последнем сегменте, до которого добралась печать
+    let cursorAt = -1;
+    for (let i = segs.length - 1; i >= 0; i--) {
+      if (taken[i] > 0) {
+        cursorAt = i;
+        break;
+      }
+    }
+    const typing = count < total;
+
+    return (
+      <>
+        <p className="hp-menu__detail-desc">
+          {desc.slice(0, taken[0])}
+          {cursorAt === 0 && typing && (
+            <span className="hp-menu__cursor" aria-hidden="true" />
+          )}
+          {/* невидимый «хвост» держит итоговую высоту — блок не прыгает при наборе */}
+          {taken[0] < desc.length && (
+            <span className="hp-menu__pending">{desc.slice(taken[0])}</span>
+          )}
+        </p>
+        <ul className="hp-menu__detail-features">
+          {features.map((full, i) => {
+            const ti = i + 1;
+            const take = taken[ti];
+            const started = take > 0;
+            return (
+              <li key={i}>
+                <span
+                  className="lg-card__check"
+                  style={{ visibility: started ? "visible" : "hidden" }}
+                >
+                  ✓
+                </span>
+                {full.slice(0, take)}
+                {cursorAt === ti && typing && (
+                  <span className="hp-menu__cursor" aria-hidden="true" />
+                )}
+                {/* невидимый остаток строки фиксирует высоту пункта заранее */}
+                {take < full.length && (
+                  <span className="hp-menu__pending">{full.slice(take)}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </>
+    );
+  },
+);
+
+// ─── Вариант «Меню»: рельс иконок + деталь при наведении ───
+const MenuLayout = memo(() => {
+  const [active, setActive] = useState(0);
+  const t = tools[active];
+  const accent = MENU_ACCENTS[active % MENU_ACCENTS.length];
+  const Art = MENU_ART[t.path];
+
+  // лёгкий параллакс фона за курсором
+  const handleParallax = useCallback((e) => {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    const mx = (e.clientX - r.left) / r.width - 0.5;
+    const my = (e.clientY - r.top) / r.height - 0.5;
+    el.style.setProperty("--mx", mx.toFixed(3));
+    el.style.setProperty("--my", my.toFixed(3));
+  }, []);
+
+  const resetParallax = useCallback((e) => {
+    e.currentTarget.style.setProperty("--mx", "0");
+    e.currentTarget.style.setProperty("--my", "0");
+  }, []);
+
+  return (
+    <main className="hp-menu">
+      <nav className="hp-menu__rail">
+        {tools.map((tool, i) => (
+          <Link
+            key={tool.path}
+            to={tool.path}
+            className={`hp-menu__item ${i === active ? "is-active" : ""}`}
+            onMouseEnter={() => setActive(i)}
+            onFocus={() => setActive(i)}
+          >
+            <span className="hp-menu__ico">{tool.icon}</span>
+            <span className="hp-menu__name">{tool.title}</span>
+          </Link>
+        ))}
+      </nav>
+      <section
+        className="hp-menu__detail"
+        key={t.path}
+        style={{ "--accent": accent }}
+        onMouseMove={handleParallax}
+        onMouseLeave={resetParallax}
+      >
+        {/* «Живой» фон инструмента */}
+        <div className="hp-menu__detail-bg" aria-hidden="true">
+          <span className="hp-menu__glow" />
+          {Art ? (
+            <Art />
+          ) : (
+            <>
+              <span className="hp-menu__ghost">{t.icon}</span>
+              <span className="hp-menu__float hp-menu__float--1">{t.icon}</span>
+              <span className="hp-menu__float hp-menu__float--2">{t.icon}</span>
+              <span className="hp-menu__float hp-menu__float--3">{t.icon}</span>
+              <span className="hp-menu__float hp-menu__float--4">{t.icon}</span>
+            </>
+          )}
+          <span className="hp-menu__grid" />
+        </div>
+
+        <div className="hp-menu__detail-body">
+          <div className="hp-menu__detail-icon">{t.icon}</div>
+          <h2 className="hp-menu__detail-title">{t.title}</h2>
+          <TypedDescription desc={t.description} features={t.features} />
+          {t.note && (
+            <p className="hp-menu__detail-note">
+              <span aria-hidden="true">⚠️</span> {t.note}
+            </p>
+          )}
+          <Link to={t.path} className="lg-btn lg-btn--primary hp-menu__open">
+            Открыть →
+          </Link>
+          <p className="hp-menu__offline">
+            <span className="hp-menu__offline-ico" aria-hidden="true">🔒</span>
+            Работает офлайн · файлы не покидают устройство
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+});
+
+// ─── Вариант «Список»: плотный двухколоночный ───
+const ListLayout = memo(() => (
+  <main className="hp-list">
+    {tools.map((tool) => (
+      <Link key={tool.path} to={tool.path} className="hp-list__row">
+        <span className="hp-list__ico">{tool.icon}</span>
+        <span className="hp-list__text">
+          <span className="hp-list__title">{tool.title}</span>
+          <span className="hp-list__desc">{tool.description}</span>
+        </span>
+        <svg
+          className="hp-list__arrow"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+        >
+          <path
+            d="M6 3l5 5-5 5"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </Link>
+    ))}
+  </main>
+));
+
 // ─── Главная страница ───
 const HomePage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCsiOpen, setIsCsiOpen] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadedFilename, setDownloadedFilename] = useState<string>("");
+  const [layout, setLayout] = useState<string>(
+    () => localStorage.getItem("hp-layout") || "menu",
+  );
+  const changeLayout = useCallback((id: string) => {
+    setLayout(id);
+    localStorage.setItem("hp-layout", id);
+  }, []);
+
 
   // Добавьте эффект для обработки URL при загрузке главной страницы:
   useEffect(() => {
@@ -289,6 +1037,16 @@ const HomePage = () => {
   }, []);
 
   useEffect(() => {
+    // Один раз показываем окно опроса CSI. Пока не показан — приоритетнее
+    // окна обратной связи, чтобы модалки не накладывались друг на друга.
+    if (!localStorage.getItem("csiSurveyShown")) {
+      const timer = setTimeout(() => {
+        setIsCsiOpen(true);
+        localStorage.setItem("csiSurveyShown", "true");
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+    // CSI уже показывали — при необходимости показываем окно обратной связи.
     if (!localStorage.getItem("feedbackModalShown")) {
       const timer = setTimeout(() => {
         setIsModalOpen(true);
@@ -299,12 +1057,14 @@ const HomePage = () => {
   }, []);
 
   const closeModal = useCallback(() => setIsModalOpen(false), []);
+  const closeCsi = useCallback(() => setIsCsiOpen(false), []);
 
   return (
     <div className="lg-page">
       <AnimatedBackground />
 
       <FeedbackModal isOpen={isModalOpen} onClose={closeModal} />
+      <CsiModal isOpen={isCsiOpen} onClose={closeCsi} />
 
       {/* ─── Header ─── */}
       <header className="lg-header">
@@ -312,7 +1072,7 @@ const HomePage = () => {
         <div className="lg-header__content">
           <div className="lg-header__left">
             <div className="lg-logo">
-              <svg width="180" height="82" viewBox="0 0 157 77" fill="none">
+              <svg width="98" height="48" viewBox="0 0 157 77" fill="none">
                 <path
                   d="M34.85 27.87Q34.93 27.71 34.93 27.51L34.93 19.96Q34.93 19.77 34.85 19.61Q34.8 19.5 34.71 19.42Q34.63 19.33 34.52 19.28Q34.36 19.2 34.17 19.2L3.9 19.2Q3.7 19.2 3.55 19.28Q3.44 19.33 3.35 19.42Q3.27 19.5 3.21 19.61Q3.14 19.77 3.14 19.96L3.14 63.23Q3.14 63.37 3.18 63.5Q3.23 63.65 3.35 63.78Q3.44 63.86 3.55 63.92Q3.7 64 3.9 64L34.17 64Q34.36 64 34.52 63.92Q34.63 63.86 34.71 63.78Q34.83 63.65 34.89 63.5Q34.93 63.37 34.93 63.23L34.93 55.68Q34.93 55.49 34.85 55.33Q34.8 55.22 34.71 55.14Q34.61 55.03 34.49 54.97Q34.34 54.9 34.17 54.9L14.07 54.9Q13.92 54.9 13.84 54.82Q13.76 54.75 13.76 54.59L13.76 46.14Q13.76 45.98 13.84 45.9Q13.92 45.82 14.07 45.82L26.93 45.82Q27.13 45.82 27.29 45.74Q27.39 45.69 27.48 45.6Q27.62 45.46 27.68 45.3Q27.71 45.18 27.71 45.06L27.71 37.56Q27.71 37.41 27.66 37.29Q27.61 37.14 27.48 37.03Q27.38 36.92 27.25 36.86Q27.11 36.79 26.93 36.79L14.07 36.79Q13.92 36.79 13.84 36.71Q13.76 36.64 13.76 36.48L13.76 28.6Q13.76 28.43 13.85 28.35Q13.92 28.28 14.07 28.28L34.17 28.28Q34.36 28.28 34.52 28.2Q34.63 28.15 34.71 28.06Q34.8 27.97 34.85 27.87Z"
                   fill="#1d1d1f"
@@ -340,15 +1100,17 @@ const HomePage = () => {
               </svg>
             </div>
             <p className="lg-header__sub">
-              Мощные инструменты для работы
-              <br />с Excel файлами и данными
+              Инструменты для работы с документами и данными
             </p>
           </div>
 
+          {/* <LayoutSwitcher value={layout} onChange={changeLayout} /> */}
+
           <div className="lg-header__right">
+            <ThemeToggle />
             <svg
               width="auto"
-              height="56"
+              height="38"
               viewBox="0 0 579.913 117"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -432,25 +1194,21 @@ const HomePage = () => {
         </div>
       </header>
 
-      {/* ─── Сетка карточек ─── */}
-      <main className="lg-main">
-        <div className="lg-grid">
-          {tools.map((tool, i) => (
-            <ToolCard key={tool.path} tool={tool} index={i} />
-          ))}
-        </div>
-      </main>
+      {/* ─── Активный вариант отображения ─── */}
+      {layout === "menu" ? (
+        <MenuLayout />
+      ) : layout === "list" ? (
+        <ListLayout />
+      ) : (
+        <GridLayout />
+      )}
 
       {/* ─── Footer / Support ─── */}
       <footer className="lg-footer">
         <div className="lg-footer__glass" />
         <div className="lg-footer__content">
           <div className="lg-footer__info">
-            <h2 className="lg-footer__title">Нужна помощь?</h2>
-            <p className="lg-footer__text">
-              Если у вас возникли вопросы или предложения по улучшению
-              инструментов
-            </p>
+            <span className="lg-footer__title">Нужна помощь?</span>
           </div>
           <div className="lg-footer__actions">
             <button
@@ -494,6 +1252,17 @@ const HomePage = () => {
                 className="lg-btn__icon-img"
               />
               Документация
+            </a>
+
+            {/* ─── Кнопка опроса CSI ─── */}
+            <a
+              href={SURVEY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="lg-btn lg-btn--survey lg-footer__btn"
+              title="Пройти опрос удовлетворённости проектом"
+            >
+              ⭐ Опрос
             </a>
 
             {/* ─── Кнопка игры в футере ─── */}
