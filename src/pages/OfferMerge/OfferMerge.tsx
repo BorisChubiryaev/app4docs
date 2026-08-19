@@ -88,7 +88,11 @@ export default function OfferMerge() {
   const [error, setError] = useState<string | null>(null);
 
   const [offerBytes, setOfferBytes] = useState<Uint8Array | null>(null);
-  const [offerParts, setOfferParts] = useState<{ document: string; footnotes: string | null } | null>(null);
+  const [offerParts, setOfferParts] = useState<{
+    document: string;
+    footnotes: string | null;
+    numbering: string | null;
+  } | null>(null);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("color");
@@ -109,7 +113,7 @@ export default function OfferMerge() {
     const map = new Map<string, PreviewSnippet>();
     if (!offerParts) return map;
     for (const op of operations) {
-      map.set(op.id, previewOperation(offerParts.document, offerParts.footnotes, op));
+      map.set(op.id, previewOperation(offerParts.document, offerParts.footnotes, op, offerParts.numbering));
     }
     return map;
   }, [operations, offerParts]);
@@ -157,7 +161,7 @@ export default function OfferMerge() {
       const bytes = await fileBytes(offer);
       setOfferBytes(bytes);
       const parts = await loadDocx(bytes);
-      setOfferParts({ document: parts.document, footnotes: parts.footnotes });
+      setOfferParts({ document: parts.document, footnotes: parts.footnotes, numbering: parts.numbering });
       const docs = [];
       for (const c of changes) docs.push({ name: c.name, data: await fileBytes(c) });
       const { operations: ops } = await parseAllChangeDocs(docs);

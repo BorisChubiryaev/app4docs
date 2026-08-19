@@ -3,6 +3,7 @@
 // Работает на извлечённых строках (без мутации документа).
 import { paragraphs, xmlText } from "./text";
 import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
+import { locateReplaceParagraph } from "./locate";
 import type { Operation } from "./types";
 
 export interface PreviewSnippet {
@@ -67,15 +68,13 @@ function tail(s: string, n: number): string {
 function head(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
-function firstWords(text: string, n: number): string {
-  return text.trim().split(/\s+/).slice(0, n).join(" ");
-}
 
 /** Построить предпросмотр одной операции по извлечённым строкам Оферты. */
 export function previewOperation(
   documentXml: string,
   footnotesXml: string | null,
   op: Operation,
+  numberingXml: string | null = null,
 ): PreviewSnippet {
   // ── Вставка после якоря ──
   if (op.type === "insert_after" && op.anchor && op.payload !== undefined) {
@@ -125,20 +124,14 @@ export function previewOperation(
   // ── Замена (термин / пункт / пункт приложения) ──
   if (op.type === "replace" && op.payload !== undefined) {
     const body = stripLeadingNumber(stripOuterQuotes(op.payload));
-    let locator = "";
-    if (op.target.kind === "term") locator = op.target.term || firstWords(body, 2);
-    else locator = firstWords(body, 5);
-    const nl = normalize(locator);
-    const paras = paragraphs(documentXml);
-    const old =
-      paras.find((x) => normalize(x).startsWith(nl)) ??
-      paras.find((x) => normalize(x).includes(nl));
+    const span = locateReplaceParagraph(documentXml, numberingXml, op);
+    const old = span ? xmlText(span.inner) : null;
     return {
       ok: !!old,
       kind: "replace",
       removed: old ? head(old, CTX * 2) : undefined,
       hit: body,
-      note: old ? undefined : "исходный пункт не найден (проверьте ориентир)",
+      note: old ? undefined : "исходный пункт не найден (проверьте номер/раздел)",
     };
   }
 

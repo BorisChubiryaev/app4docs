@@ -3,7 +3,8 @@
 import type { DocxParts } from "./docx";
 import { saveDocx } from "./docx";
 import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
-import { insertAfterAnchor, findParagraphStartingWith } from "./ooxml";
+import { insertAfterAnchor } from "./ooxml";
+import { locateReplaceParagraph } from "./locate";
 import { renderInsertRuns, renderTableRow, resetInsCounter } from "./render";
 import type { ApplyResult, BuildOptions, Operation } from "./types";
 
@@ -26,11 +27,6 @@ function stripLeadingNumber(text: string): string {
   return text.replace(/^\s*\d+(?:\.\d+)*\.?\s*/, "");
 }
 
-/** Первые N значимых слов текста — для локации абзаца по началу редакции. */
-function firstWords(text: string, n: number): string {
-  return text.trim().split(/\s+/).slice(0, n).join(" ");
-}
-
 /** Снять внешние кавычки-«ёлочки», если инструкция дала payload целиком в них. */
 function stripOuterQuotes(text: string): string {
   const t = text.trim();
@@ -41,6 +37,7 @@ function stripOuterQuotes(text: string): string {
 export interface ApplyState {
   document: string;
   footnotes: string | null;
+  numbering: string | null;
 }
 
 export function applyOneOp(
@@ -112,15 +109,16 @@ export function applyOneOp(
   if (op.type === "replace") {
     if (op.payload === undefined) return fail("нет текста замены");
     const body = stripLeadingNumber(stripOuterQuotes(op.payload));
-    // Ориентир: термин целиком либо первые слова новой редакции — по началу
-    // абзаца (номера пунктов в тексте автоматические, искать по ним нельзя).
-    let locator = "";
-    if (op.target.kind === "term") locator = op.target.term || firstWords(body, 2);
-    else locator = firstWords(body, 5);
-    if (!locator) return fail("нет ориентира для замены");
-
-    const para = findParagraphStartingWith(state.document, locator);
-    if (!para) return fail(`абзац, начинающийся с «${locator}», не найден`);
+    // Цель ищем по НОМЕРУ пункта/имени термина и разделу (а не по новому тексту).
+    const para = locateReplaceParagraph(state.document, state.numbering, op);
+    if (!para) {
+      let what = "пункт";
+      if (op.target.kind === "term") what = `термин «${op.target.term}»`;
+      else if (op.target.kind === "appendix_point")
+        what = `пункт ${op.target.point} Приложения №${op.target.appendix}`;
+      else if (op.target.kind === "point") what = `пункт ${op.target.point}`;
+      return fail(`${what} не найден в документе — проверьте, что правка применима к этой редакции`);
+    }
 
     let newRuns = "";
     if (op.target.kind === "term") {
@@ -177,7 +175,11 @@ export async function applyOperations(
   opts: BuildOptions,
 ): Promise<{ offerDocx: Uint8Array; results: ApplyResult[] }> {
   resetInsCounter();
-  const state: ApplyState = { document: offer.document, footnotes: offer.footnotes };
+  const state: ApplyState = {
+    document: offer.document,
+    footnotes: offer.footnotes,
+    numbering: offer.numbering,
+  };
   const results: ApplyResult[] = [];
   // Применяем от конца документа к началу, чтобы смещения не «съезжали»:
   // сначала считаем orderKey каждой операции, затем применяем по убыванию.

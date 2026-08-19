@@ -36,7 +36,7 @@ export async function orderOperations(
 ): Promise<Operation[]> {
   const offer = await loadDocx(offerData);
   const keyed = operations.map((op) => {
-    const state = { document: offer.document, footnotes: offer.footnotes };
+    const state = { document: offer.document, footnotes: offer.footnotes, numbering: offer.numbering };
     const r = applyOneOp(op, state, opts);
     return { op, key: r.ok ? r.orderKey : Number.MAX_SAFE_INTEGER };
   });
