@@ -4,6 +4,8 @@
 import { paragraphs, xmlText } from "./text";
 import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
 import { locateReplaceParagraph, locatePointInsertion } from "./locate";
+import { findAppendixTable } from "./tables";
+import { sortTableAlphabetically, alphabeticalPosition, findExistingRow } from "./alpha-sort";
 import type { Operation } from "./types";
 
 export interface PreviewSnippet {
@@ -14,6 +16,8 @@ export interface PreviewSnippet {
   hit?: string; // подсвеченный вставленный/новый текст
   after?: string;
   note?: string;
+  /** false — правка НЕ будет применена (напр. запись уже есть). */
+  willApply?: boolean;
 }
 
 const CTX = 160; // сколько символов контекста показывать с каждой стороны
@@ -192,6 +196,64 @@ export function previewOperation(
       hit: `изменяет строки ${nums} в таблице Приложения №${app}`,
       after: op.rows && op.rows[0] ? `напр.: ${head(op.rows[0].filter(Boolean).slice(0, 3).join(" · "), CTX)}` : undefined,
       note: op.rows && op.rows.length ? `строк с данными: ${op.rows.length}` : "новые данные строк не найдены",
+    };
+  }
+
+  // ── Алфавитная пересортировка ──
+  if (op.type === "sort_table_alpha") {
+    const app = op.target.kind === "appendix_table" ? op.target.appendix : "1";
+    const table = findAppendixTable(documentXml, app);
+    if (!table) return { ok: false, kind: "none", note: `таблица Приложения №${app} не найдена` };
+    const res = sortTableAlphabetically(table.inner, op.nameColumn ?? 1);
+    if ("error" in res) return { ok: false, kind: "none", note: res.error };
+    const sample = res.moves
+      .slice(0, 4)
+      .map((mv) => `${mv.name.slice(0, 26)}: ${mv.from}→${mv.to}`)
+      .join("; ");
+    return {
+      ok: true,
+      kind: "table",
+      hit:
+        res.moves.length === 0
+          ? `Приложение №${app} уже в алфавитном порядке`
+          : `сортировка Приложения №${app}: переместится строк ${res.moves.length} из ${res.order.length}`,
+      after: sample ? `напр.: ${sample}` : undefined,
+      note: res.warnings.join("; ") || undefined,
+    };
+  }
+
+  // ── Вставка строки по алфавиту ──
+  if (op.type === "insert_table_row_alpha") {
+    const app = op.target.kind === "appendix_table" ? op.target.appendix : "1";
+    const table = findAppendixTable(documentXml, app);
+    const nameCol = op.nameColumn ?? 1;
+    if (!table || !op.rows || op.rows.length === 0)
+      return { ok: false, kind: "none", note: "не найдены таблица или данные новой строки" };
+    const names = op.rows.map((r) => r[nameCol] ?? "").filter(Boolean);
+    const dups = names
+      .map((n) => ({ n, dup: findExistingRow(table.inner, n, nameCol) }))
+      .filter((x) => x.dup);
+    const parts = names
+      .filter((n) => !dups.some((d) => d.n === n))
+      .map((n) => `${n} → позиция ${alphabeticalPosition(table.inner, n, nameCol)}`);
+    if (parts.length === 0 && dups.length > 0) {
+      return {
+        ok: false,
+        kind: "none",
+        note: `уже есть в Приложении №${app}: ${dups
+          .map((d) => `${d.n} (строка ${d.dup!.number})`)
+          .join("; ")} — добавление не требуется`,
+        willApply: false,
+      };
+    }
+    return {
+      ok: parts.length > 0,
+      kind: "table",
+      hit: `добавление в Приложение №${app} по алфавиту`,
+      after:
+        parts.join("; ") +
+        (dups.length ? ` · пропустим (уже есть): ${dups.map((d) => d.n).join("; ")}` : ""),
+      note: "нумерация последующих строк обновится",
     };
   }
 

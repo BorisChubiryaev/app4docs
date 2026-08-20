@@ -26,6 +26,8 @@ const OP_TYPE_LABEL: Record<Operation["type"], string> = {
   insert_point: "добавить новый пункт",
   append_table_rows: "добавить строки таблицы",
   replace_table_rows: "изменить строки таблицы",
+  sort_table_alpha: "сортировка по алфавиту",
+  insert_table_row_alpha: "добавить по алфавиту",
   delete: "исключить",
   manual: "ручная обработка",
 };
@@ -38,6 +40,8 @@ const OP_TYPE_ICON: Record<Operation["type"], string> = {
   insert_point: "➕",
   append_table_rows: "▤",
   replace_table_rows: "▦",
+  sort_table_alpha: "🔤",
+  insert_table_row_alpha: "🔤",
   delete: "🗑️",
   manual: "✋",
 };
@@ -614,10 +618,14 @@ function PreviewBlock({ preview }: { preview: PreviewSnippet }) {
   if (!preview.ok && preview.kind === "none") {
     return (
       <div className="om-preview om-preview--miss">
-        <span className="om-preview__badge">📍 место не найдено</span>
+        <span className="om-preview__badge">
+          {preview.willApply === false ? "⏭ будет пропущено" : "📍 место не найдено"}
+        </span>
         <span className="om-preview__note">
-          {preview.note ?? "не удалось показать место правки"} — правка всё равно будет
-          применена по указанным данным
+          {preview.note ?? "не удалось показать место правки"}
+          {preview.willApply === false
+            ? ""
+            : " — правка всё равно будет применена по указанным данным"}
         </span>
       </div>
     );

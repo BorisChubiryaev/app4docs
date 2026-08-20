@@ -26,6 +26,8 @@ export type OpType =
   | "insert_point" // добавить новый пункт (нумерация сдвигается автоматически)
   | "append_table_rows"
   | "replace_table_rows"
+  | "sort_table_alpha" // пересортировать таблицу приложения по алфавиту
+  | "insert_table_row_alpha" // вставить строку в таблицу по алфавиту
   | "delete"
   | "manual"; // распознано, но требует ручной обработки
 
@@ -49,6 +51,8 @@ export interface Operation {
   rowRange?: { from: number; to: number };
   /** Номера заменяемых строк таблицы (для replace_table_rows). */
   rowNumbers?: number[];
+  /** Индекс колонки с наименованием для алфавитных операций (по умолчанию 1). */
+  nameColumn?: number;
   /** Пояснение для операций типа manual / неуверенного распознавания. */
   note?: string;
   /** Нужна ли последующая перенумерация сносок. */

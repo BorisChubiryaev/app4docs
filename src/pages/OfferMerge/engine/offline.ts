@@ -154,13 +154,53 @@ export function parseInstructionsOffline(
       continue;
     }
 
+    // D0) Изложить Приложение N в алфавитном порядке (с перенумерацией).
+    if (/алфавитн/i.test(text) && /Приложени/i.test(text) && !/Дополнить/i.test(text)) {
+      const app = text.match(/Приложени[а-я]*\s*№?\s*(\d+)/i);
+      ops.push({
+        id: nid(sourceDoc),
+        sourceDoc,
+        type: "sort_table_alpha",
+        target: { kind: "appendix_table", appendix: app ? app[1] : "1" },
+        rawText: text,
+        confidence: 0.8,
+      });
+      continue;
+    }
+
+    // D1) Дополнить Приложение N пунктом ... (с учётом алфавитного порядка).
+    if (
+      /Дополнить\s+Приложени/i.test(text) &&
+      /пункт(?:ом)?\s+следующего содержания/i.test(text)
+    ) {
+      const app = text.match(/Приложени[а-я]*\s*№?\s*(\d+)/i);
+      const appendix = app ? app[1] : "1";
+      // Данные новой строки — в небольшой таблице документа «Изменения».
+      let rows: string[][] = [];
+      for (const tbl of docTables) {
+        const cand = tbl
+          .filter((r) => r.some((c) => c.trim()))
+          .map((r) => r.map((c) => c.trim()));
+        if (cand.length <= 3 && cand.some((r) => r.some((c) => /(ООО|АО|АНО|ПАО)/.test(c)))) {
+          rows = cand;
+        }
+      }
+      const alphabetical = /алфавитн/i.test(text);
+      ops.push({
+        id: nid(sourceDoc),
+        sourceDoc,
+        type: alphabetical ? "insert_table_row_alpha" : "append_table_rows",
+        target: { kind: "appendix_table", appendix },
+        rows,
+        rawText: text,
+        confidence: rows.length ? 0.75 : 0.4,
+        warnings: rows.length ? undefined : ["данные новой строки не найдены в документе"],
+      });
+      continue;
+    }
+
     // E) Операции, требующие ручной обработки (безопасно помечаем).
-    const manualNote =
-      /алфавитн/i.test(text) && /Приложени/i.test(text)
-        ? "Сортировка приложения по алфавиту с перенумерацией — выполните вручную"
-        : /Дополнить\s+Приложени[а-я]*\s*№?\s*\d+.*пункт(?:ом)?\s+следующего содержания/i.test(text)
-          ? "Добавление компании в приложение (в алфавитном порядке) — выполните вручную"
-          : null;
+    const manualNote = null as string | null;
     if (manualNote) {
       ops.push({
         id: nid(sourceDoc),

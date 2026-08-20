@@ -7,6 +7,13 @@ import { insertAfterAnchor } from "./ooxml";
 import { locateReplaceParagraph, locatePointInsertion } from "./locate";
 import { findAppendixTable, replaceRowsByNumber, buildRow } from "./tables";
 import {
+  sortTableAlphabetically,
+  alphabeticalPosition,
+  setRowNumber,
+  parseRows,
+  findExistingRow,
+} from "./alpha-sort";
+import {
   maxFootnoteId,
   footnoteRefRunRpr,
   buildFootnoteReferenceRun,
@@ -276,6 +283,85 @@ export function applyOneOp(
       operationId: op.id,
       ok: res.replaced.length > 0,
       message: `заменено строк: ${res.replaced.length}/${map.size} в Приложении №${appendix}${miss}`,
+      orderKey: table.start,
+    };
+  }
+
+  // ── Пересортировка таблицы приложения по алфавиту ──────────────────
+  if (op.type === "sort_table_alpha") {
+    const appendix = op.target.kind === "appendix_table" ? op.target.appendix : "1";
+    const table = findAppendixTable(state.document, appendix);
+    if (!table) return fail(`таблица Приложения №${appendix} не найдена`);
+    const res = sortTableAlphabetically(table.inner, op.nameColumn ?? 1);
+    if ("error" in res) return fail(res.error);
+    state.document =
+      state.document.slice(0, table.start) + res.xml + state.document.slice(table.end);
+    const warn = res.warnings.length ? `; ${res.warnings.join("; ")}` : "";
+    return {
+      operationId: op.id,
+      ok: true,
+      message:
+        res.moves.length === 0
+          ? `Приложение №${appendix}: уже в алфавитном порядке, нумерация проверена`
+          : `Приложение №${appendix}: отсортировано по алфавиту, перемещено строк: ${res.moves.length}${warn}`,
+      orderKey: table.start,
+    };
+  }
+
+  // ── Вставка строки в таблицу по алфавиту ───────────────────────────
+  if (op.type === "insert_table_row_alpha") {
+    if (!op.rows || op.rows.length === 0) return fail("нет данных новой строки");
+    const appendix = op.target.kind === "appendix_table" ? op.target.appendix : "1";
+    const table = findAppendixTable(state.document, appendix);
+    if (!table) return fail(`таблица Приложения №${appendix} не найдена`);
+    const nameCol = op.nameColumn ?? 1;
+    const rowsXml = table.inner.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) ?? [];
+    const parsed = parseRows(table.inner);
+    const hasHeader = !/^\d+$/.test(parsed[0]?.cells[0] ?? "");
+    const headerCount = hasHeader ? 1 : 0;
+
+    const inserted: string[] = [];
+    const skipped: string[] = [];
+    let out = [...rowsXml];
+    for (const cells of op.rows) {
+      const name = cells[nameCol] ?? "";
+      if (!name.trim()) continue;
+      // Защита от дубликатов: если компания уже в таблице — не добавляем.
+      const dup = findExistingRow(out.slice(headerCount).join(""), name, nameCol);
+      if (dup) {
+        skipped.push(`${name} (уже есть, строка ${dup.number})`);
+        continue;
+      }
+      const pos = alphabeticalPosition(
+        out.slice(headerCount).join(""),
+        name,
+        nameCol,
+      );
+      out.splice(headerCount + pos - 1, 0, buildRow(cells, opts));
+      inserted.push(`${name} → позиция ${pos}`);
+    }
+    if (inserted.length === 0) {
+      return {
+        operationId: op.id,
+        ok: false,
+        message: skipped.length
+          ? `Приложение №${appendix}: пропущено — ${skipped.join("; ")}`
+          : "не удалось определить наименование новой строки",
+        orderKey: table.start,
+      };
+    }
+    // Перенумеровываем весь корпус таблицы.
+    out = out.map((tr, i) => (i < headerCount ? tr : setRowNumber(tr, i - headerCount + 1)));
+    const firstTr = table.inner.indexOf("<w:tr");
+    const rebuilt = table.inner.slice(0, firstTr) + out.join("") + "</w:tbl>";
+    state.document =
+      state.document.slice(0, table.start) + rebuilt + state.document.slice(table.end);
+    return {
+      operationId: op.id,
+      ok: true,
+      message:
+        `Приложение №${appendix}: добавлено по алфавиту (${inserted.join("; ")}), нумерация обновлена` +
+        (skipped.length ? `; пропущено: ${skipped.join("; ")}` : ""),
       orderKey: table.start,
     };
   }
