@@ -130,15 +130,37 @@ export function parseInstructionsOffline(
       continue;
     }
 
-    // D) Операции, требующие ручной обработки (безопасно помечаем).
+    // D) Пункт X … после слов «ЯКОРЬ» дополнить сноской следующего
+    //    содержания: «PAYLOAD» — добавление НОВОЙ сноски.
+    if (/дополнить\s+сноской/i.test(text)) {
+      const anchorM = text.match(/(?:после\s+слов[а]?|к\s+слов[ауе]м?)\s+(«.+?»)/i);
+      const contentIdx = text.search(/содержания/i);
+      const payload =
+        (contentIdx >= 0 ? payloadToLastGuillemet(text, contentIdx) : null) ??
+        payloadToLastGuillemet(text, 0) ??
+        "";
+      const pointM = text.match(/пункт[а-я]*\s*([\d.]+)/i);
+      ops.push({
+        id: nid(sourceDoc),
+        sourceDoc,
+        type: "add_footnote",
+        target: { kind: "point", point: pointM ? pointM[1].replace(/\.$/, "") : "?" },
+        anchor: anchorM ? tidy(anchorM[1]) : "",
+        payload,
+        rawText: text,
+        confidence: anchorM && payload ? 0.8 : 0.4,
+        warnings: anchorM ? undefined : ["не найдены слова-якорь для сноски"],
+      });
+      continue;
+    }
+
+    // E) Операции, требующие ручной обработки (безопасно помечаем).
     const manualNote =
       /алфавитн/i.test(text) && /Приложени/i.test(text)
         ? "Сортировка приложения по алфавиту с перенумерацией — выполните вручную"
-        : /дополнить\s+сноской/i.test(text)
-          ? "Добавление новой сноски к пункту — выполните вручную"
-          : /Дополнить\s+Приложени[а-я]*\s*№?\s*\d+.*пункт(?:ом)?\s+следующего содержания/i.test(text)
-            ? "Добавление компании в приложение (в алфавитном порядке) — выполните вручную"
-            : null;
+        : /Дополнить\s+Приложени[а-я]*\s*№?\s*\d+.*пункт(?:ом)?\s+следующего содержания/i.test(text)
+          ? "Добавление компании в приложение (в алфавитном порядке) — выполните вручную"
+          : null;
     if (manualNote) {
       ops.push({
         id: nid(sourceDoc),

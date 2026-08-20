@@ -22,6 +22,7 @@ export type OpType =
   | "insert_after"
   | "replace"
   | "replace_footnote"
+  | "add_footnote" // добавить новую сноску (нумерация сносок сдвигается автоматически)
   | "insert_point" // добавить новый пункт (нумерация сдвигается автоматически)
   | "append_table_rows"
   | "replace_table_rows"

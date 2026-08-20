@@ -150,6 +150,20 @@ export function previewOperation(
     };
   }
 
+  // ── Добавление новой сноски ──
+  if (op.type === "add_footnote" && op.payload !== undefined) {
+    const point = op.target.kind === "point" || op.target.kind === "appendix_point" ? op.target.point : "";
+    return {
+      ok: !!op.anchor,
+      kind: "insert",
+      before: op.anchor ? `после слов «${op.anchor.replace(/[«»]/g, "")}» ` : "",
+      hit: `[новая сноска] ${op.payload}`,
+      note: op.anchor
+        ? `новая сноска${point && point !== "?" ? ` к п. ${point}` : ""} — нумерация сносок сдвигается`
+        : "не найдены слова-якорь",
+    };
+  }
+
   // ── Замена сноски целиком ──
   if (op.type === "replace_footnote" && op.payload !== undefined) {
     let old: string | null = null;

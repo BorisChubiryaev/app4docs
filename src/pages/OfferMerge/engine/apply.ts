@@ -6,6 +6,13 @@ import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
 import { insertAfterAnchor } from "./ooxml";
 import { locateReplaceParagraph, locatePointInsertion } from "./locate";
 import { findAppendixTable, replaceRowsByNumber, buildRow } from "./tables";
+import {
+  maxFootnoteId,
+  footnoteRefRunRpr,
+  buildFootnoteReferenceRun,
+  buildFootnoteElement,
+  appendFootnoteElement,
+} from "./footnote-add";
 import { renderInsertRuns, resetInsCounter } from "./render";
 import type { ApplyResult, BuildOptions, Operation } from "./types";
 
@@ -178,6 +185,42 @@ export function applyOneOp(
       ok: true,
       message: `добавлен пункт ${point} (последующие перенумеруются автоматически)`,
       orderKey: at,
+    };
+  }
+
+  // ── Добавить НОВУЮ сноску (нумерация сносок сдвигается автоматически) ─
+  if (op.type === "add_footnote") {
+    if (!state.footnotes) return fail("в документе нет блока сносок");
+    if (op.payload === undefined || !op.anchor) return fail("нет якоря или текста сноски");
+    const id = maxFootnoteId(state.footnotes) + 1;
+    const refRun = buildFootnoteReferenceRun(id, footnoteRefRunRpr(state.document));
+    // Вставляем ссылку после якоря — по возможности внутри нужного пункта.
+    let inserted = false;
+    const point =
+      op.target.kind === "point" || op.target.kind === "appendix_point" ? op.target.point : undefined;
+    if (point) {
+      const loc = locatePointInsertion(state.document, state.numbering, point);
+      if (loc) {
+        const res = insertAfterAnchor(loc.span.inner, op.anchor, refRun);
+        if (res.ok) {
+          state.document =
+            state.document.slice(0, loc.span.start) + res.xml + state.document.slice(loc.span.end);
+          inserted = true;
+        }
+      }
+    }
+    if (!inserted) {
+      const res = insertAfterAnchor(state.document, op.anchor, refRun);
+      if (!res.ok) return fail(`якорь «${op.anchor}» для сноски не найден`);
+      state.document = res.xml;
+    }
+    state.footnotes = appendFootnoteElement(state.footnotes, buildFootnoteElement(id, op.payload, opts));
+    const orderKey = state.document.indexOf(`<w:footnoteReference w:id="${id}"`);
+    return {
+      operationId: op.id,
+      ok: true,
+      message: "добавлена сноска (последующие сноски перенумеруются автоматически)",
+      orderKey: orderKey >= 0 ? orderKey : 0,
     };
   }
 
