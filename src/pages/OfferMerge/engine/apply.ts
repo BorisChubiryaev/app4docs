@@ -4,7 +4,7 @@ import type { DocxParts } from "./docx";
 import { saveDocx } from "./docx";
 import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
 import { insertAfterAnchor } from "./ooxml";
-import { locateReplaceParagraph } from "./locate";
+import { locateReplaceParagraph, locatePointInsertion } from "./locate";
 import { findAppendixTable, replaceRowsByNumber, buildRow } from "./tables";
 import { renderInsertRuns, resetInsCounter } from "./render";
 import type { ApplyResult, BuildOptions, Operation } from "./types";
@@ -45,6 +45,22 @@ function stripOuterQuotes(text: string): string {
   const t = text.trim();
   if (t.startsWith("«") && t.endsWith("»")) return t.slice(1, -1);
   return t;
+}
+
+/** Собрать выделенные раны абзаца; для термина ведущее слово — жирным. */
+function buildParagraphRuns(body: string, termLike: boolean, opts: BuildOptions): string {
+  if (termLike) {
+    const dashIdx = body.search(/\s[–—-]\s/);
+    if (dashIdx > 0) {
+      const term = body.slice(0, dashIdx);
+      const rest = body.slice(dashIdx);
+      return (
+        renderInsertRuns(term, opts).replace("<w:rPr>", "<w:rPr><w:b/>") +
+        renderInsertRuns(rest, opts)
+      );
+    }
+  }
+  return renderInsertRuns(body, opts);
 }
 
 export interface ApplyState {
@@ -133,26 +149,36 @@ export function applyOneOp(
       return fail(`${what} не найден в документе — проверьте, что правка применима к этой редакции`);
     }
 
-    let newRuns = "";
-    if (op.target.kind === "term") {
-      // Термин — жирным, остальное обычным; всё выделено.
-      const dashIdx = body.search(/\s[–-]\s/);
-      if (dashIdx > 0) {
-        const term = body.slice(0, dashIdx);
-        const rest = body.slice(dashIdx);
-        newRuns =
-          renderInsertRuns(term, opts).replace("<w:rPr>", "<w:rPr><w:b/>") +
-          renderInsertRuns(rest, opts);
-      } else {
-        newRuns = renderInsertRuns(body, opts);
-      }
-    } else {
-      newRuns = renderInsertRuns(body, opts);
-    }
+    const newRuns = buildParagraphRuns(body, op.target.kind === "term", opts);
     const rebuilt = replaceParagraphRuns(para.inner, newRuns);
     state.document =
       state.document.slice(0, para.start) + rebuilt + state.document.slice(para.end);
     return { operationId: op.id, ok: true, message: "пункт изложен в новой редакции", orderKey: para.start };
+  }
+
+  // ── Добавление НОВОГО пункта (нумерация сдвигается автоматически) ───
+  if (op.type === "insert_point") {
+    if (op.payload === undefined) return fail("нет текста нового пункта");
+    if (op.target.kind !== "point" && op.target.kind !== "appendix_point")
+      return fail("некорректная цель нового пункта");
+    const point = op.target.point;
+    const loc = locatePointInsertion(state.document, state.numbering, point);
+    if (!loc) return fail(`не найдено место для нового пункта ${point} (раздел/соседний пункт)`);
+    const body = stripLeadingNumber(stripOuterQuotes(op.payload));
+    // Новый абзац наследует стиль/нумерацию (numPr) соседнего пункта — тогда
+    // Word сам присвоит номер и перенумерует последующие.
+    const pPr = extractPPr(loc.span.inner);
+    const isTermLike = /\s[–—-]\s/.test(body.slice(0, 80));
+    const runs = buildParagraphRuns(body, isTermLike, opts);
+    const newPara = `<w:p>${pPr}${runs}</w:p>`;
+    const at = loc.mode === "before" ? loc.span.start : loc.span.end;
+    state.document = state.document.slice(0, at) + newPara + state.document.slice(at);
+    return {
+      operationId: op.id,
+      ok: true,
+      message: `добавлен пункт ${point} (последующие перенумеруются автоматически)`,
+      orderKey: at,
+    };
   }
 
   // ── Замена сноски целиком ──────────────────────────────────────────
@@ -232,13 +258,15 @@ export async function applyOperations(
     numbering: offer.numbering,
   };
   const results: ApplyResult[] = [];
-  // Применяем от конца документа к началу, чтобы смещения не «съезжали»:
-  // сначала считаем orderKey каждой операции, затем применяем по убыванию.
-  // Здесь применяем последовательно, а orderKey фиксируем внутри applyOne
-  // на неизменённой в этот момент позиции цели.
-  for (const op of operations) {
-    results.push(applyOneOp(op, state, opts));
+  // Применяем СНИЗУ ВВЕРХ (в обратном порядке следования в документе): так
+  // вставка/добавление пункта не сдвигает позиции и номера ещё не применённых
+  // операций, расположенных выше. operations уже отсортированы по возрастанию
+  // orderKey, поэтому идём с конца. Отчёт возвращаем в исходном порядке.
+  const results2: (ApplyResult | undefined)[] = new Array(operations.length);
+  for (let i = operations.length - 1; i >= 0; i--) {
+    results2[i] = applyOneOp(operations[i], state, opts);
   }
+  for (const r of results2) if (r) results.push(r);
   const offerDocx = await saveDocx(offer, {
     document: state.document,
     footnotes: state.footnotes ?? undefined,

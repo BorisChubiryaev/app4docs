@@ -3,7 +3,7 @@
 // Работает на извлечённых строках (без мутации документа).
 import { paragraphs, xmlText } from "./text";
 import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
-import { locateReplaceParagraph } from "./locate";
+import { locateReplaceParagraph, locatePointInsertion } from "./locate";
 import type { Operation } from "./types";
 
 export interface PreviewSnippet {
@@ -132,6 +132,21 @@ export function previewOperation(
       removed: old ? head(old, CTX * 2) : undefined,
       hit: body,
       note: old ? undefined : "исходный пункт не найден (проверьте номер/раздел)",
+    };
+  }
+
+  // ── Добавление нового пункта ──
+  if (op.type === "insert_point" && op.payload !== undefined) {
+    const point = op.target.kind === "point" || op.target.kind === "appendix_point" ? op.target.point : "";
+    const body = stripLeadingNumber(stripOuterQuotes(op.payload));
+    const loc = locatePointInsertion(documentXml, numberingXml, point);
+    const near = loc ? xmlText(loc.span.inner) : null;
+    return {
+      ok: !!loc,
+      kind: "insert",
+      hit: body,
+      after: near ? ` ${loc!.mode === "before" ? "перед" : "после"}: ${head(near, CTX)}` : undefined,
+      note: loc ? `новый пункт ${point} — последующие перенумеруются` : "место вставки не найдено",
     };
   }
 

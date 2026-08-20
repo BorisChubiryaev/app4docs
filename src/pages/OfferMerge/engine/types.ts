@@ -22,10 +22,11 @@ export type OpType =
   | "insert_after"
   | "replace"
   | "replace_footnote"
+  | "insert_point" // добавить новый пункт (нумерация сдвигается автоматически)
   | "append_table_rows"
   | "replace_table_rows"
   | "delete"
-  | "manual"; // распознано, но требует ручной обработки (напр. перенумерация)
+  | "manual"; // распознано, но требует ручной обработки
 
 /** Одна распознанная правка. */
 export interface Operation {

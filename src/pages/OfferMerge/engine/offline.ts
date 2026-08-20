@@ -108,17 +108,37 @@ export function parseInstructionsOffline(
       continue;
     }
 
-    // C) Операции, требующие ручной обработки (безопасно помечаем).
+    // C) Добавить НОВЫЙ пункт X (с автоматической перенумерацией последующих).
+    m = text.match(/Дополнить\s+пункт(?:ом)?\s+([\d.]+)\.?/i);
+    if (m && /перенумерац/i.test(text) && !/Приложени/i.test(text)) {
+      const point = m[1].replace(/\.$/, "");
+      const colon = text.indexOf(":", m.index!);
+      const payload =
+        (colon >= 0 ? payloadToLastGuillemet(text, colon) : null) ??
+        payloadToLastGuillemet(text, m.index! + m[0].length) ??
+        "";
+      const sec = text.match(/раздел[а-я]*\s+(\d+)/i);
+      ops.push({
+        id: nid(sourceDoc),
+        sourceDoc,
+        type: "insert_point",
+        target: { kind: "point", section: sec ? sec[1] : point.split(".")[0], point },
+        payload,
+        rawText: text,
+        confidence: payload ? 0.8 : 0.4,
+      });
+      continue;
+    }
+
+    // D) Операции, требующие ручной обработки (безопасно помечаем).
     const manualNote =
       /алфавитн/i.test(text) && /Приложени/i.test(text)
         ? "Сортировка приложения по алфавиту с перенумерацией — выполните вручную"
-        : /Дополнить\s+пункт(?:ом)?\s+[\d.]+/i.test(text) && /перенумерац/i.test(text)
-          ? "Добавление нового пункта с перенумерацией — выполните вручную"
-          : /дополнить\s+сноской/i.test(text)
-            ? "Добавление новой сноски к пункту — выполните вручную"
-            : /Дополнить\s+Приложени[а-я]*\s*№?\s*\d+.*пункт(?:ом)?\s+следующего содержания/i.test(text)
-              ? "Добавление компании в приложение (в алфавитном порядке) — выполните вручную"
-              : null;
+        : /дополнить\s+сноской/i.test(text)
+          ? "Добавление новой сноски к пункту — выполните вручную"
+          : /Дополнить\s+Приложени[а-я]*\s*№?\s*\d+.*пункт(?:ом)?\s+следующего содержания/i.test(text)
+            ? "Добавление компании в приложение (в алфавитном порядке) — выполните вручную"
+            : null;
     if (manualNote) {
       ops.push({
         id: nid(sourceDoc),

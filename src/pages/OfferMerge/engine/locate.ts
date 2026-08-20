@@ -49,6 +49,37 @@ function findByLiteralNumber(index: NumberedPara[], point: string, from: number)
   return null;
 }
 
+/**
+ * Найти место для ВСТАВКИ нового пункта X (напр. 2.9). Возвращает абзац-якорь
+ * и режим: "before" — вставить перед ним (новый станет X), "after" — вставить
+ * после предыдущего пункта (когда X ещё нет, добавляем в конец списка).
+ * Поиск ведётся в пределах раздела (по номеру раздела перед первой точкой).
+ */
+export function locatePointInsertion(
+  documentXml: string,
+  numberingXml: string | null,
+  point: string,
+): { span: ParaSpan; mode: "before" | "after" } | null {
+  const index = indexNumberedParagraphs(documentXml, numberingXml);
+  const section = normNumber(point).split(".")[0];
+  // Регион раздела: заголовок с номером == section (ilvl 0).
+  const secHead = section ? findByNumber(index, section, 0) : null;
+  const from = secHead ? secHead.start : 0;
+
+  const exact = findByNumber(index, point, from);
+  if (exact) return { span: span(exact), mode: "before" };
+
+  // X ещё нет — ищем предыдущий номер того же уровня (X с уменьшённым хвостом).
+  const parts = normNumber(point).split(".").map((n) => parseInt(n, 10));
+  const last = parts[parts.length - 1];
+  for (let p = last - 1; p >= 1; p--) {
+    const prevNum = [...parts.slice(0, -1), p].join(".");
+    const prev = findByNumber(index, prevNum, from);
+    if (prev) return { span: span(prev), mode: "after" };
+  }
+  return null;
+}
+
 /** Найти абзац-цель для замены. Возвращает span либо null (без «угадывания»). */
 export function locateReplaceParagraph(
   documentXml: string,
