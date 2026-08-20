@@ -24,7 +24,10 @@ export function sortKey(name: string): string {
   t = t.replace(new RegExp(`\\s*(?:${FORMS_RE})\\s*$`), "");
   t = t.replace(new RegExp(`^(?:${FORMS_RE})\\s+`), "");
   t = t.replace(/["«»“”„]/g, "");
-  return t.trim().toLowerCase().replace(/ё/g, "е");
+  // Внутренние пробелы схлопываем: в документах «Изменения» встречаются
+  // двойные пробелы («Объединенное  Кредитное Бюро»), из-за которых
+  // наименование иначе не совпало бы с текстом Оферты.
+  return t.replace(/\s+/g, " ").trim().toLowerCase().replace(/ё/g, "е");
 }
 
 export interface TableRow {

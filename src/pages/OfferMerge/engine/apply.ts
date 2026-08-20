@@ -5,7 +5,7 @@ import { saveDocx } from "./docx";
 import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
 import { insertAfterAnchor } from "./ooxml";
 import { locateReplaceParagraph, locatePointInsertion } from "./locate";
-import { findAppendixTable, replaceRowsByNumber, buildRow } from "./tables";
+import { findAppendixTable, replaceRows, buildRow } from "./tables";
 import {
   sortTableAlphabetically,
   alphabeticalPosition,
@@ -264,25 +264,40 @@ export function applyOneOp(
     return { operationId: op.id, ok: true, message: `добавлено строк: ${op.rows.length}`, orderKey: table.start };
   }
 
-  // ── Замена существующих строк таблицы по номеру ────────────────────
+  // ── Замена существующих строк таблицы ──────────────────────────────
   if (op.type === "replace_table_rows") {
     if (!op.rows || op.rows.length === 0) return fail("нет данных строк для замены");
     const appendix = op.target.kind === "appendix_table" ? op.target.appendix : "2";
     const table = findAppendixTable(state.document, appendix);
     if (!table) return fail(`таблица Приложения №${appendix} не найдена`);
-    const map = new Map<number, string[]>();
-    for (const row of op.rows) {
-      const n = parseInt((row[0] || "").trim(), 10);
-      if (Number.isFinite(n)) map.set(n, row);
-    }
-    if (map.size === 0) return fail("не удалось сопоставить строки по номеру");
-    const res = replaceRowsByNumber(table.inner, map, opts);
-    state.document = state.document.slice(0, table.start) + res.xml + state.document.slice(table.end);
-    const miss = res.missing.length ? `; не найдены строки: ${res.missing.join(", ")}` : "";
+    const nameCol = op.nameColumn ?? 1;
+    const reps = op.rows.map((cells, i) => ({
+      number: parseInt((cells[0] || "").trim(), 10) || op.rowNumbers?.[i] || 0,
+      cells,
+    }));
+    const res = replaceRows(table.inner, reps, opts, nameCol);
+    state.document =
+      state.document.slice(0, table.start) + res.xml + state.document.slice(table.end);
+
+    const moved = res.replaced.filter((r) => r.byName && r.atRow !== r.number);
+    const details: string[] = [];
+    if (moved.length)
+      details.push(
+        `сопоставлено по наименованию (номер в правке отличается): ${moved
+          .map((r) => `${r.name.slice(0, 24)} №${r.number}→№${r.atRow}`)
+          .slice(0, 4)
+          .join(", ")}${moved.length > 4 ? ` и ещё ${moved.length - 4}` : ""}`,
+      );
+    if (res.missing.length)
+      details.push(`не найдены: ${res.missing.map((m) => m.name || `№${m.number}`).join(", ")}`);
+    if (res.warnings.length) details.push(res.warnings.slice(0, 2).join("; "));
+
     return {
       operationId: op.id,
       ok: res.replaced.length > 0,
-      message: `заменено строк: ${res.replaced.length}/${map.size} в Приложении №${appendix}${miss}`,
+      message:
+        `заменено строк: ${res.replaced.length}/${reps.length} в Приложении №${appendix}` +
+        (details.length ? `; ${details.join("; ")}` : ""),
       orderKey: table.start,
     };
   }
@@ -387,15 +402,27 @@ export async function applyOperations(
     numbering: offer.numbering,
   };
   const results: ApplyResult[] = [];
-  // Применяем СНИЗУ ВВЕРХ (в обратном порядке следования в документе): так
-  // вставка/добавление пункта не сдвигает позиции и номера ещё не применённых
-  // операций, расположенных выше. operations уже отсортированы по возрастанию
-  // orderKey, поэтому идём с конца. Отчёт возвращаем в исходном порядке.
-  const results2: (ApplyResult | undefined)[] = new Array(operations.length);
+  // Порядок применения:
+  //  1) СНИЗУ ВВЕРХ (в обратном порядке следования в документе) — так вставка
+  //     нового пункта/сноски не сдвигает нумерацию ещё не применённых правок,
+  //     расположенных выше по тексту;
+  //  2) нормализующие операции (алфавитная пересортировка) — В САМОМ КОНЦЕ:
+  //     они приводят таблицу в порядок уже ПОСЛЕ всех замен и добавлений
+  //     строк, иначе переименованные строки нарушат алфавитный порядок.
+  const isNormalizing = (op: Operation) => op.type === "sort_table_alpha";
+  const order: number[] = [];
   for (let i = operations.length - 1; i >= 0; i--) {
-    results2[i] = applyOneOp(operations[i], state, opts);
+    if (!isNormalizing(operations[i])) order.push(i);
   }
-  for (const r of results2) if (r) results.push(r);
+  for (let i = operations.length - 1; i >= 0; i--) {
+    if (isNormalizing(operations[i])) order.push(i);
+  }
+
+  const slots: (ApplyResult | undefined)[] = new Array(operations.length);
+  for (const i of order) {
+    slots[i] = applyOneOp(operations[i], state, opts);
+  }
+  for (const r of slots) if (r) results.push(r);
   const offerDocx = await saveDocx(offer, {
     document: state.document,
     footnotes: state.footnotes ?? undefined,
