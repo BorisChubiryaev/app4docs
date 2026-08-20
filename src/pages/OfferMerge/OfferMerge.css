@@ -594,12 +594,20 @@
 .om-preview__ctx {
   color: var(--muted);
 }
-.om-preview--miss {
+.om-preview--miss,
+.om-preview--manual {
   display: flex;
   flex-direction: column;
   gap: 2px;
   background: rgba(255, 149, 0, 0.1);
   border-color: rgba(255, 149, 0, 0.4);
+}
+.om-preview--manual {
+  background: rgba(88, 86, 214, 0.1);
+  border-color: rgba(88, 86, 214, 0.4);
+}
+.om-preview--manual .om-preview__badge {
+  color: #5856d6;
 }
 .om-preview__badge {
   font-size: 0.75rem;

@@ -57,8 +57,84 @@ export function parseInstructionsOffline(
   const paras = mergeInstructions(rawParas);
 
   for (const text of paras) {
+    // A) Изложить сноску N в следующей редакции: «PAYLOAD» — замена сноски.
+    let m = text.match(/Изложить\s+сноску\s+(\d+)\s+в следующей редакции\s*:?/i);
+    if (m) {
+      const num = parseInt(m[1], 10);
+      const payload = payloadToLastGuillemet(text, m.index! + m[0].length) ?? "";
+      ops.push({
+        id: nid(sourceDoc),
+        sourceDoc,
+        type: "replace_footnote",
+        target: { kind: "footnote", number: num },
+        payload,
+        rawText: text,
+        confidence: 0.85,
+      });
+      continue;
+    }
+
+    // B) Приложение № A … пункты N, N, … [таблицы п. K] изложить в следующей
+    //    редакции + таблица ниже — ЗАМЕНА существующих строк по номерам.
+    if (
+      /Приложени/i.test(text) &&
+      /изложить в следующей редакции/i.test(text) &&
+      /пункт[ыа]?\s+\d+\s*,/i.test(text)
+    ) {
+      const app = text.match(/Приложени[а-я]*\s*№?\s*(\d+)/i);
+      const appendix = app ? app[1] : "?";
+      const tp = text.match(/таблиц[ыи]?\s*п\.?\s*(\d+)/i);
+      const iP = text.search(/пункт[ыа]?/i);
+      const iI = text.search(/изложить/i);
+      const seg = text.slice(iP, iI).replace(/таблиц[ыи]?\s*п\.?\s*\d+/gi, "");
+      const rowNumbers = (seg.match(/\d+/g) ?? []).map((n) => parseInt(n, 10));
+      const want = new Set(rowNumbers);
+      let rows: string[][] = [];
+      for (const tbl of docTables) {
+        const hit = tbl.filter((r) => want.has(parseInt((r[0] || "").trim(), 10)));
+        if (hit.length > rows.length) rows = hit.map((r) => r.map((c) => c.trim()));
+      }
+      ops.push({
+        id: nid(sourceDoc),
+        sourceDoc,
+        type: "replace_table_rows",
+        target: { kind: "appendix_table", appendix, point: tp ? tp[1] : undefined },
+        rows,
+        rowNumbers,
+        rawText: text,
+        confidence: rows.length ? 0.8 : 0.4,
+        warnings: rows.length ? undefined : ["новые данные строк не найдены в документе"],
+      });
+      continue;
+    }
+
+    // C) Операции, требующие ручной обработки (безопасно помечаем).
+    const manualNote =
+      /алфавитн/i.test(text) && /Приложени/i.test(text)
+        ? "Сортировка приложения по алфавиту с перенумерацией — выполните вручную"
+        : /Дополнить\s+пункт(?:ом)?\s+[\d.]+/i.test(text) && /перенумерац/i.test(text)
+          ? "Добавление нового пункта с перенумерацией — выполните вручную"
+          : /дополнить\s+сноской/i.test(text)
+            ? "Добавление новой сноски к пункту — выполните вручную"
+            : /Дополнить\s+Приложени[а-я]*\s*№?\s*\d+.*пункт(?:ом)?\s+следующего содержания/i.test(text)
+              ? "Добавление компании в приложение (в алфавитном порядке) — выполните вручную"
+              : null;
+    if (manualNote) {
+      ops.push({
+        id: nid(sourceDoc),
+        sourceDoc,
+        type: "manual",
+        target: { kind: "point", point: "—" },
+        note: manualNote,
+        rawText: text,
+        confidence: 0.5,
+        warnings: [manualNote],
+      });
+      continue;
+    }
+
     // 1) Сноску N после слов «ЯКОРЬ» дополнить …: «PAYLOAD»
-    let m = text.match(/Сноску\s+(\d+)\s+после слов\s+(«.+?»)\s*(?:дополнить|заменить)/i);
+    m = text.match(/Сноску\s+(\d+)\s+после слов\s+(«.+?»)\s*(?:дополнить|заменить)/i);
     if (m) {
       const num = parseInt(m[1], 10);
       const anchor = tidy(m[2]);

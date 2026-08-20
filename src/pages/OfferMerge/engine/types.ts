@@ -14,11 +14,18 @@ export type OpTarget =
   | { kind: "point"; section?: string; point: string; heading?: string }
   /** Пункт внутри Приложения (напр. Приложение №2 п. 1.2). */
   | { kind: "appendix_point"; appendix: string; point: string }
-  /** Таблица внутри Приложения (напр. таблица п. 3 Приложения №2). */
-  | { kind: "appendix_table"; appendix: string; point: string };
+  /** Таблица внутри Приложения (напр. таблица п. 3 Приложения №2, либо вся таблица Приложения №1). */
+  | { kind: "appendix_table"; appendix: string; point?: string };
 
 /** Тип операции над Офертой. */
-export type OpType = "insert_after" | "replace" | "append_table_rows" | "delete";
+export type OpType =
+  | "insert_after"
+  | "replace"
+  | "replace_footnote"
+  | "append_table_rows"
+  | "replace_table_rows"
+  | "delete"
+  | "manual"; // распознано, но требует ручной обработки (напр. перенумерация)
 
 /** Одна распознанная правка. */
 export interface Operation {
@@ -34,10 +41,14 @@ export interface Operation {
   anchor?: string;
   /** Вставляемый / заменяющий текст (уже без внешних кавычек-ёлочек). */
   payload?: string;
-  /** Строки таблицы (для append_table_rows): массив строк, каждая — массив ячеек. */
+  /** Строки таблицы (для append/replace_table_rows): массив строк, каждая — массив ячеек. */
   rows?: string[][];
   /** Диапазон номеров добавляемых строк, если указан в инструкции. */
   rowRange?: { from: number; to: number };
+  /** Номера заменяемых строк таблицы (для replace_table_rows). */
+  rowNumbers?: number[];
+  /** Пояснение для операций типа manual / неуверенного распознавания. */
+  note?: string;
   /** Нужна ли последующая перенумерация сносок. */
   renumberFootnotes?: boolean;
   /** Исходный текст инструкции — показывается оператору и попадает в объединённый файл. */

@@ -8,7 +8,7 @@ import type { Operation } from "./types";
 
 export interface PreviewSnippet {
   ok: boolean;
-  kind: "insert" | "replace" | "table" | "none";
+  kind: "insert" | "replace" | "table" | "manual" | "none";
   before?: string;
   removed?: string; // старая редакция (для замены)
   hit?: string; // подсвеченный вставленный/новый текст
@@ -133,6 +133,42 @@ export function previewOperation(
       hit: body,
       note: old ? undefined : "исходный пункт не найден (проверьте номер/раздел)",
     };
+  }
+
+  // ── Замена сноски целиком ──
+  if (op.type === "replace_footnote" && op.payload !== undefined) {
+    let old: string | null = null;
+    if (op.target.kind === "footnote" && footnotesXml) {
+      const idx = indexFootnotes(documentXml);
+      const id = idx.displayToId.get(op.target.number);
+      const fn = id !== undefined ? findFootnoteById(footnotesXml, id) : null;
+      if (fn) old = xmlText(fn.inner);
+    }
+    return {
+      ok: !!old,
+      kind: "replace",
+      removed: old ? head(old, CTX * 2) : undefined,
+      hit: op.payload,
+      note: old ? "сноска" : "сноска не найдена",
+    };
+  }
+
+  // ── Замена существующих строк таблицы ──
+  if (op.type === "replace_table_rows") {
+    const nums = op.rowNumbers?.join(", ") ?? "";
+    const app = op.target.kind === "appendix_table" ? op.target.appendix : "?";
+    return {
+      ok: !!op.rows && op.rows.length > 0,
+      kind: "table",
+      hit: `изменяет строки ${nums} в таблице Приложения №${app}`,
+      after: op.rows && op.rows[0] ? `напр.: ${head(op.rows[0].filter(Boolean).slice(0, 3).join(" · "), CTX)}` : undefined,
+      note: op.rows && op.rows.length ? `строк с данными: ${op.rows.length}` : "новые данные строк не найдены",
+    };
+  }
+
+  // ── Требует ручной обработки ──
+  if (op.type === "manual") {
+    return { ok: false, kind: "manual", hit: op.note ?? "требует ручной обработки" };
   }
 
   // ── Строки таблицы ──

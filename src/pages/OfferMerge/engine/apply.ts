@@ -5,8 +5,21 @@ import { saveDocx } from "./docx";
 import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
 import { insertAfterAnchor } from "./ooxml";
 import { locateReplaceParagraph } from "./locate";
-import { renderInsertRuns, renderTableRow, resetInsCounter } from "./render";
+import { findAppendixTable, replaceRowsByNumber, buildRow } from "./tables";
+import { renderInsertRuns, resetInsCounter } from "./render";
 import type { ApplyResult, BuildOptions, Operation } from "./types";
+
+/** Заменить содержимое сноски (все раны) на новый текст, сохранив маркер. */
+function replaceFootnoteBody(inner: string, text: string, opts: BuildOptions): string {
+  // Оставляем служебный первый ран со ссылкой-номером, если он есть; иначе
+  // просто заменяем все текстовые раны одним выделенным.
+  const runs = renderInsertRuns(text, opts);
+  const ref = inner.match(/<w:r\b[^>]*>[\s\S]*?<w:footnoteRef\s*\/>[\s\S]*?<\/w:r>/);
+  const firstP = inner.match(/<w:p\b[^>]*>/);
+  const open = firstP ? firstP[0] : "<w:p>";
+  const pPr = inner.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
+  return `${open}${pPr ? pPr[0] : ""}${ref ? ref[0] : ""}${runs}</w:p>`;
+}
 
 /** Извлечь <w:pPr>…</w:pPr> из начала абзаца (стиль/нумерация сохраняются). */
 function extractPPr(pXml: string): string {
@@ -142,27 +155,65 @@ export function applyOneOp(
     return { operationId: op.id, ok: true, message: "пункт изложен в новой редакции", orderKey: para.start };
   }
 
+  // ── Замена сноски целиком ──────────────────────────────────────────
+  if (op.type === "replace_footnote") {
+    if (op.target.kind !== "footnote") return fail("цель не является сноской");
+    if (op.payload === undefined) return fail("нет текста замены");
+    if (!state.footnotes) return fail("в документе нет сносок");
+    const idx = indexFootnotes(state.document);
+    const id = idx.displayToId.get(op.target.number);
+    const fn = id !== undefined ? findFootnoteById(state.footnotes, id) : null;
+    if (!fn) return fail(`сноска № ${op.target.number} не найдена`);
+    const rebuilt = replaceFootnoteBody(fn.inner, op.payload, opts);
+    state.footnotes =
+      state.footnotes.slice(0, fn.start) +
+      state.footnotes.slice(fn.start).replace(fn.inner, rebuilt);
+    return {
+      operationId: op.id,
+      ok: true,
+      message: `сноска № ${op.target.number}: изложена в новой редакции`,
+      orderKey: idx.displayToBodyPos.get(op.target.number) ?? fn.start,
+    };
+  }
+
   // ── Добавление строк в таблицу приложения ──────────────────────────
   if (op.type === "append_table_rows") {
     if (!op.rows || op.rows.length === 0) return fail("нет строк для добавления");
-    // Ищем заголовок приложения, затем первую таблицу после него.
-    const heading =
-      op.target.kind === "appendix_table"
-        ? "Способы и особенности реализации Бесшовного"
-        : "";
-    let searchFrom = 0;
-    if (heading) {
-      const hp = state.document.indexOf(heading);
-      if (hp >= 0) searchFrom = hp;
+    const appendix = op.target.kind === "appendix_table" ? op.target.appendix : "2";
+    const table = findAppendixTable(state.document, appendix);
+    if (!table) return fail(`таблица Приложения №${appendix} не найдена`);
+    const tblEnd = table.end - "</w:tbl>".length;
+    const rowsXml = op.rows.map((r) => buildRow(r, opts)).join("");
+    state.document = state.document.slice(0, tblEnd) + rowsXml + state.document.slice(tblEnd);
+    return { operationId: op.id, ok: true, message: `добавлено строк: ${op.rows.length}`, orderKey: table.start };
+  }
+
+  // ── Замена существующих строк таблицы по номеру ────────────────────
+  if (op.type === "replace_table_rows") {
+    if (!op.rows || op.rows.length === 0) return fail("нет данных строк для замены");
+    const appendix = op.target.kind === "appendix_table" ? op.target.appendix : "2";
+    const table = findAppendixTable(state.document, appendix);
+    if (!table) return fail(`таблица Приложения №${appendix} не найдена`);
+    const map = new Map<number, string[]>();
+    for (const row of op.rows) {
+      const n = parseInt((row[0] || "").trim(), 10);
+      if (Number.isFinite(n)) map.set(n, row);
     }
-    const tblStart = state.document.indexOf("<w:tbl>", searchFrom);
-    if (tblStart < 0) return fail("таблица приложения не найдена");
-    const tblEnd = state.document.indexOf("</w:tbl>", tblStart);
-    if (tblEnd < 0) return fail("таблица не закрыта");
-    const rowsXml = op.rows.map((r) => renderTableRow(r, opts)).join("");
-    state.document =
-      state.document.slice(0, tblEnd) + rowsXml + state.document.slice(tblEnd);
-    return { operationId: op.id, ok: true, message: `добавлено строк: ${op.rows.length}`, orderKey: tblStart };
+    if (map.size === 0) return fail("не удалось сопоставить строки по номеру");
+    const res = replaceRowsByNumber(table.inner, map, opts);
+    state.document = state.document.slice(0, table.start) + res.xml + state.document.slice(table.end);
+    const miss = res.missing.length ? `; не найдены строки: ${res.missing.join(", ")}` : "";
+    return {
+      operationId: op.id,
+      ok: res.replaced.length > 0,
+      message: `заменено строк: ${res.replaced.length}/${map.size} в Приложении №${appendix}${miss}`,
+      orderKey: table.start,
+    };
+  }
+
+  // ── Требует ручной обработки ───────────────────────────────────────
+  if (op.type === "manual") {
+    return fail(`требует ручной обработки: ${op.note ?? op.rawText.slice(0, 80)}`);
   }
 
   return fail(`тип операции не поддержан: ${op.type}`);

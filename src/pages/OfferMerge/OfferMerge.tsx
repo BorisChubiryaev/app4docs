@@ -21,15 +21,21 @@ interface ApplyResult {
 const OP_TYPE_LABEL: Record<Operation["type"], string> = {
   insert_after: "вставка после слов",
   replace: "изложить в новой редакции",
+  replace_footnote: "изложить сноску заново",
   append_table_rows: "добавить строки таблицы",
+  replace_table_rows: "изменить строки таблицы",
   delete: "исключить",
+  manual: "ручная обработка",
 };
 
 const OP_TYPE_ICON: Record<Operation["type"], string> = {
   insert_after: "➕",
   replace: "✏️",
+  replace_footnote: "✏️",
   append_table_rows: "▤",
+  replace_table_rows: "▦",
   delete: "🗑️",
+  manual: "✋",
 };
 
 function targetLabel(op: Operation): string {
@@ -44,7 +50,7 @@ function targetLabel(op: Operation): string {
     case "appendix_point":
       return `Приложение №${t.appendix}, п. ${t.point}`;
     case "appendix_table":
-      return `Таблица п. ${t.point} Приложения №${t.appendix}`;
+      return `Таблица${t.point ? ` п. ${t.point}` : ""} Приложения №${t.appendix}`;
   }
 }
 
@@ -593,6 +599,14 @@ function OpCard({
 }
 
 function PreviewBlock({ preview }: { preview: PreviewSnippet }) {
+  if (preview.kind === "manual") {
+    return (
+      <div className="om-preview om-preview--manual">
+        <span className="om-preview__badge">✋ ручная обработка</span>
+        <span className="om-preview__note">{preview.hit}</span>
+      </div>
+    );
+  }
   if (!preview.ok && preview.kind === "none") {
     return (
       <div className="om-preview om-preview--miss">
