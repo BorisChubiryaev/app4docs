@@ -1,18 +1,43 @@
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { jsPDF } from "jspdf";
-import JpgToPdfInstructions from "./components/JpgToPdfInstructions";
+import { saveAs } from "file-saver";
+import ImageConverterInstructions from "./components/ImageConverterInstructions";
 import PageShell from "../../components/PageShell";
-import "./JpgToPdfPage.css";
+import {
+  decodeFile,
+  decodeSvgCode,
+  getSvgIntrinsicSize,
+  ACCEPTED_INPUT,
+  SUPPORTED_INPUT_LABEL,
+  type DecodedRaster,
+} from "./core/decode";
+import {
+  encodeCanvas,
+  getFormatInfo,
+  IMAGE_FORMATS,
+  isWebpEncodingSupported,
+  type ImageFormat,
+} from "./core/encode";
+import { composeImage } from "./core/render";
+import "./ImageConverter.css";
+
+/** Куда конвертируем: многостраничный PDF или растровый формат. */
+type OutputFormat = "pdf" | ImageFormat;
 
 interface ImageFile {
   id: string;
-  file: File;
+  /** Исходный файл (отсутствует, если источник — вставленный SVG-код). */
+  file?: File;
   previewUrl: string;
+  /** Полноразмерный растр источника — используется для image-экспорта. */
+  raster: DecodedRaster;
   name: string;
   customName: string;
   size: number;
   width: number;
   height: number;
+  /** Тип источника для подписи (SVG/PDF/PSD и т.п.). */
+  sourceLabel?: string;
   status: "pending" | "converting" | "done" | "error";
   error?: string;
 }
@@ -57,8 +82,28 @@ interface ConversionSettings {
   pageNumberTextSettings: TextSettings;
 }
 
-const JpgToPdfPage: React.FC = () => {
+const ImageConverter: React.FC = () => {
   const [images, setImages] = useState<ImageFile[]>([]);
+
+  // Выходной формат: PDF (полный layout-движок) или растровый формат.
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>("png");
+
+  // Настройки растрового экспорта (для не-PDF форматов).
+  const [imgSizeMode, setImgSizeMode] = useState<"original" | "custom">(
+    "original",
+  );
+  const [imgWidth, setImgWidth] = useState<number>(800);
+  const [imgHeight, setImgHeight] = useState<number>(600);
+  const [imgBackground, setImgBackground] = useState<string>("#ffffff");
+  const [imgMaintainRatio, setImgMaintainRatio] = useState<boolean>(true);
+  const [imgQuality, setImgQuality] = useState<number>(0.92);
+
+  // Вставка SVG-кода как источника.
+  const [showSvgInput, setShowSvgInput] = useState(false);
+  const [svgCode, setSvgCode] = useState("");
+
+  const webpSupported = React.useMemo(() => isWebpEncodingSupported(), []);
+
   const [settings, setSettings] = useState<ConversionSettings>({
     pageSize: "a4",
     orientation: "auto",
@@ -133,54 +178,99 @@ const JpgToPdfPage: React.FC = () => {
     processFiles(files);
   }, []);
 
-  const processFiles = async (files: File[]) => {
-    const imageFiles = files.filter((file) => {
-      const ext = file.name.toLowerCase().split(".").pop();
-      return ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff"].includes(
-        ext || "",
+  // Преобразуем canvas растра в blob-URL для превью и PDF-движка.
+  const rasterToPreviewUrl = (raster: DecodedRaster): Promise<string> =>
+    new Promise((resolve) => {
+      raster.canvas.toBlob(
+        (blob) => {
+          resolve(blob ? URL.createObjectURL(blob) : "");
+        },
+        "image/png",
       );
     });
 
-    if (imageFiles.length === 0) {
+  const rasterToImageFile = async (
+    raster: DecodedRaster,
+    file: File | undefined,
+    sourceLabel: string,
+    approxSize: number,
+  ): Promise<ImageFile> => {
+    const previewUrl = await rasterToPreviewUrl(raster);
+    return {
+      id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      file,
+      previewUrl,
+      raster,
+      name: raster.name,
+      customName: raster.name,
+      size: approxSize,
+      width: raster.width,
+      height: raster.height,
+      sourceLabel,
+      status: "pending" as const,
+    };
+  };
+
+  const processFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    setError(null);
+
+    const collected: ImageFile[] = [];
+    const failed: string[] = [];
+
+    for (const file of files) {
+      try {
+        const rasters = await decodeFile(file);
+        const ext = (file.name.split(".").pop() || "").toUpperCase();
+        // Для многостраничных источников (PDF) размер файла делим на страницы.
+        const per = Math.max(1, Math.round(file.size / rasters.length));
+        for (const raster of rasters) {
+          collected.push(
+            await rasterToImageFile(raster, file, ext, per),
+          );
+        }
+      } catch (err) {
+        console.error("Decode error:", file.name, err);
+        failed.push(file.name);
+      }
+    }
+
+    if (collected.length === 0) {
       setError(
-        "Пожалуйста, выберите изображения (JPG, PNG, GIF, BMP, WebP, TIFF)",
+        `Не удалось прочитать файлы. Поддерживаются: ${SUPPORTED_INPUT_LABEL}`,
       );
       return;
     }
 
-    setError(null);
+    if (failed.length > 0) {
+      setError(`Пропущены нечитаемые файлы: ${failed.join(", ")}`);
+    }
 
-    const newImages: ImageFile[] = await Promise.all(
-      imageFiles.map(async (file) => {
-        const previewUrl = URL.createObjectURL(file);
-        const dimensions = await getImageDimensions(previewUrl);
-        const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-        return {
-          id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          file,
-          previewUrl,
-          name: file.name,
-          customName: nameWithoutExt,
-          size: file.size,
-          width: dimensions.width,
-          height: dimensions.height,
-          status: "pending" as const,
-        };
-      }),
-    );
-
-    setImages((prev) => [...prev, ...newImages]);
+    setImages((prev) => [...prev, ...collected]);
   };
 
-  const getImageDimensions = (
-    url: string,
-  ): Promise<{ width: number; height: number }> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve({ width: img.width, height: img.height });
-      img.onerror = () => resolve({ width: 0, height: 0 });
-      img.src = url;
-    });
+  // Добавление источника из вставленного SVG-кода.
+  const addSvgFromCode = async () => {
+    const code = svgCode.trim();
+    if (!code) return;
+    try {
+      const { width, height } = getSvgIntrinsicSize(code);
+      // Рендерим SVG в чуть увеличенном масштабе для чёткого растра.
+      const scale = Math.max(1, Math.min(4, 2048 / Math.max(width, height)));
+      const raster = await decodeSvgCode(code, "svg-code", scale);
+      const imageFile = await rasterToImageFile(
+        raster,
+        undefined,
+        "SVG",
+        new Blob([code]).size,
+      );
+      setImages((prev) => [...prev, imageFile]);
+      setSvgCode("");
+      setShowSvgInput(false);
+      setError(null);
+    } catch {
+      setError("Неверный SVG-код. Проверьте синтаксис.");
+    }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1064,6 +1154,61 @@ const JpgToPdfPage: React.FC = () => {
     }
   };
 
+  // Экспорт в растровый формат (PNG/JPEG/WEBP/BMP/ICO).
+  const convertToImages = async () => {
+    if (images.length === 0) {
+      setError("Нет изображений для конвертации");
+      return;
+    }
+    const format = outputFormat as ImageFormat;
+    const info = getFormatInfo(format);
+
+    setConverting(true);
+    setProgress(0);
+    setError(null);
+
+    try {
+      // Форматы без альфы не должны получить прозрачный фон.
+      const background =
+        !info.alpha && imgBackground === "transparent"
+          ? "#ffffff"
+          : imgBackground;
+
+      for (let i = 0; i < images.length; i++) {
+        setProgress(Math.round(((i + 1) / images.length) * 100));
+        const image = images[i];
+        const canvas = composeImage(image.raster, {
+          targetWidth: imgWidth,
+          targetHeight: imgHeight,
+          background,
+          maintainAspectRatio: imgMaintainRatio,
+          useOriginalSize: imgSizeMode === "original",
+        });
+        const blob = await encodeCanvas(canvas, format, imgQuality);
+        const fileName = `${image.customName || "image"}.${info.ext}`;
+        saveAs(blob, fileName);
+        // Небольшая пауза, чтобы браузер не блокировал серию загрузок.
+        if (images.length > 1) {
+          await new Promise((r) => setTimeout(r, 150));
+        }
+      }
+    } catch (err) {
+      setError(`Ошибка при конвертации: ${(err as Error).message}`);
+    } finally {
+      setConverting(false);
+      setProgress(100);
+    }
+  };
+
+  // Единая точка запуска конвертации по выбранному формату.
+  const handleConvert = () => {
+    if (outputFormat === "pdf") {
+      convertToPdf();
+    } else {
+      convertToImages();
+    }
+  };
+
   const clearAll = () => {
     images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
     setImages([]);
@@ -1093,8 +1238,8 @@ const JpgToPdfPage: React.FC = () => {
 
   return (
     <PageShell
-      title="Конвертация JPG в PDF"
-      subtitle="Гибкая конвертация изображений в PDF с настройкой компоновки. Поддерживается одиночный режим и режим сетки."
+      title="Универсальный конвертер изображений"
+      subtitle="SVG, PNG, JPG, WebP, GIF, BMP, PDF, PSD → PNG, JPEG, WebP, BMP, ICO или PDF. Всё в браузере — без загрузки на сервер."
       onShowInstructions={() => setShowInstructions(true)}
     >
 
@@ -1111,7 +1256,7 @@ const JpgToPdfPage: React.FC = () => {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept={ACCEPTED_INPUT}
             multiple
             onChange={handleFileSelect}
             className="file-input-hidden"
@@ -1120,11 +1265,21 @@ const JpgToPdfPage: React.FC = () => {
           {images.length === 0 ? (
             <div className="upload-prompt">
               <div className="upload-icon-large">🖼️</div>
-              <h2>Перетащите изображения сюда</h2>
-              <p>или нажмите, чтобы выбрать файлы</p>
+              <h2>Перетащите файлы сюда</h2>
+              <p>или нажмите, чтобы выбрать</p>
               <div className="supported-formats">
-                Поддерживаемые форматы: JPG, JPEG, PNG, GIF, BMP, WebP, TIFF
+                Поддерживаемые форматы: {SUPPORTED_INPUT_LABEL}
               </div>
+              <button
+                type="button"
+                className="btn-paste-svg"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSvgInput(true);
+                }}
+              >
+                📝 Вставить SVG-код
+              </button>
             </div>
           ) : (
             <div
@@ -1135,9 +1290,73 @@ const JpgToPdfPage: React.FC = () => {
               }}
             >
               <span className="add-more-icon">+</span>
-              <span>Добавить ещё изображения</span>
+              <span>Добавить ещё файлы</span>
             </div>
           )}
+        </div>
+
+        {/* Вставка SVG-кода */}
+        {showSvgInput && (
+          <div className="svg-code-panel">
+            <div className="svg-code-header">
+              <h3>📝 Вставьте SVG-код</h3>
+              <button
+                className="error-close"
+                onClick={() => setShowSvgInput(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              className="svg-code-area"
+              value={svgCode}
+              onChange={(e) => setSvgCode(e.target.value)}
+              placeholder={`<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">\n  <circle cx="100" cy="100" r="80" fill="#4f46e5" />\n</svg>`}
+              rows={6}
+            />
+            <div className="svg-code-actions">
+              <button
+                className="btn-convert"
+                disabled={!svgCode.trim()}
+                onClick={addSvgFromCode}
+              >
+                ➕ Добавить как изображение
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Выбор выходного формата */}
+        <div className="output-format-bar">
+          <span className="output-format-label">Конвертировать в:</span>
+          <div className="output-format-options">
+            <button
+              className={`format-chip ${outputFormat === "pdf" ? "active" : ""}`}
+              onClick={() => setOutputFormat("pdf")}
+            >
+              📄 PDF
+            </button>
+            {IMAGE_FORMATS.map((f) => {
+              const disabled = f.id === "webp" && !webpSupported;
+              return (
+                <button
+                  key={f.id}
+                  className={`format-chip ${
+                    outputFormat === f.id ? "active" : ""
+                  }`}
+                  disabled={disabled}
+                  title={
+                    disabled
+                      ? "WebP-кодирование не поддерживается этим браузером"
+                      : undefined
+                  }
+                  onClick={() => setOutputFormat(f.id)}
+                >
+                  🖼️ {f.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {error && (
@@ -1158,12 +1377,14 @@ const JpgToPdfPage: React.FC = () => {
                 <span className="images-count">({images.length})</span>
               </h2>
               <div className="images-actions">
-                <button
-                  onClick={() => setShowPreview(!showPreview)}
-                  className="btn-preview"
-                >
-                  👁️ Предпросмотр
-                </button>
+                {outputFormat === "pdf" && (
+                  <button
+                    onClick={() => setShowPreview(!showPreview)}
+                    className="btn-preview"
+                  >
+                    👁️ Предпросмотр
+                  </button>
+                )}
                 <button
                   onClick={() => setShowSettings(!showSettings)}
                   className="btn-settings"
@@ -1226,8 +1447,141 @@ const JpgToPdfPage: React.FC = () => {
               </div>
             )}
 
-            {/* Настройки */}
-            {showSettings && (
+            {/* Настройки экспорта в растровый формат */}
+            {showSettings && outputFormat !== "pdf" && (
+              <div className="settings-panel">
+                <h3>
+                  Параметры экспорта в{" "}
+                  {getFormatInfo(outputFormat as ImageFormat).label}
+                </h3>
+
+                <div className="settings-section">
+                  <h4>Размер</h4>
+                  <div className="layout-mode-selector">
+                    <button
+                      className={`layout-btn ${
+                        imgSizeMode === "original" ? "active" : ""
+                      }`}
+                      onClick={() => setImgSizeMode("original")}
+                    >
+                      🔁 Оригинальный
+                    </button>
+                    <button
+                      className={`layout-btn ${
+                        imgSizeMode === "custom" ? "active" : ""
+                      }`}
+                      onClick={() => setImgSizeMode("custom")}
+                    >
+                      ✏️ Задать размер
+                    </button>
+                  </div>
+
+                  {imgSizeMode === "custom" && (
+                    <div className="settings-grid settings-grid--3">
+                      <div className="setting-item">
+                        <label>Ширина, px</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10000}
+                          value={imgWidth}
+                          onChange={(e) => setImgWidth(Number(e.target.value))}
+                        />
+                      </div>
+                      <div className="setting-item">
+                        <label>Высота, px</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10000}
+                          value={imgHeight}
+                          onChange={(e) => setImgHeight(Number(e.target.value))}
+                        />
+                      </div>
+                      <div className="setting-item checkbox-item">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={imgMaintainRatio}
+                            onChange={(e) =>
+                              setImgMaintainRatio(e.target.checked)
+                            }
+                          />
+                          Сохранять пропорции
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="settings-section">
+                  <h4>Фон и качество</h4>
+                  <div className="settings-grid">
+                    <div className="setting-item">
+                      <label>Фон</label>
+                      <div className="bg-controls">
+                        <input
+                          type="color"
+                          value={
+                            imgBackground === "transparent"
+                              ? "#ffffff"
+                              : imgBackground
+                          }
+                          disabled={imgBackground === "transparent"}
+                          onChange={(e) => setImgBackground(e.target.value)}
+                          className="color-picker"
+                        />
+                        {getFormatInfo(outputFormat as ImageFormat).alpha && (
+                          <button
+                            className={`layout-btn ${
+                              imgBackground === "transparent" ? "active" : ""
+                            }`}
+                            onClick={() =>
+                              setImgBackground(
+                                imgBackground === "transparent"
+                                  ? "#ffffff"
+                                  : "transparent",
+                              )
+                            }
+                          >
+                            Прозрачный
+                          </button>
+                        )}
+                      </div>
+                      {!getFormatInfo(outputFormat as ImageFormat).alpha && (
+                        <small className="setting-hint">
+                          {getFormatInfo(outputFormat as ImageFormat).label} не
+                          поддерживает прозрачность
+                        </small>
+                      )}
+                    </div>
+
+                    {getFormatInfo(outputFormat as ImageFormat).quality && (
+                      <div className="setting-item">
+                        <label>Качество: {Math.round(imgQuality * 100)}%</label>
+                        <input
+                          type="range"
+                          min={10}
+                          max={100}
+                          value={Math.round(imgQuality * 100)}
+                          onChange={(e) =>
+                            setImgQuality(Number(e.target.value) / 100)
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {outputFormat === "ico" && (
+                    <small className="setting-hint">
+                      ICO создаётся квадратным, до 256×256 px
+                    </small>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Настройки PDF */}
+            {showSettings && outputFormat === "pdf" && (
               <div className="settings-panel">
                 <h3>Параметры конвертации</h3>
 
@@ -1767,18 +2121,27 @@ const JpgToPdfPage: React.FC = () => {
             <div className="layout-info">
               <div className="layout-stats">
                 <span className="stat">📸 Изображений: {images.length}</span>
-                {settings.layoutMode === "grid" && (
+                {outputFormat === "pdf" ? (
+                  <>
+                    {settings.layoutMode === "grid" && (
+                      <span className="stat">
+                        📐 Сетка: {layoutSettings.columns}×{layoutSettings.rows}
+                      </span>
+                    )}
+                    <span className="stat">
+                      📄 Страниц в PDF: {getTotalPages()}
+                    </span>
+                    {settings.layoutMode === "grid" && (
+                      <span className="stat">
+                        📏 На странице:{" "}
+                        {layoutSettings.columns * layoutSettings.rows} изобр.
+                      </span>
+                    )}
+                  </>
+                ) : (
                   <span className="stat">
-                    📐 Сетка: {layoutSettings.columns}×{layoutSettings.rows}
-                  </span>
-                )}
-                <span className="stat">
-                  📄 Страниц в PDF: {getTotalPages()}
-                </span>
-                {settings.layoutMode === "grid" && (
-                  <span className="stat">
-                    📏 На странице:{" "}
-                    {layoutSettings.columns * layoutSettings.rows} изобр.
+                    📦 Формат: {getFormatInfo(outputFormat as ImageFormat).label}
+                    {images.length > 1 ? " • отдельными файлами" : ""}
                   </span>
                 )}
               </div>
@@ -1796,18 +2159,22 @@ const JpgToPdfPage: React.FC = () => {
                 </div>
               )}
               <button
-                onClick={convertToPdf}
+                onClick={handleConvert}
                 disabled={converting || images.length === 0}
                 className="btn-convert"
               >
                 {converting
                   ? `⏳ Конвертация... ${progress}%`
-                  : `📄 Создать PDF (${images.length} изображ.)`}
+                  : outputFormat === "pdf"
+                    ? `📄 Создать PDF (${images.length} изображ.)`
+                    : `⬇️ Сохранить ${
+                        getFormatInfo(outputFormat as ImageFormat).label
+                      } (${images.length})`}
               </button>
             </div>
           </div>
         )}
-      <JpgToPdfInstructions
+      <ImageConverterInstructions
         isOpen={showInstructions}
         onClose={() => setShowInstructions(false)}
       />
@@ -1815,4 +2182,4 @@ const JpgToPdfPage: React.FC = () => {
   );
 };
 
-export default JpgToPdfPage;
+export default ImageConverter;
