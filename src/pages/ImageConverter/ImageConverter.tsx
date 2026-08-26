@@ -19,6 +19,12 @@ import {
   type ImageFormat,
 } from "./core/encode";
 import { composeExport } from "./core/render";
+import {
+  buildIconPack,
+  ICON_TARGETS,
+  hasAnyTarget,
+  type IconPackOptions,
+} from "./core/iconPack";
 import "./ImageConverter.css";
 
 /** Куда конвертируем: многостраничный PDF или растровый формат. */
@@ -105,6 +111,18 @@ const ImageConverter: React.FC = () => {
     current: number;
   } | null>(null);
   const [estimating, setEstimating] = useState(false);
+
+  // Настройки пакета иконок (для формата ICO).
+  const [iconPack, setIconPack] = useState<
+    Omit<IconPackOptions, "customSizes" | "background">
+  >({
+    windowsIco: true,
+    webFavicons: true,
+    appleTouch: true,
+    android: true,
+    windowsTile: false,
+  });
+  const [iconCustomSizes, setIconCustomSizes] = useState<string>("");
 
   // Вставка SVG-кода как источника.
   const [showSvgInput, setShowSvgInput] = useState(false);
@@ -1218,7 +1236,7 @@ const ImageConverter: React.FC = () => {
   // Пересчёт оценки веса результата (по первому изображению) при
   // изменении настроек растрового экспорта.
   useEffect(() => {
-    if (outputFormat === "pdf" || images.length === 0) {
+    if (outputFormat === "pdf" || outputFormat === "ico" || images.length === 0) {
       setSizeEstimate(null);
       return;
     }
@@ -1260,6 +1278,62 @@ const ImageConverter: React.FC = () => {
     imgQuality,
   ]);
 
+  // Разбор строки произвольных размеров ("32, 64 128" → [32,64,128]).
+  const parseCustomSizes = (text: string): number[] =>
+    Array.from(
+      new Set(
+        text
+          .split(/[\s,;]+/)
+          .map((s) => parseInt(s, 10))
+          .filter((n) => Number.isFinite(n) && n > 0 && n <= 1024),
+      ),
+    );
+
+  const iconPackOptions = (): IconPackOptions => ({
+    ...iconPack,
+    customSizes: parseCustomSizes(iconCustomSizes),
+    background: imgBackground,
+  });
+
+  // Сборка пакета иконок в ZIP (формат ICO).
+  const convertIconPack = async () => {
+    if (images.length === 0) {
+      setError("Нет изображений для конвертации");
+      return;
+    }
+    const opts = iconPackOptions();
+    if (!hasAnyTarget(opts)) {
+      setError("Выберите хотя бы один набор иконок");
+      return;
+    }
+
+    setConverting(true);
+    setProgress(0);
+    setError(null);
+
+    try {
+      const items = images.map((img) => ({
+        raster: img.raster,
+        name: img.customName || "icon",
+      }));
+      const { blob, fileCount } = await buildIconPack(
+        items,
+        opts,
+        (done, total) => setProgress(Math.round((done / total) * 100)),
+      );
+      const stamp = new Date().toISOString().slice(0, 10);
+      saveAs(blob, `icons_${stamp}.zip`);
+      setError(null);
+      // Короткая подсказка в консоль (не критично для UX).
+      console.log(`Готово: ${fileCount} файлов иконок`);
+    } catch (err) {
+      setError(`Ошибка при сборке иконок: ${(err as Error).message}`);
+    } finally {
+      setConverting(false);
+      setProgress(100);
+    }
+  };
+
   // Смена выходного формата. Превью актуально только для PDF —
   // при уходе с PDF закрываем панель предпросмотра.
   const changeOutputFormat = (format: OutputFormat) => {
@@ -1267,12 +1341,18 @@ const ImageConverter: React.FC = () => {
     if (format !== "pdf") {
       setShowPreview(false);
     }
+    // Для ICO выбор наборов иконок — ключевой шаг, раскрываем настройки.
+    if (format === "ico") {
+      setShowSettings(true);
+    }
   };
 
   // Единая точка запуска конвертации по выбранному формату.
   const handleConvert = () => {
     if (outputFormat === "pdf") {
       convertToPdf();
+    } else if (outputFormat === "ico") {
+      convertIconPack();
     } else {
       convertToImages();
     }
@@ -1516,8 +1596,10 @@ const ImageConverter: React.FC = () => {
               </div>
             )}
 
-            {/* Настройки экспорта в растровый формат */}
-            {showSettings && outputFormat !== "pdf" && (
+            {/* Настройки экспорта в растровый формат (кроме ICO-пака) */}
+            {showSettings &&
+              outputFormat !== "pdf" &&
+              outputFormat !== "ico" && (
               <div className="settings-panel">
                 <h3>
                   Параметры экспорта в{" "}
@@ -1716,13 +1798,112 @@ const ImageConverter: React.FC = () => {
                       </span>
                     )}
                   </div>
-
-                  {outputFormat === "ico" && (
-                    <small className="setting-hint">
-                      ICO создаётся квадратным, до 256×256 px
-                    </small>
-                  )}
                 </div>
+              </div>
+            )}
+
+            {/* Пакет иконок (формат ICO) */}
+            {showSettings && outputFormat === "ico" && (
+              <div className="settings-panel">
+                <h3>🎯 Пакет иконок</h3>
+                <p className="icon-pack-intro">
+                  Соберём набор иконок под разные задачи одним ZIP-архивом:
+                  приложения и ярлыки (многоразмерный <code>.ico</code>),
+                  веб-фавиконки, PWA, Apple и плитки Windows.
+                </p>
+
+                <div className="settings-section">
+                  <h4>Что включить</h4>
+                  <div className="icon-targets">
+                    {ICON_TARGETS.map((t) => (
+                      <label key={t.id} className="icon-target">
+                        <input
+                          type="checkbox"
+                          checked={iconPack[t.id]}
+                          onChange={(e) =>
+                            setIconPack((prev) => ({
+                              ...prev,
+                              [t.id]: e.target.checked,
+                            }))
+                          }
+                        />
+                        <span className="icon-target__body">
+                          <span className="icon-target__label">{t.label}</span>
+                          <span className="icon-target__hint">{t.hint}</span>
+                          <span className="icon-target__files">
+                            {t.files.join(" · ")}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="settings-section">
+                  <h4>Дополнительные размеры (PNG)</h4>
+                  <div className="setting-item">
+                    <input
+                      type="text"
+                      value={iconCustomSizes}
+                      onChange={(e) => setIconCustomSizes(e.target.value)}
+                      placeholder="например: 64, 256, 1024"
+                    />
+                    <small className="setting-hint">
+                      Через запятую. Файлы вида icon-64x64.png
+                    </small>
+                  </div>
+                </div>
+
+                <div className="settings-section">
+                  <h4>Фон</h4>
+                  <div className="bg-controls">
+                    <input
+                      type="color"
+                      value={
+                        imgBackground === "transparent"
+                          ? "#ffffff"
+                          : imgBackground
+                      }
+                      onChange={(e) => setImgBackground(e.target.value)}
+                      className="color-picker"
+                      title="Выбрать цвет фона"
+                    />
+                    <input
+                      type="text"
+                      className="bg-hex-input"
+                      value={imgBackground}
+                      onChange={(e) => setImgBackground(e.target.value)}
+                      placeholder="#ffffff"
+                    />
+                    <button
+                      type="button"
+                      className={`transparent-btn ${
+                        imgBackground === "transparent" ? "active" : ""
+                      }`}
+                      onClick={() =>
+                        setImgBackground(
+                          imgBackground === "transparent"
+                            ? "#ffffff"
+                            : "transparent",
+                        )
+                      }
+                      title="Прозрачный фон"
+                    >
+                      <span className="checker-swatch" />
+                      Прозрачный
+                    </button>
+                  </div>
+                  <small className="setting-hint">
+                    Для иконок обычно используют прозрачный фон
+                  </small>
+                </div>
+
+                {images.length > 1 && (
+                  <small className="setting-hint">
+                    Несколько источников — каждый попадёт в свою подпапку
+                    архива.
+                  </small>
+                )}
               </div>
             )}
 
@@ -2284,6 +2465,8 @@ const ImageConverter: React.FC = () => {
                       </span>
                     )}
                   </>
+                ) : outputFormat === "ico" ? (
+                  <span className="stat">🎯 Пакет иконок → ZIP-архив</span>
                 ) : (
                   <span className="stat">
                     📦 Формат: {getFormatInfo(outputFormat as ImageFormat).label}
@@ -2313,9 +2496,11 @@ const ImageConverter: React.FC = () => {
                   ? `⏳ Конвертация... ${progress}%`
                   : outputFormat === "pdf"
                     ? `📄 Создать PDF (${images.length} изображ.)`
-                    : `⬇️ Сохранить ${
-                        getFormatInfo(outputFormat as ImageFormat).label
-                      } (${images.length})`}
+                    : outputFormat === "ico"
+                      ? `🎯 Собрать пак иконок (ZIP)`
+                      : `⬇️ Сохранить ${
+                          getFormatInfo(outputFormat as ImageFormat).label
+                        } (${images.length})`}
               </button>
             </div>
           </div>

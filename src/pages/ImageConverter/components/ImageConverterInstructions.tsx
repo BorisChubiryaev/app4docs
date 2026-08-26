@@ -35,6 +35,13 @@ const ImageConverterInstructions: React.FC<ImageConverterInstructionsProps> = ({
         Можно также <strong>вставить SVG-код</strong> напрямую — кнопка «📝
         Вставить SVG-код» в области загрузки.
       </p>
+      <p>
+        <strong>Формат ICO</strong> собирает целый{" "}
+        <strong>пакет иконок</strong> в один ZIP: многоразмерный{" "}
+        <code>favicon.ico</code> для приложений и ярлыков, веб-фавиконки,
+        apple-touch-icon, иконки Android/PWA и плитку Windows. Отметьте нужные
+        наборы и, при желании, добавьте свои размеры.
+      </p>
     </div>
 
     <div className="instructions-section">

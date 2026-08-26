@@ -105,9 +105,11 @@ function encodeBmp(canvas: HTMLCanvasElement): Blob {
   return new Blob([buf], { type: "image/bmp" });
 }
 
-/** Уменьшает canvas до квадрата не больше maxSize (для иконок). */
-function fitForIcon(canvas: HTMLCanvasElement, maxSize = 256): HTMLCanvasElement {
-  const size = Math.min(maxSize, Math.max(canvas.width, canvas.height));
+/** Масштабирует источник в квадрат size×size с центрированием. */
+function toSquare(
+  source: HTMLCanvasElement,
+  size: number,
+): HTMLCanvasElement {
   const out = document.createElement("canvas");
   out.width = size;
   out.height = size;
@@ -115,37 +117,72 @@ function fitForIcon(canvas: HTMLCanvasElement, maxSize = 256): HTMLCanvasElement
   if (ctx) {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    const scale = Math.min(size / canvas.width, size / canvas.height);
-    const w = canvas.width * scale;
-    const h = canvas.height * scale;
-    ctx.drawImage(canvas, (size - w) / 2, (size - h) / 2, w, h);
+    const scale = Math.min(size / source.width, size / source.height);
+    const w = source.width * scale;
+    const h = source.height * scale;
+    ctx.drawImage(source, (size - w) / 2, (size - h) / 2, w, h);
   }
   return out;
 }
 
-/** ICO с встроенным PNG (поддерживается Windows Vista+ и всеми браузерами). */
-async function encodeIco(canvas: HTMLCanvasElement): Promise<Blob> {
-  const icon = fitForIcon(canvas, 256);
-  const pngBlob = await canvasToBlob(icon, "image/png");
-  const png = new Uint8Array(await pngBlob.arrayBuffer());
+/** Стандартные размеры, вкладываемые в многоразмерный .ico. */
+export const ICO_DEFAULT_SIZES = [16, 24, 32, 48, 64, 128, 256];
 
-  const header = new ArrayBuffer(6 + 16);
+/**
+ * Собирает ICO из набора квадратных canvas'ов (каждый — отдельный размер).
+ * Каждый размер хранится как встроенный PNG (Windows Vista+ и все браузеры).
+ */
+export async function encodeIcoFromCanvases(
+  canvases: HTMLCanvasElement[],
+): Promise<Blob> {
+  // Сортируем по возрастанию и убираем дубли размеров.
+  const uniq = new Map<number, HTMLCanvasElement>();
+  for (const c of canvases) uniq.set(c.width, c);
+  const entries = [...uniq.values()].sort((a, b) => a.width - b.width);
+
+  const pngs = await Promise.all(
+    entries.map(async (c) =>
+      new Uint8Array(await (await canvasToBlob(c, "image/png")).arrayBuffer()),
+    ),
+  );
+
+  const count = entries.length;
+  const dirSize = 6 + 16 * count;
+  const header = new ArrayBuffer(dirSize);
   const dv = new DataView(header);
   // ICONDIR
   dv.setUint16(0, 0, true); // reserved
   dv.setUint16(2, 1, true); // type: icon
-  dv.setUint16(4, 1, true); // count
-  // ICONDIRENTRY
-  dv.setUint8(6, icon.width >= 256 ? 0 : icon.width); // 0 == 256
-  dv.setUint8(7, icon.height >= 256 ? 0 : icon.height);
-  dv.setUint8(8, 0); // color count
-  dv.setUint8(9, 0); // reserved
-  dv.setUint16(10, 1, true); // planes
-  dv.setUint16(12, 32, true); // bit count
-  dv.setUint32(14, png.length, true); // bytes in resource
-  dv.setUint32(18, 6 + 16, true); // offset
+  dv.setUint16(4, count, true);
 
-  return new Blob([header, png], { type: "image/x-icon" });
+  let offset = dirSize;
+  entries.forEach((c, i) => {
+    const base = 6 + i * 16;
+    const png = pngs[i];
+    dv.setUint8(base + 0, c.width >= 256 ? 0 : c.width); // 0 == 256
+    dv.setUint8(base + 1, c.height >= 256 ? 0 : c.height);
+    dv.setUint8(base + 2, 0); // color count
+    dv.setUint8(base + 3, 0); // reserved
+    dv.setUint16(base + 4, 1, true); // planes
+    dv.setUint16(base + 6, 32, true); // bit count
+    dv.setUint32(base + 8, png.length, true); // bytes in resource
+    dv.setUint32(base + 12, offset, true); // offset
+    offset += png.length;
+  });
+
+  return new Blob([header, ...pngs], { type: "image/x-icon" });
+}
+
+/**
+ * ICO из одного canvas — раскладываем на стандартные размеры,
+ * чтобы иконка была пригодна для приложений и ярлыков.
+ */
+async function encodeIco(canvas: HTMLCanvasElement): Promise<Blob> {
+  const maxSide = Math.max(canvas.width, canvas.height);
+  const sizes = ICO_DEFAULT_SIZES.filter((s) => s <= Math.max(maxSide, 16));
+  if (sizes.length === 0) sizes.push(Math.min(256, maxSide));
+  const squares = sizes.map((s) => toSquare(canvas, s));
+  return encodeIcoFromCanvases(squares);
 }
 
 /**
