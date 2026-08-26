@@ -418,10 +418,22 @@ def extract_ppr(paragraph: str) -> str:
     return m.group(0) if m else ""
 
 
-def replace_paragraph_runs(paragraph: str, new_runs: str) -> str:
+FOOTNOTE_REF_RUN = re.compile(r"<w:r\b[^>]*>(?:(?!</w:r>).)*?<w:footnoteReference[^>]*/>.*?</w:r>", re.S)
+
+
+def replace_paragraph_runs(paragraph: str, new_runs: str) -> tuple[str, int]:
+    """Заменить содержимое абзаца, СОХРАНИВ ссылки на сноски.
+
+    Иначе сноска осталась бы «сиротой»: её элемент остаётся в footnotes.xml,
+    но ссылка из текста исчезает — и вся последующая нумерация сносок
+    сдвигается. Сохранённые ссылки переносятся в конец абзаца, их число
+    возвращается, чтобы предупредить оператора о проверке места.
+    """
     ppr = extract_ppr(paragraph)
     open_m = re.match(r"<w:p(?:\s[^>]*)?>", paragraph)
-    return "%s%s%s</w:p>" % (open_m.group(0) if open_m else "<w:p>", ppr, new_runs)
+    refs = FOOTNOTE_REF_RUN.findall(paragraph)
+    body = new_runs + "".join(refs)
+    return "%s%s%s</w:p>" % (open_m.group(0) if open_m else "<w:p>", ppr, body), len(refs)
 
 
 def strip_leading_number(text: str) -> str:
@@ -717,9 +729,12 @@ def apply_operation(op: dict[str, Any], state: State, color: str) -> OpResult:
             return _fail(op_id, f"{what} не найден — правка неприменима к этой редакции")
         body = strip_leading_number(strip_outer_quotes(payload))
         new_runs = paragraph_runs(body, bool(op.get("term")), color)
-        rebuilt = replace_paragraph_runs(para.inner, new_runs)
+        rebuilt, kept = replace_paragraph_runs(para.inner, new_runs)
         state.document = state.document[:para.start] + rebuilt + state.document[para.end:]
-        return OpResult(op_id, True, "пункт изложен в новой редакции", para.start)
+        msg = "пункт изложен в новой редакции"
+        if kept:
+            msg += f"; сохранено ссылок на сноски: {kept} — проверьте их место в пункте"
+        return OpResult(op_id, True, msg, para.start)
 
     # ── добавить новый пункт (нумерация сдвигается автоматически) ──
     if kind == "insert_point":
@@ -894,10 +909,44 @@ def _apply_table_operation(op: dict[str, Any], state: State, color: str) -> OpRe
         data = op.get("rows") or []
         if not data:
             return _fail(op_id, "нет строк для добавления")
-        new_rows = [build_row(list(e.get("cells") or []), color) for e in data]
+        # Защита от дублей: в Оферте строка могла появиться прежней правкой.
+        existing_names = {
+            om_key
+            for r in rows
+            if (cells := row_cells(r)) and len(cells) > name_col
+            and (om_key := sort_key(visible_text(cells[name_col])))
+        }
+        existing_numbers = {
+            visible_text(cells[0]).strip()
+            for r in rows if (cells := row_cells(r))
+        }
+        new_rows: list[str] = []
+        skipped: list[str] = []
+        for entry in data:
+            cells_new = list(entry.get("cells") or [])
+            name = cells_new[name_col] if len(cells_new) > name_col else ""
+            number = (cells_new[0] or "").strip() if cells_new else ""
+            key = sort_key(name)
+            if (key and key in existing_names) or (number and number in existing_numbers):
+                skipped.append(name or f"№{number}")
+                continue
+            new_rows.append(build_row(cells_new, color))
+            if key:
+                existing_names.add(key)
+            if number:
+                existing_numbers.add(number)
+        if not new_rows:
+            return OpResult(
+                op_id, False,
+                f"Приложение №{appendix}: все строки уже присутствуют — {'; '.join(skipped)}",
+                table.start, {"skipped": skipped},
+            )
         state.document = state.document[:table.start] + rebuild_table(table.inner, rows + new_rows) + \
             state.document[table.end:]
-        return OpResult(op_id, True, f"добавлено строк: {len(new_rows)} в Приложение №{appendix}", table.start)
+        msg = f"добавлено строк: {len(new_rows)} в Приложение №{appendix}"
+        if skipped:
+            msg += f"; пропущено (уже есть): {'; '.join(skipped)}"
+        return OpResult(op_id, True, msg, table.start, {"skipped": skipped})
 
     # ── алфавитная пересортировка ──
     if kind == "sort_table_alpha":
@@ -1334,24 +1383,59 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 
 def cmd_audit(args: argparse.Namespace) -> int:
-    """Независимая проверка результата: структура и инварианты приложений."""
+    """Независимая проверка результата: структура и инварианты приложений.
+
+    Вердикт `ok` включает ВСЕ содержательные проверки, а не только булевы:
+    уменьшение числа сносок или разрыв нумерации приложения — это провал,
+    даже если XML формально цел.
+    """
     result = Docx.load(Path(args.result))
+    footnotes_in_body = len(footnote_display_map(result.document))
     checks: dict[str, Any] = {
         "document_xml_balanced": xml_balanced(result.document),
         "footnotes_xml_balanced": xml_balanced(result.footnotes) if result.footnotes else True,
-        "footnotes_in_body": len(footnote_display_map(result.document)),
+        "footnotes_in_body": footnotes_in_body,
     }
+    failures: list[str] = []
+    if not checks["document_xml_balanced"]:
+        failures.append("XML документа нарушен")
+    if not checks["footnotes_xml_balanced"]:
+        failures.append("XML сносок нарушен")
+
     if args.offer:
         source = Docx.load(Path(args.offer))
         missing = [n for n in source.names if n not in result.parts]
+        before = len(footnote_display_map(source.document))
+        delta = footnotes_in_body - before
         checks["source_parts_preserved"] = not missing
         checks["missing_parts"] = missing
-        checks["footnotes_added"] = checks["footnotes_in_body"] - len(footnote_display_map(source.document))
+        checks["footnotes_before"] = before
+        checks["footnotes_added"] = delta
+        checks["footnotes_not_lost"] = delta >= 0
+        if missing:
+            failures.append(f"утрачены части пакета: {', '.join(missing)}")
+        if delta < 0:
+            failures.append(
+                f"число сносок в тексте уменьшилось на {-delta} "
+                f"({before} → {footnotes_in_body}): ссылки потеряны, нумерация сносок сдвинулась"
+            )
+
     if args.appendix:
         snap = snapshot_appendix(result.document, result.numbering, args.appendix, args.name_column)
         checks["appendix"] = {k: v for k, v in snap.items() if k != "keys"}
-    ok = all(v is True for k, v in checks.items() if isinstance(v, bool))
-    print(json.dumps({"ok": ok, "checks": checks}, ensure_ascii=False, indent=2))
+        if snap.get("present"):
+            keys = [k for k in (snap.get("keys") or []) if k]
+            duplicates = sorted({k for k in keys if keys.count(k) > 1})
+            checks["appendix"]["duplicate_entries"] = duplicates
+            if duplicates:
+                failures.append(
+                    "в Приложении №%s повторяются записи: %s" % (args.appendix, ", ".join(duplicates[:5]))
+                )
+            if not snap.get("numbering_sequential"):
+                failures.append(f"нумерация Приложения №{args.appendix} не является непрерывной")
+
+    ok = not failures
+    print(json.dumps({"ok": ok, "failures": failures, "checks": checks}, ensure_ascii=False, indent=2))
     return 0 if ok else 1
 
 

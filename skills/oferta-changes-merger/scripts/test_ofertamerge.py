@@ -216,6 +216,40 @@ class TableOperationTests(unittest.TestCase):
         self.assertEqual(names.index("ООО «Домклик»"), 2)  # после Газета.Ру, перед Интеркомп
 
 
+class ContentPreservationTests(unittest.TestCase):
+    """Замена содержимого не должна тихо терять ссылки на сноски."""
+
+    def test_paragraph_replacement_keeps_footnote_references(self) -> None:
+        doc = ("<w:document><w:body>"
+               '<w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="13"/></w:numPr></w:pPr>'
+               '<w:r><w:t>Клиент Банка – лицо</w:t></w:r>'
+               '<w:r><w:footnoteReference w:id="10"/></w:r>'
+               '<w:r><w:footnoteReference w:id="11"/></w:r></w:p>'
+               "</w:body></w:document>")
+        state = om.State(doc, "<w:footnotes></w:footnotes>", NUMBERING)
+        res = om.apply_operation(
+            {"id": "r", "type": "replace_point", "point": "1.1",
+             "payload": "«1.1. Новая редакция.»", "raw_text": "x"},
+            state, om.HIGHLIGHT_COLOR)
+        self.assertTrue(res.ok)
+        self.assertEqual(len(om.footnote_display_map(state.document)), 2)
+        self.assertIn("сохранено ссылок на сноски: 2", res.message)
+
+    def test_append_does_not_duplicate_existing_rows(self) -> None:
+        rows = [["1", '"БИЗОН" ООО', "адрес"], ["2", '"Газета.Ру" АО', "адрес"]]
+        doc = ("<w:document><w:body><w:p><w:r><w:t>Приложение № 1</w:t></w:r></w:p>"
+               + table(rows) + "</w:body></w:document>")
+        state = om.State(doc, None, None)
+        res = om.apply_operation(
+            {"id": "a", "type": "append_table_rows", "appendix": "1",
+             "rows": [{"cells": ["2", 'ООО «Газета.Ру»', "адрес"]}], "raw_text": "x"},
+            state, om.HIGHLIGHT_COLOR)
+        self.assertFalse(res.ok)
+        self.assertIn("уже присутствуют", res.message)
+        tbl = om.find_appendix_table(state.document, "1")
+        self.assertEqual(len(om.table_rows(tbl.inner)), 2)
+
+
 class PlanValidationTests(unittest.TestCase):
     def test_missing_raw_text_is_rejected(self) -> None:
         errors = om.validate_plan({"operations": [{"id": "a", "type": "sort_table_alpha", "appendix": "1"}]})
