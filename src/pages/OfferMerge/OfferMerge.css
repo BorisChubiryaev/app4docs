@@ -1,0 +1,667 @@
+/* Модуль «Объединение изменений в Оферту».
+   Опирается на дизайн-систему EX-EL (tokens.css / components.css) и
+   переключатель темы (data-theme="dark"). Кастомные элементы окрашены
+   через токены (--ink/--muted/--line/--surface…), поэтому тёмная тема
+   работает автоматически; ниже — лишь точечные доопределения. */
+
+.om {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.om-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Шаги (кликабельные) ── */
+.om-steps {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.om-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.86rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.om-step:hover:not(:disabled):not(.is-active) {
+  color: var(--ink);
+}
+.om-step.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+.om-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.om-step__arrow {
+  margin-left: 4px;
+  opacity: 0.4;
+  font-weight: 400;
+}
+
+/* Подсказки / примечания */
+.om-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+.om-note {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+/* ── Баннеры статуса ── */
+.om-error {
+  background: rgba(255, 59, 48, 0.12);
+  border: 1px solid rgba(255, 59, 48, 0.4);
+  color: #c0392b;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+}
+.om-ok {
+  background: rgba(52, 199, 89, 0.14);
+  border: 1px solid rgba(52, 199, 89, 0.4);
+  color: var(--ink);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.92rem;
+}
+
+/* ── Зона загрузки (drag & drop) ── */
+.om-dz-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.om-dz {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 22px;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.05s;
+}
+.om-dz:hover {
+  border-color: var(--brand-2);
+  box-shadow: var(--shadow-sm);
+}
+.om-dz.is-over {
+  border-color: var(--brand-2);
+  border-style: solid;
+  background: rgba(81, 93, 173, 0.06);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+.om-dz__icon {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.om-dz__text {
+  min-width: 0;
+}
+.om-dz__label {
+  font-weight: 700;
+  color: var(--ink);
+  font-size: 0.98rem;
+}
+.om-dz__hint {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-top: 1px;
+}
+.om-dz__cta {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+.om-dz__cta span {
+  color: var(--brand-2);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* Чипы загруженных файлов */
+.om-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.om-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px 7px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+.om-chip__ico {
+  flex: none;
+}
+.om-chip__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.om-chip__size {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.om-chip__x {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+}
+.om-chip__x:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+
+/* ── Кнопки ── */
+.om-btn {
+  align-self: flex-start;
+  background: var(--brand-gradient);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.15s, transform 0.05s;
+}
+.om-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.om-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.om-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.om-link {
+  background: none;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+}
+.om-link:hover {
+  color: var(--ink);
+}
+
+.om-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.om-hl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+.om-hl .ds-select {
+  width: auto;
+}
+
+/* ── Экран проверки: навигатор + карточки ── */
+.om-review {
+  display: grid;
+  grid-template-columns: 232px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.om-review__main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.om-nav {
+  position: sticky;
+  top: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  box-shadow: var(--shadow-sm);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+}
+.om-nav__title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.om-nav__count {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.om-nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.om-nav__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  transition: background 0.12s;
+}
+.om-nav__item:hover {
+  background: var(--surface-2);
+}
+.om-nav__item.off {
+  opacity: 0.45;
+}
+.om-nav__num {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.om-nav__ico {
+  flex: none;
+  font-size: 0.8rem;
+}
+.om-nav__lbl {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.om-nav__warn {
+  flex: none;
+  color: #b8860b;
+}
+
+/* ── Карточка операции (на базе .ds-panel) ── */
+.om-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scroll-margin-top: 16px;
+}
+.om-card.off {
+  opacity: 0.5;
+}
+.om-card.flash {
+  animation: om-flash 1.3s ease;
+}
+@keyframes om-flash {
+  0%,
+  100% {
+    box-shadow: var(--shadow-sm);
+  }
+  20% {
+    box-shadow: 0 0 0 3px rgba(81, 93, 173, 0.45);
+  }
+}
+.om-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+.om-card__num {
+  font-weight: 700;
+  margin-right: 6px;
+}
+.om-card__type {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.om-card__src {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.om-card__toggle {
+  font-size: 0.78rem;
+  white-space: nowrap;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--ink-soft);
+}
+.om-card__raw {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.om-card__raw summary {
+  cursor: pointer;
+}
+.om-card__raw p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+}
+.om-card__warn {
+  color: #b8860b;
+  font-size: 0.8rem;
+  margin: 0;
+}
+.om-card__rows {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0;
+}
+.om-field {
+  display: block;
+  font-size: 0.8rem;
+}
+.om-field span {
+  color: var(--muted);
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* ── Экран «Файлы»: карточки скачивания ── */
+.om-downloads {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.om-dl {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+.om-dl:hover {
+  border-color: var(--brand-2);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.om-dl__ico {
+  flex: none;
+  font-size: 24px;
+}
+.om-dl span b {
+  display: block;
+  font-size: 0.92rem;
+}
+.om-dl span small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+.om-dl__arrow {
+  margin-left: auto;
+  font-size: 1.2rem;
+  color: var(--brand-2);
+}
+
+.om-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+.om-results .fail {
+  color: #e0564b;
+}
+
+/* ── Адаптив: узкий экран ── */
+@media (max-width: 780px) {
+  .om-review {
+    grid-template-columns: 1fr;
+  }
+  .om-nav {
+    position: static;
+    max-height: 220px;
+  }
+  .om-downloads {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Навигатор: пейджер «предыдущее/следующее» ── */
+.om-nav__pager {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.om-pager-btn {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+.om-pager-btn:hover:not(:disabled) {
+  border-color: var(--brand-2);
+  color: var(--ink);
+}
+.om-pager-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.om-nav__pos {
+  font-size: 0.72rem;
+  color: var(--muted);
+  min-width: 30px;
+  text-align: center;
+}
+.om-nav__item.current {
+  background: rgba(81, 93, 173, 0.1);
+  box-shadow: inset 2px 0 0 var(--brand-2);
+}
+
+/* ── Предпросмотр места правки ── */
+.om-preview {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 8px 10px;
+}
+.om-preview__label {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.om-preview__doc {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink);
+  word-break: break-word;
+}
+.om-ctx {
+  color: var(--muted);
+}
+.om-mark {
+  background: rgba(255, 196, 0, 0.38);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 600;
+}
+.om-new {
+  background: rgba(52, 199, 89, 0.22);
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 600;
+}
+.om-old {
+  color: var(--muted);
+  text-decoration: line-through;
+  margin-right: 6px;
+}
+.om-preview__ctx {
+  color: var(--muted);
+}
+.om-preview--miss,
+.om-preview--manual {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(255, 149, 0, 0.1);
+  border-color: rgba(255, 149, 0, 0.4);
+}
+.om-preview--manual {
+  background: rgba(88, 86, 214, 0.1);
+  border-color: rgba(88, 86, 214, 0.4);
+}
+.om-preview--manual .om-preview__badge {
+  color: #5856d6;
+}
+.om-preview__badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #b8860b;
+}
+.om-preview__note {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* ── Точечные доопределения для тёмной темы ── */
+:root[data-theme="dark"] .om-nav__item.current {
+  background: rgba(130, 150, 255, 0.14);
+  box-shadow: inset 2px 0 0 #8296ff;
+}
+:root[data-theme="dark"] .om-mark {
+  background: rgba(255, 209, 102, 0.28);
+}
+:root[data-theme="dark"] .om-new {
+  background: rgba(48, 209, 88, 0.24);
+}
+:root[data-theme="dark"] .om-preview--miss {
+  background: rgba(255, 159, 10, 0.12);
+  border-color: rgba(255, 159, 10, 0.4);
+}
+:root[data-theme="dark"] .om-preview__badge {
+  color: #e8c66b;
+}
+:root[data-theme="dark"] .om-error {
+  background: rgba(255, 69, 58, 0.16);
+  border-color: rgba(255, 69, 58, 0.45);
+  color: #ff8a80;
+}
+:root[data-theme="dark"] .om-ok {
+  background: rgba(48, 209, 88, 0.16);
+  border-color: rgba(48, 209, 88, 0.4);
+}
+:root[data-theme="dark"] .om-dz.is-over {
+  background: rgba(130, 150, 255, 0.1);
+}
+:root[data-theme="dark"] .om-card__warn,
+:root[data-theme="dark"] .om-nav__warn {
+  color: #e8c66b;
+}
+:root[data-theme="dark"] .om-card.flash {
+  animation: om-flash-dark 1.3s ease;
+}
+@keyframes om-flash-dark {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  20% {
+    box-shadow: 0 0 0 3px rgba(130, 150, 255, 0.5);
+  }
+}
