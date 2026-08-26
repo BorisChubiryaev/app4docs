@@ -18,7 +18,7 @@ import {
   isWebpEncodingSupported,
   type ImageFormat,
 } from "./core/encode";
-import { composeImage } from "./core/render";
+import { composeExport } from "./core/render";
 import "./ImageConverter.css";
 
 /** Куда конвертируем: многостраничный PDF или растровый формат. */
@@ -94,9 +94,17 @@ const ImageConverter: React.FC = () => {
   );
   const [imgWidth, setImgWidth] = useState<number>(800);
   const [imgHeight, setImgHeight] = useState<number>(600);
-  const [imgBackground, setImgBackground] = useState<string>("#ffffff");
+  const [imgBackground, setImgBackground] = useState<string>("transparent");
   const [imgMaintainRatio, setImgMaintainRatio] = useState<boolean>(true);
   const [imgQuality, setImgQuality] = useState<number>(0.92);
+  // Масштаб выходного разрешения (%) — уменьшает вес файла.
+  const [imgScale, setImgScale] = useState<number>(100);
+  // Оценка веса результата (по первому изображению).
+  const [sizeEstimate, setSizeEstimate] = useState<{
+    full: number;
+    current: number;
+  } | null>(null);
+  const [estimating, setEstimating] = useState(false);
 
   // Вставка SVG-кода как источника.
   const [showSvgInput, setShowSvgInput] = useState(false);
@@ -1154,6 +1162,25 @@ const ImageConverter: React.FC = () => {
     }
   };
 
+  // Эффективный фон: форматы без альфы не могут быть прозрачными.
+  const effectiveBackground = (format: ImageFormat): string => {
+    const info = getFormatInfo(format);
+    return !info.alpha && imgBackground === "transparent"
+      ? "#ffffff"
+      : imgBackground;
+  };
+
+  // Собирает выходной canvas одного изображения по текущим настройкам.
+  const buildCanvas = (image: ImageFile, format: ImageFormat, scale: number) =>
+    composeExport(image.raster, {
+      sizeMode: imgSizeMode,
+      customWidth: imgWidth,
+      customHeight: imgHeight,
+      maintainAspectRatio: imgMaintainRatio,
+      background: effectiveBackground(format),
+      scalePercent: scale,
+    });
+
   // Экспорт в растровый формат (PNG/JPEG/WEBP/BMP/ICO).
   const convertToImages = async () => {
     if (images.length === 0) {
@@ -1168,22 +1195,10 @@ const ImageConverter: React.FC = () => {
     setError(null);
 
     try {
-      // Форматы без альфы не должны получить прозрачный фон.
-      const background =
-        !info.alpha && imgBackground === "transparent"
-          ? "#ffffff"
-          : imgBackground;
-
       for (let i = 0; i < images.length; i++) {
         setProgress(Math.round(((i + 1) / images.length) * 100));
         const image = images[i];
-        const canvas = composeImage(image.raster, {
-          targetWidth: imgWidth,
-          targetHeight: imgHeight,
-          background,
-          maintainAspectRatio: imgMaintainRatio,
-          useOriginalSize: imgSizeMode === "original",
-        });
+        const canvas = await buildCanvas(image, format, imgScale);
         const blob = await encodeCanvas(canvas, format, imgQuality);
         const fileName = `${image.customName || "image"}.${info.ext}`;
         saveAs(blob, fileName);
@@ -1199,6 +1214,51 @@ const ImageConverter: React.FC = () => {
       setProgress(100);
     }
   };
+
+  // Пересчёт оценки веса результата (по первому изображению) при
+  // изменении настроек растрового экспорта.
+  useEffect(() => {
+    if (outputFormat === "pdf" || images.length === 0) {
+      setSizeEstimate(null);
+      return;
+    }
+    const format = outputFormat as ImageFormat;
+    const image = images[0];
+    let cancelled = false;
+    setEstimating(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const fullCanvas = await buildCanvas(image, format, 100);
+        const fullBlob = await encodeCanvas(fullCanvas, format, 1);
+        const curCanvas = await buildCanvas(image, format, imgScale);
+        const curBlob = await encodeCanvas(curCanvas, format, imgQuality);
+        if (!cancelled) {
+          setSizeEstimate({ full: fullBlob.size, current: curBlob.size });
+        }
+      } catch {
+        if (!cancelled) setSizeEstimate(null);
+      } finally {
+        if (!cancelled) setEstimating(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    outputFormat,
+    images,
+    imgSizeMode,
+    imgWidth,
+    imgHeight,
+    imgMaintainRatio,
+    imgBackground,
+    imgScale,
+    imgQuality,
+  ]);
 
   // Единая точка запуска конвертации по выбранному формату.
   const handleConvert = () => {
@@ -1515,48 +1575,58 @@ const ImageConverter: React.FC = () => {
                 </div>
 
                 <div className="settings-section">
-                  <h4>Фон и качество</h4>
-                  <div className="settings-grid">
-                    <div className="setting-item">
-                      <label>Фон</label>
-                      <div className="bg-controls">
-                        <input
-                          type="color"
-                          value={
+                  <h4>Фон</h4>
+                  <div className="bg-controls">
+                    <input
+                      type="color"
+                      value={
+                        imgBackground === "transparent"
+                          ? "#ffffff"
+                          : imgBackground
+                      }
+                      disabled={imgBackground === "transparent"}
+                      onChange={(e) => setImgBackground(e.target.value)}
+                      className="color-picker"
+                    />
+                    <input
+                      type="text"
+                      className="bg-hex-input"
+                      value={imgBackground}
+                      onChange={(e) => setImgBackground(e.target.value)}
+                      placeholder="#ffffff"
+                    />
+                    {getFormatInfo(outputFormat as ImageFormat).alpha && (
+                      <button
+                        type="button"
+                        className={`transparent-btn ${
+                          imgBackground === "transparent" ? "active" : ""
+                        }`}
+                        onClick={() =>
+                          setImgBackground(
                             imgBackground === "transparent"
                               ? "#ffffff"
-                              : imgBackground
-                          }
-                          disabled={imgBackground === "transparent"}
-                          onChange={(e) => setImgBackground(e.target.value)}
-                          className="color-picker"
-                        />
-                        {getFormatInfo(outputFormat as ImageFormat).alpha && (
-                          <button
-                            className={`layout-btn ${
-                              imgBackground === "transparent" ? "active" : ""
-                            }`}
-                            onClick={() =>
-                              setImgBackground(
-                                imgBackground === "transparent"
-                                  ? "#ffffff"
-                                  : "transparent",
-                              )
-                            }
-                          >
-                            Прозрачный
-                          </button>
-                        )}
-                      </div>
-                      {!getFormatInfo(outputFormat as ImageFormat).alpha && (
-                        <small className="setting-hint">
-                          {getFormatInfo(outputFormat as ImageFormat).label} не
-                          поддерживает прозрачность
-                        </small>
-                      )}
-                    </div>
+                              : "transparent",
+                          )
+                        }
+                        title="Прозрачный фон"
+                      >
+                        <span className="checker-swatch" />
+                        Прозрачный
+                      </button>
+                    )}
+                  </div>
+                  {!getFormatInfo(outputFormat as ImageFormat).alpha && (
+                    <small className="setting-hint">
+                      {getFormatInfo(outputFormat as ImageFormat).label} не
+                      поддерживает прозрачность — используется сплошной фон
+                    </small>
+                  )}
+                </div>
 
-                    {getFormatInfo(outputFormat as ImageFormat).quality && (
+                <div className="settings-section">
+                  <h4>Сжатие и вес</h4>
+                  <div className="settings-grid">
+                    {getFormatInfo(outputFormat as ImageFormat).quality ? (
                       <div className="setting-item">
                         <label>Качество: {Math.round(imgQuality * 100)}%</label>
                         <input
@@ -1569,8 +1639,75 @@ const ImageConverter: React.FC = () => {
                           }
                         />
                       </div>
+                    ) : (
+                      <div className="setting-item">
+                        <label>Разрешение: {imgScale}%</label>
+                        <input
+                          type="range"
+                          min={10}
+                          max={100}
+                          value={imgScale}
+                          onChange={(e) => setImgScale(Number(e.target.value))}
+                        />
+                        <small className="setting-hint">
+                          Уменьшает вес за счёт размера. Прозрачность
+                          сохраняется.
+                        </small>
+                      </div>
+                    )}
+                    {getFormatInfo(outputFormat as ImageFormat).quality && (
+                      <div className="setting-item">
+                        <label>Разрешение: {imgScale}%</label>
+                        <input
+                          type="range"
+                          min={10}
+                          max={100}
+                          value={imgScale}
+                          onChange={(e) => setImgScale(Number(e.target.value))}
+                        />
+                      </div>
                     )}
                   </div>
+
+                  {/* Живая оценка веса результата */}
+                  <div className="size-estimate">
+                    {estimating ? (
+                      <span className="size-estimate__loading">
+                        Расчёт веса…
+                      </span>
+                    ) : sizeEstimate ? (
+                      (() => {
+                        const saved =
+                          sizeEstimate.full > 0
+                            ? Math.round(
+                                (1 - sizeEstimate.current / sizeEstimate.full) *
+                                  100,
+                              )
+                            : 0;
+                        return (
+                          <>
+                            <span className="size-estimate__label">
+                              Примерный вес (1-е изображение):
+                            </span>
+                            <span className="size-estimate__value">
+                              {formatFileSize(sizeEstimate.current)}
+                            </span>
+                            {saved > 0 && (
+                              <span className="size-estimate__saved">
+                                −{saved}% от максимума (
+                                {formatFileSize(sizeEstimate.full)})
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()
+                    ) : (
+                      <span className="size-estimate__loading">
+                        Добавьте изображение для оценки веса
+                      </span>
+                    )}
+                  </div>
+
                   {outputFormat === "ico" && (
                     <small className="setting-hint">
                       ICO создаётся квадратным, до 256×256 px

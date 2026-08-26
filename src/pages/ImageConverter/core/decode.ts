@@ -24,6 +24,12 @@ export interface DecodedRaster {
   height: number;
   /** Имя для отображения/скачивания (без расширения). */
   name: string;
+  /**
+   * Исходный SVG-код, если источник векторный. Позволяет при экспорте
+   * рендерить SVG сразу в целевом разрешении (без потери чёткости),
+   * а не масштабировать заранее растеризованный битмап.
+   */
+  svgCode?: string;
 }
 
 /** Тип, к которому мы свели входной файл. */
@@ -141,10 +147,55 @@ export async function decodeSvgCode(
     const w = (img.naturalWidth || width) * scale;
     const h = (img.naturalHeight || height) * scale;
     const canvas = imageToCanvas(img, w, h);
-    return { canvas, width: canvas.width, height: canvas.height, name: targetName };
+    return {
+      canvas,
+      width: canvas.width,
+      height: canvas.height,
+      name: targetName,
+      svgCode,
+    };
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/**
+ * Загружает SVG-код как <img> (вектор). drawImage такого источника
+ * рендерит SVG в целевом размере отрисовки — чётко на любом разрешении.
+ */
+/**
+ * Гарантирует, что корневой <svg> имеет явные width/height. Без этого
+ * некоторые браузеры считают intrinsic-размер нулевым, и drawImage такого
+ * источника ничего не рисует.
+ */
+function ensureSvgHasSize(svgCode: string): string {
+  try {
+    const doc = new DOMParser().parseFromString(svgCode, "image/svg+xml");
+    const el = doc.querySelector("svg");
+    if (!el) return svgCode;
+    const hasW = el.getAttribute("width");
+    const hasH = el.getAttribute("height");
+    if (hasW && hasH) return svgCode;
+    const { width, height } = getSvgIntrinsicSize(svgCode);
+    if (!hasW) el.setAttribute("width", String(width));
+    if (!hasH) el.setAttribute("height", String(height));
+    return new XMLSerializer().serializeToString(el);
+  } catch {
+    return svgCode;
+  }
+}
+
+export async function loadSvgImage(svgCode: string): Promise<HTMLImageElement> {
+  const normalized = ensureSvgHasSize(svgCode);
+  const blob = new Blob([normalized], {
+    type: "image/svg+xml;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const img = await loadImageEl(url);
+  // SVG может дорастеризовываться при drawImage, поэтому отзываем URL
+  // с задержкой, а не сразу после загрузки.
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return img;
 }
 
 async function decodeRasterFile(file: File): Promise<DecodedRaster[]> {
