@@ -1260,6 +1260,15 @@ const ImageConverter: React.FC = () => {
     imgQuality,
   ]);
 
+  // Смена выходного формата. Превью актуально только для PDF —
+  // при уходе с PDF закрываем панель предпросмотра.
+  const changeOutputFormat = (format: OutputFormat) => {
+    setOutputFormat(format);
+    if (format !== "pdf") {
+      setShowPreview(false);
+    }
+  };
+
   // Единая точка запуска конвертации по выбранному формату.
   const handleConvert = () => {
     if (outputFormat === "pdf") {
@@ -1392,7 +1401,7 @@ const ImageConverter: React.FC = () => {
           <div className="output-format-options">
             <button
               className={`format-chip ${outputFormat === "pdf" ? "active" : ""}`}
-              onClick={() => setOutputFormat("pdf")}
+              onClick={() => changeOutputFormat("pdf")}
             >
               📄 PDF
             </button>
@@ -1410,7 +1419,7 @@ const ImageConverter: React.FC = () => {
                       ? "WebP-кодирование не поддерживается этим браузером"
                       : undefined
                   }
-                  onClick={() => setOutputFormat(f.id)}
+                  onClick={() => changeOutputFormat(f.id)}
                 >
                   🖼️ {f.label}
                 </button>
@@ -1458,7 +1467,7 @@ const ImageConverter: React.FC = () => {
             </div>
 
             {/* Предпросмотр */}
-            {showPreview && (
+            {showPreview && outputFormat === "pdf" && (
               <div className="preview-panel">
                 <div className="preview-header">
                   <h3>Предпросмотр PDF</h3>
@@ -1584,9 +1593,9 @@ const ImageConverter: React.FC = () => {
                           ? "#ffffff"
                           : imgBackground
                       }
-                      disabled={imgBackground === "transparent"}
                       onChange={(e) => setImgBackground(e.target.value)}
                       className="color-picker"
+                      title="Выбрать цвет фона"
                     />
                     <input
                       type="text"
