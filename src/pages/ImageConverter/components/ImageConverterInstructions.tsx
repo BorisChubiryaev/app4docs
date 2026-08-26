@@ -1,28 +1,46 @@
 import React from "react";
 import InstructionsModal from "../../../components/InstructionsModal";
 
-interface JpgToPdfInstructionsProps {
+interface ImageConverterInstructionsProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const JpgToPdfInstructions: React.FC<JpgToPdfInstructionsProps> = ({
+const ImageConverterInstructions: React.FC<ImageConverterInstructionsProps> = ({
   isOpen,
   onClose,
 }) => (
   <InstructionsModal
     isOpen={isOpen}
     onClose={onClose}
-    title="📚 Инструкция по использованию JPG/PDF конвертера"
+    title="📚 Инструкция по универсальному конвертеру"
     footerLabel="Понятно! Начать работу!"
     maxWidth={820}
   >
     <div className="instructions-section">
       <h3>🎯 Назначение инструмента</h3>
       <p>
-        Конвертер позволяет преобразовывать изображения (JPG, PNG, GIF, BMP,
-        WebP, TIFF) в PDF документы с гибкой настройкой компоновки, текстовых
-        элементов и нумерации страниц.
+        Универсальный конвертер преобразует изображения любых популярных
+        форматов — <strong>SVG, PNG, JPG, WebP, GIF, BMP, PDF и PSD</strong>{" "}
+        (Photoshop) — в <strong>PNG, JPEG, WebP, BMP, ICO</strong> или{" "}
+        <strong>PDF</strong>. Всё выполняется прямо в браузере: файлы никуда не
+        загружаются, интернет и сервер не нужны.
+      </p>
+      <p>
+        <strong>Выберите формат вывода</strong> в панели «Конвертировать в».
+        Для PDF доступна гибкая компоновка (сетка, нумерация, подписи), для
+        растровых форматов — настройка размера, фона и качества.
+      </p>
+      <p>
+        Можно также <strong>вставить SVG-код</strong> напрямую — кнопка «📝
+        Вставить SVG-код» в области загрузки.
+      </p>
+      <p>
+        <strong>Формат ICO</strong> собирает целый{" "}
+        <strong>пакет иконок</strong> в один ZIP: многоразмерный{" "}
+        <code>favicon.ico</code> для приложений и ярлыков, веб-фавиконки,
+        apple-touch-icon, иконки Android/PWA и плитку Windows. Отметьте нужные
+        наборы и, при желании, добавьте свои размеры.
       </p>
     </div>
 
@@ -42,8 +60,9 @@ const JpgToPdfInstructions: React.FC<JpgToPdfInstructionsProps> = ({
         </li>
       </ul>
       <p>
-        <strong>Поддерживаемые форматы:</strong> JPG, JPEG, PNG, GIF, BMP, WebP,
-        TIFF
+        <strong>Поддерживаемые форматы ввода:</strong> SVG, PNG, JPG, JPEG, GIF,
+        BMP, WebP, PDF (постранично) и PSD (Adobe Photoshop, сведённое
+        изображение)
       </p>
     </div>
 
@@ -289,4 +308,4 @@ const JpgToPdfInstructions: React.FC<JpgToPdfInstructionsProps> = ({
   </InstructionsModal>
 );
 
-export default JpgToPdfInstructions;
+export default ImageConverterInstructions;

@@ -230,15 +230,17 @@ const tools: Tool[] = [
     ],
   },
   {
-    title: "SVG в PNG/JPEG Конвертер",
-    path: "/Svg2Png",
+    title: "Универсальный конвертер изображений",
+    path: "/ImageConverter",
     description:
-      "Быстрая конвертация SVG изображений в PNG формат с настройками",
+      "SVG, PNG, JPG, WebP, GIF, BMP, PDF, PSD → PNG, JPEG, WebP, BMP, ICO или PDF — прямо в браузере",
     icon: "🖼️",
     features: [
-      "Точная настройка ширины и высоты",
-      "Прозрачный фон или заливка цветом",
-      "Сохранение пропорций изображения",
+      "Форматы дизайнеров: SVG, PDF, PSD на вход",
+      "Экспорт в PNG, JPEG, WebP, BMP, ICO и PDF",
+      "Сборка PDF: сетка, нумерация, подписи, порядок",
+      "Настройка размера, фона и качества",
+      "Полностью офлайн — без сервера и интернета",
     ],
   },
   {
@@ -290,20 +292,6 @@ const tools: Tool[] = [
       "Пакетная обработка нескольких файлов",
     ],
     note: "Не подходит для документов со сложными таблицами",
-  },
-  {
-    title: "JPG в PDF",
-    path: "/JpgToPdfPage",
-    description:
-      "Конвертируйте изображения в PDF прямо в браузере — быстро и конфиденциально",
-    icon: "🖼️",
-    features: [
-      "Поддержка JPG, PNG, WebP, GIF, BMP, TIFF",
-      "Одиночный режим и сетка на странице",
-      "Настройка отступов, качества и ориентации",
-      "Drag & Drop сортировка изображений",
-      "Нумерация страниц и подписи к фото",
-    ],
   },
   {
     title: "Объединение изменений в Оферту - 🆕",
@@ -798,6 +786,7 @@ const MENU_ART = {
   "/WorkplaceCompare": WorkplaceCompareArt,
   "/compare": CompareDocsArt,
   "/htmlToExcel": HtmlToExcelArt,
+  "/ImageConverter": Svg2PngArt,
   "/Svg2Png": Svg2PngArt,
   "/PdfEditor": PdfStudioArt,
   "/ExcelTableBuilder": GrouperArt,
