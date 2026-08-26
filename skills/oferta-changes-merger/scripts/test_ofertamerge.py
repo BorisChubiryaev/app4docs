@@ -39,10 +39,17 @@ def table(rows: list[list[str]]) -> str:
 
 
 NUMBERING = (
-    '<w:numbering><w:num w:numId="13"><w:abstractNumId w:val="20"/></w:num>'
+    '<w:numbering>'
+    '<w:num w:numId="13"><w:abstractNumId w:val="20"/></w:num>'
+    '<w:num w:numId="27"><w:abstractNumId w:val="12"/></w:num>'
+    # Обычный список: номер собирается из счётчиков уровней.
     '<w:abstractNum w:abstractNumId="20">'
-    '<w:lvl w:ilvl="0"><w:start w:val="1"/></w:lvl>'
-    '<w:lvl w:ilvl="1"><w:start w:val="1"/></w:lvl>'
+    '<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl>'
+    '<w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1.%2."/></w:lvl>'
+    "</w:abstractNum>"
+    # Список раздела 7: цифра раздела ЗАШИТА в шаблон, %1 — счётчик пункта.
+    '<w:abstractNum w:abstractNumId="12">'
+    '<w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="7.%1"/></w:lvl>'
     "</w:abstractNum></w:numbering>"
 )
 
@@ -92,7 +99,24 @@ class NumberingTests(unittest.TestCase):
     def test_auto_numbers_are_reconstructed(self) -> None:
         doc = "<w:document><w:body>" + para("Первый", "13") + para("Второй", "13") + "</w:body></w:document>"
         index = om.index_paragraphs(doc, NUMBERING)
-        self.assertEqual([p.number for p in index], ["1.1", "1.2"])
+        self.assertEqual([om.norm_number(p.number or "") for p in index], ["1.1", "1.2"])
+
+    def test_section_number_hardcoded_in_lvltext_is_honoured(self) -> None:
+        """Шаблон «7.%1» даёт «7.6», а не «6».
+
+        Из-за игнорирования w:lvlText пункты разделов 4–9 не находились —
+        реконструкция выдавала голый счётчик.
+        """
+        doc = "<w:document><w:body>" + "".join(
+            para(f"Пункт {i}", "27", ilvl=0) for i in range(1, 7)
+        ) + "</w:body></w:document>"
+        index = om.index_paragraphs(doc, NUMBERING)
+        self.assertEqual([p.number for p in index][-1], "7.6")
+        self.assertIsNotNone(om.find_by_number(index, "7.6", 0))
+
+    def test_letter_and_roman_formats(self) -> None:
+        self.assertEqual(om.format_counter(3, "lowerLetter"), "c")
+        self.assertEqual(om.format_counter(4, "upperRoman"), "IV")
 
 
 class InsertAfterAnchorTests(unittest.TestCase):
@@ -106,6 +130,14 @@ class InsertAfterAnchorTests(unittest.TestCase):
         _, ok, msg = om.insert_after_anchor("<w:p><w:r><w:t>текст</w:t></w:r></w:p>", "нет такого", "<w:r/>")
         self.assertFalse(ok)
         self.assertIn("не найден", msg)
+
+    def test_near_miss_anchor_reports_actual_wording(self) -> None:
+        """Опечатка в якоре не подгоняется молча, но подсказка выдаётся."""
+        xml = '<w:p><w:r><w:t>Расчет скоринговой оценки, далее по тексту</w:t></w:r></w:p>'
+        _, ok, msg = om.insert_after_anchor(xml, "«Расчет скоринговой оценка»", "<w:r/>")
+        self.assertFalse(ok)
+        self.assertIn("в документе на этом месте", msg)
+        self.assertIn("оценки", msg)
 
 
 class TableOperationTests(unittest.TestCase):

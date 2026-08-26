@@ -217,25 +217,108 @@ class NumberedPara:
     number: str | None
 
 
-def parse_numbering(numbering: str | None) -> tuple[dict[str, str], dict[str, dict[int, int]]]:
+def _roman(n: int) -> str:
+    vals = ((1000, "m"), (900, "cm"), (500, "d"), (400, "cd"), (100, "c"), (90, "xc"),
+            (50, "l"), (40, "xl"), (10, "x"), (9, "ix"), (5, "v"), (4, "iv"), (1, "i"))
+    out = []
+    for v, sym in vals:
+        while n >= v:
+            out.append(sym)
+            n -= v
+    return "".join(out)
+
+
+def _letter(n: int) -> str:
+    out = ""
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        out = chr(ord("a") + rem) + out
+    return out
+
+
+def format_counter(value: int, fmt: str) -> str:
+    if fmt == "lowerLetter":
+        return _letter(value)
+    if fmt == "upperLetter":
+        return _letter(value).upper()
+    if fmt == "lowerRoman":
+        return _roman(value)
+    if fmt == "upperRoman":
+        return _roman(value).upper()
+    return str(value)
+
+
+@dataclass
+class LevelDef:
+    start: int = 1
+    fmt: str = "decimal"
+    text: str = ""
+
+
+def parse_numbering(numbering: str | None) -> tuple[dict[str, str], dict[str, dict[int, LevelDef]], dict[str, dict[int, int]]]:
+    """Разобрать numbering.xml.
+
+    Возвращает: numId -> abstractId, abstractId -> уровни, numId -> startOverride.
+    Уровень хранит шаблон w:lvlText: именно он задаёт вид номера. Например у
+    списка раздела 7 шаблон «7.%1» — цифра раздела ЗАШИТА в шаблон, а %1 это
+    счётчик пункта. Склеивать счётчики уровней нельзя: получится «6» вместо
+    «7.6», и пункт не найдётся.
+    """
     num_to_abstract: dict[str, str] = {}
-    starts: dict[str, dict[int, int]] = {}
+    levels: dict[str, dict[int, LevelDef]] = {}
+    overrides: dict[str, dict[int, int]] = {}
     if not numbering:
-        return num_to_abstract, starts
-    for m in re.finditer(r'<w:num\s+w:numId="(\d+)"[^>]*>.*?<w:abstractNumId\s+w:val="(\d+)"', numbering, re.S):
-        num_to_abstract[m.group(1)] = m.group(2)
+        return num_to_abstract, levels, overrides
+
+    for m in re.finditer(r"<w:num\s+w:numId=\"(\d+)\".*?</w:num>", numbering, re.S):
+        block = m.group(0)
+        abstract = re.search(r'<w:abstractNumId\s+w:val="(\d+)"', block)
+        if abstract:
+            num_to_abstract[m.group(1)] = abstract.group(1)
+        for ov in re.finditer(r'<w:lvlOverride\s+w:ilvl="(\d+)"(.*?)</w:lvlOverride>', block, re.S):
+            start = re.search(r'<w:startOverride\s+w:val="(\d+)"', ov.group(2))
+            if start:
+                overrides.setdefault(m.group(1), {})[int(ov.group(1))] = int(start.group(1))
+
     for m in re.finditer(r'<w:abstractNum\s+w:abstractNumId="(\d+)".*?</w:abstractNum>', numbering, re.S):
-        levels: dict[int, int] = {}
+        defs: dict[int, LevelDef] = {}
         for lv in re.finditer(r'<w:lvl\s+w:ilvl="(\d+)"[^>]*>(.*?)</w:lvl>', m.group(0), re.S):
-            st = re.search(r'<w:start\s+w:val="(\d+)"', lv.group(2))
-            levels[int(lv.group(1))] = int(st.group(1)) if st else 1
-        starts[m.group(1)] = levels
-    return num_to_abstract, starts
+            body = lv.group(2)
+            start = re.search(r'<w:start\s+w:val="(\d+)"', body)
+            fmt = re.search(r'<w:numFmt\s+w:val="([^"]+)"', body)
+            text = re.search(r'<w:lvlText\s+w:val="([^"]*)"', body)
+            defs[int(lv.group(1))] = LevelDef(
+                start=int(start.group(1)) if start else 1,
+                fmt=fmt.group(1) if fmt else "decimal",
+                text=text.group(1) if text else "",
+            )
+        levels[m.group(1)] = defs
+    return num_to_abstract, levels, overrides
+
+
+def render_number(counters: list[int | None], ilvl: int, defs: dict[int, LevelDef]) -> str | None:
+    """Собрать видимый номер по шаблону w:lvlText уровня."""
+    level = defs.get(ilvl)
+    if level is None:
+        return None
+    if level.fmt in {"bullet", "none"}:
+        return None
+    template = level.text or "".join("%%%d." % (i + 1) for i in range(ilvl + 1))
+
+    def sub(m: re.Match[str]) -> str:
+        idx = int(m.group(1)) - 1
+        if idx < 0 or idx >= len(counters) or counters[idx] is None:
+            src = defs.get(idx)
+            return format_counter(src.start if src else 1, src.fmt if src else "decimal")
+        src = defs.get(idx, LevelDef())
+        return format_counter(counters[idx] or 0, src.fmt)
+
+    return re.sub(r"%(\d)", sub, template).strip()
 
 
 def index_paragraphs(document: str, numbering: str | None) -> list[NumberedPara]:
     """Все абзацы с ВЫЧИСЛЕННЫМИ номерами (в тексте их нет — рисует Word)."""
-    num_to_abstract, starts = parse_numbering(numbering)
+    num_to_abstract, levels, overrides = parse_numbering(numbering)
     counters: dict[str, list[int | None]] = {}
     out: list[NumberedPara] = []
     for m in P_RE.finditer(document):
@@ -246,16 +329,16 @@ def index_paragraphs(document: str, numbering: str | None) -> list[NumberedPara]
         if num_id and "<w:numPr>" in inner and num_id.group(1) != "0":
             nid = num_id.group(1)
             ilvl = int(ilvl_m.group(1)) if ilvl_m else 0
-            abstract = num_to_abstract.get(nid)
-            levels = starts.get(abstract or "", {})
+            defs = levels.get(num_to_abstract.get(nid, ""), {})
+            level = defs.get(ilvl, LevelDef())
+            start = overrides.get(nid, {}).get(ilvl, level.start)
             counter = counters.setdefault(nid, [])
             while len(counter) <= ilvl:
                 counter.append(None)
-            counter[ilvl] = levels.get(ilvl, 1) if counter[ilvl] is None else counter[ilvl] + 1
+            counter[ilvl] = start if counter[ilvl] is None else (counter[ilvl] or 0) + 1
             for k in range(ilvl + 1, len(counter)):
                 counter[k] = None
-            number = ".".join(str(counter[lv] if counter[lv] is not None else levels.get(lv, 1))
-                              for lv in range(ilvl + 1))
+            number = render_number(counter, ilvl, defs)
         out.append(NumberedPara(m.start(), m.end(), inner, visible_text(inner), number))
     return out
 
@@ -388,7 +471,23 @@ def insert_after_anchor(xml: str, anchor: str, new_runs: str) -> tuple[str, bool
     haystack = "".join(c for c, _, _ in flat)
     pos = haystack.find(needle)
     if pos < 0:
-        return xml, False, f"якорь не найден: «{anchor}»"
+        # Подсказка оператору: ищем самый длинный совпадающий префикс якоря и
+        # показываем, что стоит в документе на этом месте. Автоматически
+        # «дотягивать» якорь нельзя — вставка ушла бы не туда.
+        hint = ""
+        plain = "".join(tok[3] for tok in tokens)
+        for frac in (0.85, 0.7, 0.55, 0.4):
+            probe = needle[: max(12, int(len(needle) * frac))]
+            if len(probe) < 12:
+                break
+            at = haystack.find(probe)
+            if at >= 0:
+                _, hti, hoi = flat[at]
+                offset = sum(len(tokens[k][3]) for k in range(hti)) + hoi
+                snippet = re.sub(r"\s+", " ", plain[offset: offset + len(anchor) + 24]).strip()
+                hint = f"; в документе на этом месте: «{snippet}»"
+                break
+        return xml, False, f"якорь не найден: «{anchor}»{hint}"
 
     _, ti, oi = flat[pos + len(needle) - 1]
     start, end, full, text, rpr, simple = tokens[ti]  # type: ignore[misc]
@@ -543,11 +642,14 @@ def locate_replace_paragraph(state: State, op: dict[str, Any]) -> NumberedPara |
 
 
 def locate_point_insertion(state: State, point: str) -> tuple[NumberedPara, str] | None:
+    """Место для нового пункта: перед пунктом X, либо после предыдущего.
+
+    Поиск ведётся по всему документу в порядке следования. Привязку к номеру
+    раздела не используем: короткие номера вроде «4» неоднозначны — такой же
+    номер может встретиться в списке приложения ПОЗЖЕ цели и увести поиск.
+    """
     index = index_paragraphs(state.document, state.numbering)
-    section = norm_number(point).split(".")[0]
-    head = find_by_number(index, section, 0) if section else None
-    from_offset = head.start if head else 0
-    exact = find_by_number(index, point, from_offset)
+    exact = find_by_number(index, point, 0)
     if exact:
         return exact, "before"
     parts = [int(x) for x in norm_number(point).split(".") if x.isdigit()]
@@ -555,7 +657,7 @@ def locate_point_insertion(state: State, point: str) -> tuple[NumberedPara, str]
         return None
     for prev in range(parts[-1] - 1, 0, -1):
         cand = ".".join(str(x) for x in parts[:-1] + [prev])
-        found = find_by_number(index, cand, from_offset)
+        found = find_by_number(index, cand, 0)
         if found:
             return found, "after"
     return None
@@ -671,7 +773,7 @@ def apply_operation(op: dict[str, Any], state: State, color: str) -> OpResult:
         ref_run = '<w:r>%s<w:footnoteReference w:id="%d"/></w:r>' % (rpr, new_id)
         xml, ok, msg = insert_after_anchor(state.document, anchor, ref_run)
         if not ok:
-            return _fail(op_id, f"якорь «{anchor}» для сноски не найден")
+            return _fail(op_id, f"сноска не добавлена — {msg}")
         state.document = xml
         element = (
             '<w:footnote w:id="%d"><w:p><w:pPr><w:pStyle w:val="af2"/><w:jc w:val="both"/></w:pPr>'
@@ -994,8 +1096,24 @@ def cmd_inspect(args: argparse.Namespace) -> int:
                 "real_vmerge": has_real_vmerge(table.inner),
                 "items": listed if args.full else listed[:15],
             }
+    if args.point:
+        # Точечная проверка: существует ли пункт и что в нём.
+        found = find_by_number(index, args.point, 0)
+        result["point_lookup"] = {
+            "requested": args.point,
+            "found": bool(found),
+            "text": found.text[:200] if found else None,
+        }
     if args.points:
-        result["points"] = numbered if args.full else numbered[:40]
+        shown = numbered if args.full else numbered[:40]
+        result["points"] = shown
+        if len(shown) < len(numbered):
+            # ЯВНО сообщаем об усечении: иначе легко заключить, что пункта нет.
+            result["points_truncated"] = {
+                "shown": len(shown),
+                "total": len(numbered),
+                "hint": "показана часть списка; используйте --full или --point <номер>",
+            }
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
@@ -1251,6 +1369,7 @@ def build_parser() -> argparse.ArgumentParser:
     ins.add_argument("--appendix")
     ins.add_argument("--name-column", type=int, default=1)
     ins.add_argument("--points", action="store_true")
+    ins.add_argument("--point", help="проверить конкретный номер пункта, напр. 7.6")
     ins.add_argument("--full", action="store_true")
     ins.set_defaults(func=cmd_inspect)
 
