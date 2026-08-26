@@ -30,3 +30,7 @@ excelapp.zip
 unit-app-light.zip
 package-lock.json
 node_modules_gen
+
+# python
+__pycache__/
+*.pyc
