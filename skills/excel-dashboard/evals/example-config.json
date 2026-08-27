@@ -1,0 +1,28 @@
+{
+  "title": "Продажи 2025",
+  "subtitle": "1 200 сделок · январь–декабрь 2025",
+  "filters": [
+    {"column": "Дата"},
+    {"column": "Регион"},
+    {"column": "Категория"},
+    {"column": "Канал"},
+    {"column": "Выручка", "type": "range"}
+  ],
+  "kpis": [
+    {"label": "Выручка", "column": "Выручка", "agg": "sum", "format": "money"},
+    {"label": "Прибыль", "column": "Прибыль", "agg": "sum", "format": "money"},
+    {"label": "Сделок", "agg": "count"},
+    {"label": "Средний чек", "column": "Выручка", "agg": "avg", "format": "money"},
+    {"label": "Штук продано", "column": "Количество", "agg": "sum", "format": "int"}
+  ],
+  "charts": [
+    {"type": "line", "title": "Динамика выручки по месяцам", "dimension": "Дата", "bucket": "month", "measure": "Выручка", "agg": "sum", "span": 8, "format": "money"},
+    {"type": "donut", "title": "Структура выручки по каналам", "dimension": "Канал", "measure": "Выручка", "agg": "sum", "span": 4},
+    {"type": "hbar", "title": "Выручка по регионам", "dimension": "Регион", "measure": "Выручка", "agg": "sum", "span": 6, "format": "money"},
+    {"type": "stacked-bar", "title": "Категории по регионам", "dimension": "Регион", "series": "Категория", "measure": "Выручка", "agg": "sum", "span": 6},
+    {"type": "heatmap", "title": "Менеджеры × категории", "dimension": "Менеджер", "series": "Категория", "measure": "Прибыль", "agg": "sum", "span": 7},
+    {"type": "scatter", "title": "Выручка и прибыль сделок", "x": "Выручка", "y": "Прибыль", "series": "Категория", "span": 5},
+    {"type": "histogram", "title": "Распределение чека", "column": "Выручка", "span": 5},
+    {"type": "table", "title": "Сделки", "columns": ["Дата", "Регион", "Категория", "Менеджер", "Количество", "Выручка", "Прибыль"], "sortBy": "Выручка", "span": 7}
+  ]
+}
