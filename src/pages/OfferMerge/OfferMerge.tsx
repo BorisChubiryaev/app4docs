@@ -6,7 +6,7 @@ import { saveAs } from "file-saver";
 import PageShell from "../../components/PageShell";
 import { parseAllChangeDocs, buildOutputs } from "./engine/pipeline";
 import { loadDocx } from "./engine/docx";
-import { previewOperation, type PreviewSnippet } from "./engine/preview";
+import { previewOperations, type PreviewSnippet } from "./engine/preview";
 import type { Operation, HighlightMode } from "./engine/types";
 import "./OfferMerge.css";
 
@@ -28,7 +28,11 @@ const OP_TYPE_LABEL: Record<Operation["type"], string> = {
   replace_table_rows: "изменить строки таблицы",
   sort_table_alpha: "сортировка по алфавиту",
   insert_table_row_alpha: "добавить по алфавиту",
-  delete: "исключить",
+  replace_sentence: "изложить предложение заново",
+  append_sentence: "дополнить предложением",
+  replace_words: "заменить слова",
+  delete_words: "удалить слова",
+  delete_point: "исключить пункт",
   manual: "ручная обработка",
 };
 
@@ -42,7 +46,11 @@ const OP_TYPE_ICON: Record<Operation["type"], string> = {
   replace_table_rows: "▦",
   sort_table_alpha: "🔤",
   insert_table_row_alpha: "🔤",
-  delete: "🗑️",
+  replace_sentence: "✏️",
+  append_sentence: "➕",
+  replace_words: "🔁",
+  delete_words: "🗑️",
+  delete_point: "🗑️",
   manual: "✋",
 };
 
@@ -55,6 +63,8 @@ function targetLabel(op: Operation): string {
       return `Термин${t.point ? ` (п. ${t.point})` : ""}: «${t.term}»`;
     case "point":
       return `Пункт ${t.point}${t.heading ? ` — ${t.heading}` : ""}`;
+    case "preamble":
+      return "Преамбула";
     case "appendix_point":
       return `Приложение №${t.appendix}, п. ${t.point}`;
     case "appendix_table":
@@ -71,6 +81,8 @@ function targetShort(op: Operation): string {
       return `Термин «${t.term}»`;
     case "point":
       return `Пункт ${t.point}`;
+    case "preamble":
+      return "Преамбула";
     case "appendix_point":
       return `Прил. ${t.appendix} · п. ${t.point}`;
     case "appendix_table":
@@ -106,6 +118,7 @@ export default function OfferMerge() {
     document: string;
     footnotes: string | null;
     numbering: string | null;
+    styles: string | null;
   } | null>(null);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
@@ -122,15 +135,12 @@ export default function OfferMerge() {
     [operations, excluded],
   );
 
-  // Предпросмотр «места правки» для каждой операции (пересчитывается при правках).
+  // Предпросмотр: прогоняем движок на включённых правках в том же порядке, что
+  // и при сборке, — карточка показывает ровно то, что окажется в файле.
   const previews = useMemo(() => {
-    const map = new Map<string, PreviewSnippet>();
-    if (!offerParts) return map;
-    for (const op of operations) {
-      map.set(op.id, previewOperation(offerParts.document, offerParts.footnotes, op, offerParts.numbering));
-    }
-    return map;
-  }, [operations, offerParts]);
+    if (!offerParts) return new Map<string, PreviewSnippet>();
+    return previewOperations(offerParts, includedOps);
+  }, [includedOps, offerParts]);
 
   // Доступность этапов для переключения.
   const canReview = operations.length > 0;
@@ -175,7 +185,12 @@ export default function OfferMerge() {
       const bytes = await fileBytes(offer);
       setOfferBytes(bytes);
       const parts = await loadDocx(bytes);
-      setOfferParts({ document: parts.document, footnotes: parts.footnotes, numbering: parts.numbering });
+      setOfferParts({
+        document: parts.document,
+        footnotes: parts.footnotes,
+        numbering: parts.numbering,
+        styles: parts.styles,
+      });
       const docs = [];
       for (const c of changes) docs.push({ name: c.name, data: await fileBytes(c) });
       const { operations: ops } = await parseAllChangeDocs(docs);
@@ -356,6 +371,7 @@ export default function OfferMerge() {
                 Распознано операций: <b>{operations.length}</b>. Разбор —
                 детерминированный алгоритм, без ИИ и без сети. Проверьте правки,
                 при необходимости отредактируйте текст или отключите ошибочные.
+                <DocSummary operations={operations} previews={previews} />
               </div>
 
               {operations.map((op, i) => (
@@ -606,54 +622,85 @@ function OpCard({
   );
 }
 
+/**
+ * Сводка по каждому загруженному документу «Изменения».
+ *
+ * Без неё легко не заметить, что из одного файла не подхватилась ни одна
+ * правка: в общем списке это выглядит как «просто меньше карточек».
+ */
+function DocSummary({
+  operations,
+  previews,
+}: {
+  operations: Operation[];
+  previews: Map<string, PreviewSnippet>;
+}) {
+  const docs = new Map<string, { total: number; ok: number; manual: number; miss: number }>();
+  for (const op of operations) {
+    const row = docs.get(op.sourceDoc) ?? { total: 0, ok: 0, manual: 0, miss: 0 };
+    row.total++;
+    const pv = previews.get(op.id);
+    if (op.type === "manual") row.manual++;
+    else if (pv && !pv.ok) row.miss++;
+    else row.ok++;
+    docs.set(op.sourceDoc, row);
+  }
+  if (docs.size === 0) return null;
+  return (
+    <ul className="om-docsum">
+      {[...docs.entries()].map(([name, r]) => (
+        <li key={name} className={r.ok === 0 ? "om-docsum__row om-docsum__row--empty" : "om-docsum__row"}>
+          <span className="om-docsum__name">{name}</span>
+          <span className="om-docsum__stats">
+            применится {r.ok} из {r.total}
+            {r.miss ? ` · не найдено мест: ${r.miss}` : ""}
+            {r.manual ? ` · вручную: ${r.manual}` : ""}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function PreviewBlock({ preview }: { preview: PreviewSnippet }) {
   if (preview.kind === "manual") {
     return (
       <div className="om-preview om-preview--manual">
         <span className="om-preview__badge">✋ ручная обработка</span>
-        <span className="om-preview__note">{preview.hit}</span>
+        <span className="om-preview__note">{preview.message}</span>
       </div>
     );
   }
-  if (!preview.ok && preview.kind === "none") {
+  if (!preview.ok) {
     return (
       <div className="om-preview om-preview--miss">
-        <span className="om-preview__badge">
-          {preview.willApply === false ? "⏭ будет пропущено" : "📍 место не найдено"}
-        </span>
-        <span className="om-preview__note">
-          {preview.note ?? "не удалось показать место правки"}
-          {preview.willApply === false
-            ? ""
-            : " — правка всё равно будет применена по указанным данным"}
-        </span>
+        <span className="om-preview__badge">📍 правка не будет применена</span>
+        <span className="om-preview__note">{preview.message}</span>
       </div>
     );
   }
   return (
     <div className="om-preview">
-      <div className="om-preview__label">
-        📍 Предпросмотр места правки{preview.note ? ` · ${preview.note}` : ""}
-      </div>
-      <div className="om-preview__doc">
-        {preview.kind === "replace" ? (
-          <>
-            {preview.removed && <span className="om-old">{preview.removed}</span>}
-            <span className="om-new">{preview.hit}</span>
-          </>
-        ) : preview.kind === "table" ? (
-          <>
-            <span className="om-new">{preview.hit}</span>
-            {preview.after && <span className="om-preview__ctx"> — {preview.after}</span>}
-          </>
-        ) : (
-          <>
-            <span className="om-ctx">{preview.before}</span>
-            <mark className="om-mark">{preview.hit}</mark>
-            <span className="om-ctx">{preview.after}</span>
-          </>
-        )}
-      </div>
+      <div className="om-preview__label">📍 Как будет в документе · {preview.message}</div>
+      {preview.segments && (
+        <div className="om-preview__doc">
+          {preview.segments.map((seg, i) =>
+            seg.mark === "ins" ? (
+              <mark key={i} className="om-mark">
+                {seg.text}
+              </mark>
+            ) : seg.mark === "del" ? (
+              <span key={i} className="om-old">
+                {seg.text}
+              </span>
+            ) : (
+              <span key={i} className="om-ctx">
+                {seg.text}
+              </span>
+            ),
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -673,7 +720,14 @@ function Field({
     <label className="om-field">
       <span>{label}</span>
       {multiline ? (
-        <textarea className="ds-textarea" value={value} rows={2} onChange={(e) => onChange(e.target.value)} />
+        // Юридическая формулировка бывает в 20 строк: поле подстраивается под
+        // текст, иначе оператор проверяет правку через щёлку в три строки.
+        <textarea
+          className="ds-textarea om-textarea"
+          value={value}
+          rows={Math.min(24, Math.max(3, Math.ceil(value.length / 80) + value.split("\n").length))}
+          onChange={(e) => onChange(e.target.value)}
+        />
       ) : (
         <input className="ds-input" value={value} onChange={(e) => onChange(e.target.value)} />
       )}

@@ -3,8 +3,22 @@
 import type { DocxParts } from "./docx";
 import { saveDocx } from "./docx";
 import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
-import { insertAfterAnchor } from "./ooxml";
-import { locateReplaceParagraph, locatePointInsertion } from "./locate";
+import {
+  insertAfterAnchor,
+  replacePhraseRuns,
+  phraseOccurrenceAfter,
+  countPhrase,
+  paragraphText,
+} from "./ooxml";
+import {
+  locateReplaceParagraph,
+  locatePointInsertion,
+  locatePointSpan,
+  locatePointBlock,
+  locateByTextPrefix,
+  appendixOffset,
+} from "./locate";
+import type { ParaSpan } from "./locate";
 import { findAppendixTable, replaceRows, buildRow } from "./tables";
 import {
   sortTableAlphabetically,
@@ -20,7 +34,7 @@ import {
   buildFootnoteElement,
   appendFootnoteElement,
 } from "./footnote-add";
-import { renderInsertRuns, resetInsCounter } from "./render";
+import { renderInsertRuns, renderDeleteRuns, resetInsCounter } from "./render";
 import type { ApplyResult, BuildOptions, Operation } from "./types";
 
 /** Заменить содержимое сноски (все раны) на новый текст, сохранив маркер. */
@@ -77,10 +91,49 @@ function buildParagraphRuns(body: string, termLike: boolean, opts: BuildOptions)
   return renderInsertRuns(body, opts);
 }
 
+/** Раны со ссылками на сноски — их нельзя терять при замене абзаца. */
+function footnoteRefRuns(pXml: string): string {
+  const runs = pXml.match(/<w:r\b[^>]*>[\s\S]*?<\/w:r>/g) ?? [];
+  return runs.filter((r) => /<w:footnoteReference\b/.test(r)).join("");
+}
+
+/** С какого места документа искать цель: пункт приложения — ниже его заголовка. */
+function searchFrom(op: Operation, document: string): number {
+  return op.target.kind === "appendix_point" || op.target.kind === "appendix_table"
+    ? appendixOffset(document, op.target.appendix)
+    : 0;
+}
+
+/** Номер пункта, на который направлена операция (если он есть). */
+function opPoint(op: Operation): string | null {
+  if (op.target.kind === "point" || op.target.kind === "appendix_point") return op.target.point;
+  if (op.target.kind === "term" && op.target.point) return op.target.point;
+  return null;
+}
+
+/**
+ * Разбить текст пункта на предложения.
+ *
+ * Точка в «п. 5.3» или «т.д.» — не конец предложения, поэтому границей
+ * считаем точку, за которой идёт пробел и заглавная буква либо «ёлочка».
+ */
+function sentences(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+(?=[«“(]?[А-ЯЁA-Z])/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+/** Заменить фрагмент документа на новый XML абзаца. */
+function spliceSpan(document: string, span: ParaSpan, rebuilt: string): string {
+  return document.slice(0, span.start) + rebuilt + document.slice(span.end);
+}
+
 export interface ApplyState {
   document: string;
   footnotes: string | null;
   numbering: string | null;
+  styles: string | null;
 }
 
 export function applyOneOp(
@@ -141,11 +194,62 @@ export function applyOneOp(
       return fail(`сноска № ${op.target.number}: якорь «${op.anchor}» не найден ни по номеру, ни по содержимому`);
     }
 
-    // Вставка в тело (пункт, приложение-пункт)
+    // Вставка в тело. Ищем якорь ВНУТРИ целевого пункта: фразы вроде
+    // «и услуг Банка,» встречаются в Оферте многократно, и поиск по всему
+    // документу молча вставил бы все правки в первое попавшееся место.
+    const point = opPoint(op);
+    if (point) {
+      const span = locatePointSpan(state.document, state.numbering, point, state.styles, searchFrom(op, state.document));
+      if (span) {
+        // Уже внесено (повторный прогон, или правка была в предыдущей
+        // редакции) — не дублируем текст. Проверяем именно СВЯЗКУ «якорь +
+        // вставка»: короткая вставка вроде предлога «с» встречается в пункте
+        // где угодно, и проверка по одному payload'у ложно срабатывала.
+        const plain = paragraphText(span.inner).replace(/\s+/g, " ");
+        const already = (op.anchor + " " + op.payload).replace(/[«»\s]+/g, " ").trim();
+        if (already.length > 4 && plain.replace(/[«»\s]+/g, " ").includes(already)) {
+          return {
+            operationId: op.id,
+            ok: true,
+            message: `п. ${point}: текст уже присутствует — правка не требуется`,
+            orderKey: span.start,
+          };
+        }
+        const inside = insertAfterAnchor(span.inner, op.anchor, runs);
+        if (inside.ok) {
+          state.document = spliceSpan(state.document, span, inside.xml);
+          return {
+            operationId: op.id,
+            ok: true,
+            message: `п. ${point}: вставлено после слов «${op.anchor.slice(0, 40)}»`,
+            orderKey: span.start,
+          };
+        }
+      }
+    }
+    // В пункте якоря нет (номера пунктов в разных редакциях расходятся).
+    // Тогда опираемся на содержимое — но только если оно однозначно.
+    const hits = countPhrase(state.document, op.anchor);
+    if (hits === 0)
+      return fail(
+        `якорь «${op.anchor.slice(0, 60)}» не найден${point ? ` ни в п. ${point}, ни в остальном тексте` : ""}`,
+      );
+    if (hits > 1)
+      return fail(
+        `якорь «${op.anchor.slice(0, 40)}» встречается в Оферте ${hits} раз, ` +
+          `а п. ${point ?? "?"} по этому номеру не найден — куда вставлять, определить нельзя`,
+      );
     const res = insertAfterAnchor(state.document, op.anchor, runs);
     if (!res.ok) return fail(res.message);
     state.document = res.xml;
-    return { operationId: op.id, ok: true, message: "вставлено в текст", orderKey: res.orderKey };
+    return {
+      operationId: op.id,
+      ok: true,
+      message: point
+        ? `вставлено по содержимому (пункт с номером ${point} не найден, якорь в тексте единственный)`
+        : "вставлено в текст",
+      orderKey: res.orderKey,
+    };
   }
 
   // ── Замена пункта / термина / пункта приложения ────────────────────
@@ -153,7 +257,19 @@ export function applyOneOp(
     if (op.payload === undefined) return fail("нет текста замены");
     const body = stripLeadingNumber(stripOuterQuotes(op.payload));
     // Цель ищем по НОМЕРУ пункта/имени термина и разделу (а не по новому тексту).
-    const para = locateReplaceParagraph(state.document, state.numbering, op);
+    let byPrefix = false;
+    let para = locateReplaceParagraph(state.document, state.numbering, op, state.styles);
+    if (!para && op.target.kind !== "preamble") {
+      // Номер не нашёлся — пробуем опознать пункт по началу его текста.
+      para = locateByTextPrefix(
+        state.document,
+        state.numbering,
+        body,
+        state.styles,
+        opPoint(op) ?? undefined,
+      );
+      byPrefix = !!para;
+    }
     if (!para) {
       let what = "пункт";
       if (op.target.kind === "term") what = `термин «${op.target.term}»`;
@@ -164,19 +280,30 @@ export function applyOneOp(
     }
 
     const newRuns = buildParagraphRuns(body, op.target.kind === "term", opts);
-    const rebuilt = replaceParagraphRuns(para.inner, newRuns);
-    state.document =
-      state.document.slice(0, para.start) + rebuilt + state.document.slice(para.end);
-    return { operationId: op.id, ok: true, message: "пункт изложен в новой редакции", orderKey: para.start };
+    // Ссылки на сноски живут в ранах абзаца: заменив раны целиком, мы бы
+    // осиротили сноски и сломали их сквозную нумерацию.
+    const keptRefs = footnoteRefRuns(para.inner);
+    const rebuilt = replaceParagraphRuns(para.inner, newRuns + keptRefs);
+    state.document = spliceSpan(state.document, para, rebuilt);
+    return {
+      operationId: op.id,
+      ok: true,
+      message:
+        "пункт изложен в новой редакции" +
+        (byPrefix
+          ? " (пункт с указанным номером не найден — опознан по началу текста, сверьте место правки)"
+          : "") +
+        (keptRefs ? " (ссылки на сноски сохранены — проверьте их уместность)" : ""),
+      orderKey: para.start,
+    };
   }
 
   // ── Добавление НОВОГО пункта (нумерация сдвигается автоматически) ───
   if (op.type === "insert_point") {
     if (op.payload === undefined) return fail("нет текста нового пункта");
-    if (op.target.kind !== "point" && op.target.kind !== "appendix_point")
-      return fail("некорректная цель нового пункта");
-    const point = op.target.point;
-    const loc = locatePointInsertion(state.document, state.numbering, point);
+    const point = opPoint(op);
+    if (!point) return fail("не указан номер нового пункта");
+    const loc = locatePointInsertion(state.document, state.numbering, point, state.styles);
     if (!loc) return fail(`не найдено место для нового пункта ${point} (раздел/соседний пункт)`);
     const body = stripLeadingNumber(stripOuterQuotes(op.payload));
     // Новый абзац наследует стиль/нумерацию (numPr) соседнего пункта — тогда
@@ -206,7 +333,7 @@ export function applyOneOp(
     const point =
       op.target.kind === "point" || op.target.kind === "appendix_point" ? op.target.point : undefined;
     if (point) {
-      const loc = locatePointInsertion(state.document, state.numbering, point);
+      const loc = locatePointInsertion(state.document, state.numbering, point, state.styles);
       if (loc) {
         const res = insertAfterAnchor(loc.span.inner, op.anchor, refRun);
         if (res.ok) {
@@ -381,12 +508,188 @@ export function applyOneOp(
     };
   }
 
+  // ── Изложить первое/последнее предложение пункта ───────────────────
+  if (op.type === "replace_sentence") {
+    if (op.payload === undefined) return fail("нет текста новой редакции предложения");
+    const point = opPoint(op);
+    if (!point) return fail("не указан номер пункта");
+    const block = locatePointBlock(
+      state.document,
+      state.numbering,
+      point,
+      state.styles,
+      searchFrom(op, state.document),
+    );
+    if (block.length === 0) return fail(`пункт ${point} не найден в документе`);
+    const which = op.sentence ?? "last";
+    // Первое предложение — в абзаце-зачине, последнее — в завершающем абзаце
+    // пункта, а он может идти после перечисления.
+    const withText = block.filter((b) => paragraphText(b.inner).trim().length > 0);
+    const span = which === "first" ? withText[0] : withText[withText.length - 1];
+    if (!span) return fail(`пункт ${point} пуст`);
+    const plain = paragraphText(span.inner).replace(/\s+/g, " ").trim();
+    const parts = sentences(plain);
+    if (parts.length === 0) return fail(`пункт ${point} пуст`);
+    const oldSentence = which === "first" ? parts[0] : parts[parts.length - 1];
+    const body = stripLeadingNumber(stripOuterQuotes(op.payload));
+    if (plain.includes(body.trim())) {
+      return {
+        operationId: op.id,
+        ok: true,
+        message: `п. ${point}: новая редакция предложения уже присутствует`,
+        orderKey: span.start,
+      };
+    }
+    const runs = renderDeleteRuns(oldSentence, opts) + renderInsertRuns(" " + body, opts);
+    const res = replacePhraseRuns(span.inner, oldSentence, runs);
+    if (!res.ok)
+      return fail(
+        `п. ${point}: ${which === "first" ? "первое" : "последнее"} предложение не удалось выделить — ${res.message}`,
+      );
+    state.document = spliceSpan(state.document, span, res.xml);
+    return {
+      operationId: op.id,
+      ok: true,
+      message:
+        `п. ${point}: ${which === "first" ? "первое" : "последнее"} предложение изложено в новой редакции` +
+        (block.length > 1 ? ` (пункт из ${block.length} абз., правка в ${which === "first" ? "первом" : "последнем"})` : ""),
+      orderKey: span.start,
+    };
+  }
+
+  // ── Дополнить пункт предложением ───────────────────────────────────
+  if (op.type === "append_sentence") {
+    if (op.payload === undefined) return fail("нет текста предложения");
+    const point = opPoint(op);
+    if (!point) return fail("не указан номер пункта");
+    const block = locatePointBlock(
+      state.document,
+      state.numbering,
+      point,
+      state.styles,
+      searchFrom(op, state.document),
+    );
+    const withText = block.filter((b) => paragraphText(b.inner).trim().length > 0);
+    const span = withText[withText.length - 1];
+    if (!span) return fail(`пункт ${point} не найден в документе`);
+    const body = stripLeadingNumber(stripOuterQuotes(op.payload));
+    const plain = paragraphText(span.inner).replace(/\s+/g, " ");
+    if (plain.includes(body.trim())) {
+      return {
+        operationId: op.id,
+        ok: true,
+        message: `п. ${point}: предложение уже присутствует`,
+        orderKey: span.start,
+      };
+    }
+    const closing = span.inner.lastIndexOf("</w:p>");
+    const rebuilt =
+      span.inner.slice(0, closing) + renderInsertRuns(" " + body, opts) + span.inner.slice(closing);
+    state.document = spliceSpan(state.document, span, rebuilt);
+    return {
+      operationId: op.id,
+      ok: true,
+      message: `п. ${point}: дополнен предложением`,
+      orderKey: span.start,
+    };
+  }
+
+  // ── Заменить / удалить слова внутри пункта ─────────────────────────
+  if (op.type === "replace_words" || op.type === "delete_words") {
+    if (!op.find) return fail("не указано, какие слова менять");
+    const point = opPoint(op);
+    const span = point ? locatePointSpan(state.document, state.numbering, point, state.styles, searchFrom(op, state.document)) : null;
+    if (point && !span) return fail(`пункт ${point} не найден в документе`);
+    const scope = span ? span.inner : state.document;
+    const occurrence = op.anchor ? phraseOccurrenceAfter(scope, op.anchor, op.find) : 0;
+    if (occurrence === null)
+      return fail(`в п. ${point}: слова «${op.find}» после «${op.anchor}» не найдены`);
+    const hits = countPhrase(scope, op.find);
+    if (hits === 0) {
+      // Возможно, правка уже внесена в этой редакции.
+      const replacement = op.payload ? stripOuterQuotes(op.payload) : "";
+      if (replacement && countPhrase(scope, replacement) > 0) {
+        return {
+          operationId: op.id,
+          ok: true,
+          message: `п. ${point}: «${replacement}» уже стоит вместо «${op.find}» — правка не требуется`,
+          orderKey: span ? span.start : 0,
+        };
+      }
+      return fail(`слова «${op.find}» не найдены${point ? ` в п. ${point}` : ""}`);
+    }
+    if (!span && hits > 1)
+      return fail(`слова «${op.find}» встречаются ${hits} раз, а пункт не указан — правка неоднозначна`);
+
+    const del = renderDeleteRuns(op.find, opts);
+    const runs =
+      op.type === "delete_words"
+        ? del
+        : del + renderInsertRuns(stripOuterQuotes(op.payload ?? ""), opts);
+    const res = replacePhraseRuns(scope, op.find, runs, occurrence);
+    if (!res.ok) return fail(res.message);
+    state.document = span ? spliceSpan(state.document, span, res.xml) : res.xml;
+    const many = hits > 1 && span ? ` (в пункте ${hits} вхождений, изменено одно)` : "";
+    return {
+      operationId: op.id,
+      ok: true,
+      message:
+        (op.type === "delete_words"
+          ? `удалены слова «${op.find}»`
+          : `«${op.find}» заменено на «${stripOuterQuotes(op.payload ?? "")}»`) +
+        (point ? ` в п. ${point}` : "") +
+        many,
+      orderKey: span ? span.start : res.orderKey,
+    };
+  }
+
+  // ── Исключить пункт (последующие перенумеровываются) ───────────────
+  if (op.type === "delete_point") {
+    const point = opPoint(op);
+    if (!point) return fail("не указан номер исключаемого пункта");
+    const span = locatePointSpan(state.document, state.numbering, point, state.styles, searchFrom(op, state.document));
+    if (!span) return fail(`пункт ${point} не найден в документе`);
+    const plain = paragraphText(span.inner).replace(/\s+/g, " ").trim();
+    // Снимаем автонумерацию: тогда Word перенумерует последующие пункты, а сам
+    // текст остаётся зачёркнутым — читатель видит, что именно исключено.
+    const pPr = extractPPr(span.inner).replace(/<w:numPr>[\s\S]*?<\/w:numPr>/, "");
+    const openMatch = span.inner.match(/^<w:p(?:\s[^>]*)?>/);
+    const open = openMatch ? openMatch[0] : "<w:p>";
+    const body = stripLeadingNumber(plain);
+    const rebuilt = `${open}${pPr}${renderDeleteRuns(`${point}. ${body}`, opts)}</w:p>`;
+    state.document = spliceSpan(state.document, span, rebuilt);
+    return {
+      operationId: op.id,
+      ok: true,
+      message: `пункт ${point} исключён (зачёркнут, последующие перенумеровываются автоматически)`,
+      orderKey: span.start,
+    };
+  }
+
   // ── Требует ручной обработки ───────────────────────────────────────
   if (op.type === "manual") {
     return fail(`требует ручной обработки: ${op.note ?? op.rawText.slice(0, 80)}`);
   }
 
   return fail(`тип операции не поддержан: ${op.type}`);
+}
+
+/**
+ * Порядок применения операций. Вынесен отдельно, потому что предпросмотр
+ * обязан прогонять операции в ТОМ ЖЕ порядке: иначе оператор увидит одно, а в
+ * файл попадёт другое — ровно та рассинхронизация, из-за которой правка пункта
+ * оказывалась в документе, но не показывалась на шаге «Проверка».
+ */
+export function applicationOrder(operations: Operation[]): number[] {
+  const isNormalizing = (op: Operation) => op.type === "sort_table_alpha";
+  const order: number[] = [];
+  for (let i = 0; i < operations.length; i++) {
+    if (!isNormalizing(operations[i])) order.push(i);
+  }
+  for (let i = 0; i < operations.length; i++) {
+    if (isNormalizing(operations[i])) order.push(i);
+  }
+  return order;
 }
 
 /** Применить набор операций к Оферте, вернуть байты docx и отчёт. */
@@ -400,23 +703,20 @@ export async function applyOperations(
     document: offer.document,
     footnotes: offer.footnotes,
     numbering: offer.numbering,
+    styles: offer.styles,
   };
   const results: ApplyResult[] = [];
   // Порядок применения:
-  //  1) СНИЗУ ВВЕРХ (в обратном порядке следования в документе) — так вставка
-  //     нового пункта/сноски не сдвигает нумерацию ещё не применённых правок,
-  //     расположенных выше по тексту;
+  //  1) В ПОРЯДКЕ ДОКУМЕНТА «Изменения», сверху вниз. Это не косметика:
+  //     инструкции внутри пакета ссылаются на нумерацию, которая получается
+  //     ПОСЛЕ предыдущих инструкций. Документ добавляет п. 7.3 «с последующей
+  //     перенумерацией», и следующая его же строка про «п. 7.6» имеет в виду
+  //     пункт, который до этой вставки был 7.5. Каждая операция ищет цель
+  //     заново в текущем состоянии документа, поэтому сдвиг позиций безопасен;
   //  2) нормализующие операции (алфавитная пересортировка) — В САМОМ КОНЦЕ:
   //     они приводят таблицу в порядок уже ПОСЛЕ всех замен и добавлений
   //     строк, иначе переименованные строки нарушат алфавитный порядок.
-  const isNormalizing = (op: Operation) => op.type === "sort_table_alpha";
-  const order: number[] = [];
-  for (let i = operations.length - 1; i >= 0; i--) {
-    if (!isNormalizing(operations[i])) order.push(i);
-  }
-  for (let i = operations.length - 1; i >= 0; i--) {
-    if (isNormalizing(operations[i])) order.push(i);
-  }
+  const order = applicationOrder(operations);
 
   const slots: (ApplyResult | undefined)[] = new Array(operations.length);
   for (const i of order) {

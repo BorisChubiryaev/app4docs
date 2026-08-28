@@ -12,6 +12,8 @@ export type OpTarget =
   | { kind: "term"; section?: string; point?: string; term: string }
   /** Обычный пункт основного текста (напр. п. 7.6). */
   | { kind: "point"; section?: string; point: string; heading?: string }
+  /** Преамбула Оферты — вводный абзац до раздела 1. */
+  | { kind: "preamble" }
   /** Пункт внутри Приложения (напр. Приложение №2 п. 1.2). */
   | { kind: "appendix_point"; appendix: string; point: string }
   /** Таблица внутри Приложения (напр. таблица п. 3 Приложения №2, либо вся таблица Приложения №1). */
@@ -28,7 +30,11 @@ export type OpType =
   | "replace_table_rows"
   | "sort_table_alpha" // пересортировать таблицу приложения по алфавиту
   | "insert_table_row_alpha" // вставить строку в таблицу по алфавиту
-  | "delete"
+  | "replace_sentence" // изложить первое/последнее предложение пункта
+  | "append_sentence" // дополнить пункт предложением
+  | "replace_words" // заменить слово/фразу внутри пункта
+  | "delete_words" // удалить слова внутри пункта
+  | "delete_point" // исключить пункт (с перенумерацией последующих)
   | "manual"; // распознано, но требует ручной обработки
 
 /** Одна распознанная правка. */
@@ -43,6 +49,10 @@ export interface Operation {
   target: OpTarget;
   /** Якорная фраза «после слов …» (для insert_after). */
   anchor?: string;
+  /** Что искать внутри пункта (для replace_words / delete_words). */
+  find?: string;
+  /** Какое предложение пункта затрагивает правка (для replace_sentence). */
+  sentence?: "first" | "last";
   /** Вставляемый / заменяющий текст (уже без внешних кавычек-ёлочек). */
   payload?: string;
   /** Строки таблицы (для append/replace_table_rows): массив строк, каждая — массив ячеек. */
@@ -57,6 +67,8 @@ export interface Operation {
   note?: string;
   /** Нужна ли последующая перенумерация сносок. */
   renumberFootnotes?: boolean;
+  /** Нужна ли перенумерация последующих пунктов (Word делает её сам). */
+  renumberPoints?: boolean;
   /** Исходный текст инструкции — показывается оператору и попадает в объединённый файл. */
   rawText: string;
   /** Уверенность парсера 0..1 (для сортировки внимания оператора). */

@@ -29,6 +29,29 @@ export function renderInsertRuns(text: string, opts: BuildOptions): string {
   return `<w:ins w:id="${nextInsId()}" w:author="${escapeXml(author)}" w:date="${date}">${run}</w:ins>`;
 }
 
+/**
+ * Удаляемый текст. В юридической правке удаление принято показывать, а не
+ * стирать: читатель должен видеть, что именно ушло из редакции. Поэтому в
+ * режиме цвета текст остаётся зачёркнутым, а в режиме рецензирования
+ * оборачивается в <w:del> (Word покажет его как удаление).
+ */
+export function renderDeleteRuns(text: string, opts: BuildOptions): string {
+  const mode = opts.highlightMode ?? "color";
+  const color = opts.highlightColor ?? "EE0000";
+  const author = opts.author ?? "genOferta";
+  const date = "2026-01-01T00:00:00Z";
+  const rPr = `<w:rPr><w:strike/><w:color w:val="${color}"/></w:rPr>`;
+  if (mode === "color") {
+    return `<w:r>${rPr}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+  }
+  const delRPr = mode === "tracked" ? "" : rPr;
+  return (
+    `<w:del w:id="${nextInsId()}" w:author="${escapeXml(author)}" w:date="${date}">` +
+    `<w:r>${delRPr}<w:delText xml:space="preserve">${escapeXml(text)}</w:delText></w:r>` +
+    `</w:del>`
+  );
+}
+
 /** Свойства выделения для ячеек новых строк таблицы. */
 export function cellRunProps(opts: BuildOptions): string {
   const mode = opts.highlightMode ?? "color";

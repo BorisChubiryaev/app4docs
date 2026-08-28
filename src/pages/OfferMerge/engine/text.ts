@@ -27,6 +27,30 @@ export function paragraphs(documentXml: string): string[] {
 }
 
 /**
+ * Абзацы ВНЕ таблиц. Ячейка таблицы состоит из тех же <w:p>, поэтому обычный
+ * разбор смешивает инструкции с содержимым таблиц: строка «ООО «СберЛогистика»»
+ * попадает в поток инструкций и мешает склейке многоабзацных редакций.
+ */
+export function paragraphsOutsideTables(documentXml: string): string[] {
+  const gaps: { from: number; to: number }[] = [];
+  let t: RegExpExecArray | null;
+  TBL_RE.lastIndex = 0;
+  while ((t = TBL_RE.exec(documentXml)) !== null) {
+    gaps.push({ from: t.index, to: t.index + t[0].length });
+  }
+  const inTable = (pos: number) => gaps.some((g) => pos >= g.from && pos < g.to);
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  P_RE.lastIndex = 0;
+  while ((m = P_RE.exec(documentXml)) !== null) {
+    if (inTable(m.index)) continue;
+    const txt = xmlText(m[0]);
+    if (txt) out.push(txt);
+  }
+  return out;
+}
+
+/**
  * Извлечь содержимое сбалансированных кавычек-«ёлочек», начиная с позиции
  * первого «. Учитывает вложенность («ООО СК «Сбербанк Страхование»»).
  */

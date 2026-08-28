@@ -34,3 +34,4 @@ node_modules_gen
 # python
 __pycache__/
 *.pyc
+scripts/*.mjs

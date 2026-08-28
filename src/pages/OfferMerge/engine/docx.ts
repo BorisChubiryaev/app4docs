@@ -6,6 +6,7 @@ export interface DocxParts {
   document: string; // word/document.xml
   footnotes: string | null; // word/footnotes.xml (может отсутствовать)
   numbering: string | null; // word/numbering.xml (для восстановления нумерации)
+  styles: string | null; // word/styles.xml (нумерация может задаваться стилем)
 }
 
 export async function loadDocx(data: Uint8Array | ArrayBuffer): Promise<DocxParts> {
@@ -15,7 +16,9 @@ export async function loadDocx(data: Uint8Array | ArrayBuffer): Promise<DocxPart
   const footnotes = fnFile ? await fnFile.async("string") : null;
   const nbFile = zip.file("word/numbering.xml");
   const numbering = nbFile ? await nbFile.async("string") : null;
-  return { zip, document, footnotes, numbering };
+  const stFile = zip.file("word/styles.xml");
+  const styles = stFile ? await stFile.async("string") : null;
+  return { zip, document, footnotes, numbering, styles };
 }
 
 /** Записать изменённые части обратно и отдать байты .docx. */
