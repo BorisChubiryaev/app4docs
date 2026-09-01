@@ -52,9 +52,16 @@ function tcPr(tcXml: string): string {
   return m ? m[0] : "";
 }
 
+/** Абзацы ячейки: перевод строки в тексте правки — это отдельный абзац. */
+function cellParagraphs(text: string, opts: BuildOptions): string {
+  const lines = text.split("\n").filter((l) => l.trim() !== "");
+  if (!lines.length) return `<w:p>${renderInsertRuns(text, opts)}</w:p>`;
+  return lines.map((l) => `<w:p>${renderInsertRuns(l, opts)}</w:p>`).join("");
+}
+
 /** Пересобрать <w:tc> с новым текстом (выделенным). */
 function setCell(tcXml: string, text: string, opts: BuildOptions): string {
-  return `<w:tc>${tcPr(tcXml)}<w:p>${renderInsertRuns(text, opts)}</w:p></w:tc>`;
+  return `<w:tc>${tcPr(tcXml)}${cellParagraphs(text, opts)}</w:tc>`;
 }
 
 function rowCells(trXml: string): string[] {
@@ -193,9 +200,7 @@ export function replaceRows(
 
 /** Построить <w:tr> для новой строки (используется при добавлении). */
 export function buildRow(cells: string[], opts: BuildOptions): string {
-  const tcs = cells
-    .map((c) => `<w:tc><w:tcPr/><w:p>${renderInsertRuns(c, opts)}</w:p></w:tc>`)
-    .join("");
+  const tcs = cells.map((c) => `<w:tc><w:tcPr/>${cellParagraphs(c, opts)}</w:tc>`).join("");
   return `<w:tr>${tcs}</w:tr>`;
 }
 

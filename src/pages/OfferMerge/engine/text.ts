@@ -87,7 +87,13 @@ export function tables(documentXml: string): string[][][] {
       const cells: string[] = [];
       const tcRe = /<w:tc>[\s\S]*?<\/w:tc>/g;
       let tc: RegExpExecArray | null;
-      while ((tc = tcRe.exec(tr[0])) !== null) cells.push(xmlText(tc[0]));
+      while ((tc = tcRe.exec(tr[0])) !== null) {
+        // Ячейка нередко состоит из нескольких абзацев — наименование компании
+        // и её сайт. Склеив их подряд, получаем «ООО «Ромашка»https://…»,
+        // поэтому границы абзацев сохраняем переводом строки.
+        const parts = (tc[0].match(P_RE) ?? []).map((x) => xmlText(x)).filter(Boolean);
+        cells.push(parts.length ? parts.join("\n") : xmlText(tc[0]));
+      }
       rows.push(cells);
     }
     result.push(rows);

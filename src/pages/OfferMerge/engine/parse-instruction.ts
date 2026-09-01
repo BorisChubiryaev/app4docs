@@ -116,7 +116,9 @@ interface PointRef {
  */
 function findPoints(text: string): PointRef[] {
   const out: PointRef[] = [];
-  const re = /(?:подпункт[а-яё]*|пункт[а-яё]*|пп\.\s*|п\.\s*)\s*(\d+(?:\.\d+)*)/gi;
+  // Сокращение пишут по-разному: «п. 4.10», «п.4.10», «п 4.10», «пп. 5.1».
+  // Проверка «слева не буква» отсекает случайные «п» внутри слов.
+  const re = /(?:подпункт[а-яё]*|пункт[а-яё]*|(?<![А-Яа-яЁё])пп?\.?\s*)\s*(\d+(?:\.\d+)*)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     out.push({ num: m[1].replace(/\.$/, ""), index: m.index });
@@ -268,7 +270,10 @@ function readSlots(text: string): Slots {
     }
   }
 
-  if (ordinalObject) chosen = ordinalObject;
+  // Творительный падеж сильнее порядкового числительного: во фразе «в конце
+  // второго предложения дополнить словами» дополняем словами, а «второе
+  // предложение» лишь указывает место.
+  if (ordinalObject && !instrumental) chosen = ordinalObject;
 
   // Указатель места учитываем только если за ним идёт кавычка-якорь.
   let position: Position | null = null;
@@ -323,7 +328,7 @@ function insertionPairs(
   // Между указателем места и кавычкой встречается разное — «после слов»,
   // «после фразы», «после цифр», «после слов пункта». Перечислять формы
   // бессмысленно: достаточно короткого промежутка без кавычек.
-  const re = /(после|перед)\s+[^«»]{0,30}(?=«)/gi;
+  const re = /(после|перед)\s+[^«»]{0,40}(?=«)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const anchor = quotes.find((q) => q.start >= m!.index);
@@ -331,7 +336,7 @@ function insertionPairs(
     const rest = text.slice(anchor.end + 1);
     // Так же и после глагола: «дополнить словами», «дополнить фразой»,
     // «дополнить следующими компаниями:» — важно лишь, что дальше идёт кавычка.
-    const verb = rest.match(/^\s*,?\s*(?:дополнить|добавить|включить)\s+[^«»]{0,40}(?=«)/i);
+    const verb = rest.match(/^\s*,?\s*(?:дополнить|добавить|включить)\s+[^«»]{0,90}(?=«)/i);
     if (!verb) continue;
     const payload = quotes.find((q) => q.start > anchor.end);
     if (!payload) continue;
@@ -381,20 +386,26 @@ export function parseInstruction(text: string, ctx: Ctx): Draft[] | null {
     if (s.action === "add" && (s.objectInstrumental || footnoteAdd)) {
       const pair = insertionPairs(text, s.quotes)[0];
       const contentIdx = text.search(/содержания|редакции/i);
+      // Якорь пишут не только через «после слов»: встречается «сноску к словам
+      // «X» дополнить сноской следующего содержания: «Y»». Если пары не нашлось,
+      // но кавычек две — первая это слова-якорь, вторая текст сноски.
       const payload =
         (contentIdx >= 0 ? s.quotes.find((q) => q.start > contentIdx)?.text : undefined) ??
         lastQuote?.text ??
         "";
+      const anchor =
+        pair?.anchor ??
+        (s.quotes.length >= 2 && s.quotes[0].text !== payload ? s.quotes[0].text : "");
       return [
         {
           type: "add_footnote",
           target: firstPoint
             ? targetForPoint(firstPoint, ctx, text)
             : { kind: "point", point: "?" },
-          anchor: pair?.anchor ?? "",
+          anchor,
           payload,
-          confidence: pair && payload ? 0.8 : 0.4,
-          warnings: pair ? undefined : ["не найдены слова-якорь для сноски"],
+          confidence: anchor && payload ? 0.8 : 0.4,
+          warnings: anchor ? undefined : ["не найдены слова-якорь для сноски"],
         },
       ];
     }
@@ -614,6 +625,8 @@ export function parseInstruction(text: string, ctx: Ctx): Draft[] | null {
             type,
             target: targetForPoint(firstPoint, ctx, text),
             payload,
+            // «в конце второго предложения» — дополняем именно его, а не пункт.
+            sentenceIndex: type === "append_sentence" ? (s.ordinal ?? undefined) : undefined,
             confidence: payload ? 0.85 : 0.4,
           },
         ];

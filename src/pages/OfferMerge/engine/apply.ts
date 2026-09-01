@@ -111,6 +111,45 @@ function buildParagraphRuns(body: string, termLike: boolean, opts: BuildOptions)
   return renderInsertRuns(body, opts);
 }
 
+/**
+ * Варианты якорной фразы с усечённым окончанием последнего слова.
+ *
+ * В документах «Изменения» падеж последнего слова нередко расходится с текстом
+ * Оферты — «Расчет скоринговой оценка» против «…оценки». Отбрасывать окончание
+ * можно только у последнего слова и не больше двух букв, а результат
+ * применяется, лишь если он найден ВНУТРИ уже определённого пункта: это
+ * поблажка к грамматике, а не поиск похожего места.
+ */
+function anchorVariants(anchor: string): string[] {
+  const trimmed = anchor.trim();
+  const m = trimmed.match(/([А-Яа-яЁёA-Za-z]{4,})$/);
+  if (!m) return [trimmed];
+  const base = trimmed.slice(0, trimmed.length - m[1].length);
+  return [trimmed, base + m[1].slice(0, -1), base + m[1].slice(0, -2)];
+}
+
+/** Вставка с поблажкой к падежному окончанию якоря. */
+function insertNearAnchor(
+  xml: string,
+  anchor: string,
+  runs: string,
+  before: boolean,
+): { result: InsertLike; usedVariant: string } | null {
+  const insertAt = before ? insertBeforeAnchor : insertAfterAnchor;
+  for (const variant of anchorVariants(anchor)) {
+    const res = insertAt(xml, variant, runs);
+    if (res.ok) return { result: res, usedVariant: variant };
+  }
+  return null;
+}
+
+interface InsertLike {
+  xml: string;
+  ok: boolean;
+  message: string;
+  orderKey: number;
+}
+
 /** Раны со ссылками на сноски — их нельзя терять при замене абзаца. */
 function footnoteRefRuns(pXml: string): string {
   const runs = pXml.match(/<w:r\b[^>]*>[\s\S]*?<\/w:r>/g) ?? [];
@@ -311,14 +350,16 @@ export function applyOneOp(
             orderKey: span.start,
           };
         }
-        const insertAt = op.type === "insert_before" ? insertBeforeAnchor : insertAfterAnchor;
-        const inside = insertAt(span.inner, op.anchor, runs);
-        if (inside.ok) {
-          state.document = spliceSpan(state.document, span, inside.xml);
+        const hit = insertNearAnchor(span.inner, op.anchor, runs, op.type === "insert_before");
+        if (hit) {
+          state.document = spliceSpan(state.document, span, hit.result.xml);
+          const loose = hit.usedVariant !== op.anchor.trim();
           return {
             operationId: op.id,
             ok: true,
-            message: `п. ${point}: вставлено ${op.type === "insert_before" ? "перед" : "после"} слов${op.type === "insert_before" ? "ами" : ""} «${op.anchor.slice(0, 40)}»`,
+            message:
+              `п. ${point}: вставлено ${op.type === "insert_before" ? "перед" : "после"} слов${op.type === "insert_before" ? "ами" : ""} «${op.anchor.slice(0, 40)}»` +
+              (loose ? " (окончание последнего слова в тексте Оферты другое — сверьте место)" : ""),
             orderKey: span.start,
           };
         }
@@ -443,16 +484,27 @@ export function applyOneOp(
     const refRun = buildFootnoteReferenceRun(id, footnoteRefRunRpr(state.document));
     // Вставляем ссылку после якоря — по возможности внутри нужного пункта.
     let inserted = false;
+    let looseAnchor = false;
     const point =
       op.target.kind === "point" || op.target.kind === "appendix_point" ? op.target.point : undefined;
     if (point) {
-      const loc = locatePointInsertion(state.document, state.numbering, point, state.styles);
-      if (loc) {
-        const res = insertAfterAnchor(loc.span.inner, op.anchor, refRun);
-        if (res.ok) {
-          state.document =
-            state.document.slice(0, loc.span.start) + res.xml + state.document.slice(loc.span.end);
+      // Ищем якорь по всему блоку пункта — как и при вставке текста: фраза
+      // нередко лежит в подпункте. Прежде здесь использовался поиск МЕСТА ДЛЯ
+      // НОВОГО пункта, который при отсутствии номера возвращал соседний пункт.
+      const block = locatePointBlock(
+        state.document,
+        state.numbering,
+        point,
+        state.styles,
+        searchFrom(op, state.document),
+      );
+      for (const span of block) {
+        const hit = insertNearAnchor(span.inner, op.anchor, refRun, false);
+        if (hit) {
+          state.document = spliceSpan(state.document, span, hit.result.xml);
           inserted = true;
+          if (hit.usedVariant !== op.anchor.trim()) looseAnchor = true;
+          break;
         }
       }
     }
@@ -466,7 +518,9 @@ export function applyOneOp(
     return {
       operationId: op.id,
       ok: true,
-      message: "добавлена сноска (последующие сноски перенумеруются автоматически)",
+      message:
+        "добавлена сноска (последующие сноски перенумеруются автоматически)" +
+        (looseAnchor ? "; окончание последнего слова якоря в Оферте другое — сверьте место" : ""),
       orderKey: orderKey >= 0 ? orderKey : 0,
     };
   }
@@ -745,6 +799,28 @@ export function applyOneOp(
         operationId: op.id,
         ok: true,
         message: `п. ${point}: предложение уже присутствует`,
+        orderKey: span.start,
+      };
+    }
+    // «В конце второго предложения дополнить словами» — текст идёт в конец
+    // именно этого предложения, а не всего пункта.
+    if (op.sentenceIndex !== undefined) {
+      const parts = sentences(plain.trim());
+      const idx = pickIndex(op.sentenceIndex, parts.length);
+      const target = parts[idx];
+      if (!target) return fail(`в п. ${point} нет предложения № ${op.sentenceIndex}`);
+      const res = replacePhraseRuns(
+        span.inner,
+        target,
+        renderInsertRuns(target, opts).replace(/<w:color w:val="[^"]*"\/>/, "") +
+          renderInsertRuns(body, opts),
+      );
+      if (!res.ok) return fail(`п. ${point}: ${res.message}`);
+      state.document = spliceSpan(state.document, span, res.xml);
+      return {
+        operationId: op.id,
+        ok: true,
+        message: `п. ${point}: ${ordinalWord(op.sentenceIndex)} предложение дополнено`,
         orderKey: span.start,
       };
     }
