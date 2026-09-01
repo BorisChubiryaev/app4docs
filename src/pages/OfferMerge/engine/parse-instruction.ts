@@ -67,7 +67,20 @@ function tidy(s: string): string {
   return s.replace(/\u00A0/g, " ").trim().replace(/\s+/g, " ");
 }
 
-/** Все сбалансированные «…» с позициями. */
+/**
+ * Признак того, что «сбалансированная» кавычка захватила лишнее: внутри неё
+ * оказалась следующая директива. Так бывает из-за опечаток в исходных
+ * документах — «Сноску 32 после слов «ООО СК «Сбербанк Страхование» дополнить»:
+ * внешняя кавычка не закрыта, и сбалансированный разбор проглатывает весь
+ * остаток инструкции вместе с новой редакцией.
+ */
+const SWALLOWED_DIRECTIVE = /(дополнить|добавить|изложить|заменить|исключить|удалить)\s+[^«»]{0,40}«/i;
+
+/**
+ * Кавычки «…» с позициями. Сначала пробуем сбалансированный разбор (он нужен
+ * для вложенных кавычек вроде «(в Системе «Сбербанк Онлайн»)»), а если он
+ * захватил директиву — откатываемся к первой закрывающей кавычке.
+ */
 function allQuotes(text: string): Quote[] {
   const out: Quote[] = [];
   let from = 0;
@@ -76,8 +89,17 @@ function allQuotes(text: string): Quote[] {
     if (open < 0) break;
     const g = extractGuillemet(text, open);
     if (!g) break;
-    out.push({ text: tidy(g.content), start: open, end: g.endIndex });
-    from = g.endIndex + 1;
+    let end = g.endIndex;
+    let content = g.content;
+    if (SWALLOWED_DIRECTIVE.test(content)) {
+      const firstClose = text.indexOf("»", open + 1);
+      if (firstClose > open) {
+        end = firstClose;
+        content = text.slice(open + 1, firstClose);
+      }
+    }
+    out.push({ text: tidy(content), start: open, end });
+    from = end + 1;
   }
   return out;
 }
@@ -298,15 +320,18 @@ function insertionPairs(
   quotes: Quote[],
 ): { position: Position; anchor: string; payload: string }[] {
   const pairs: { position: Position; anchor: string; payload: string }[] = [];
-  const re = /(после|перед)\s+(?:слов[а-яё]*|фраз[а-яё]*|цифр[а-яё]*|числ[а-яё]*|абзац[а-яё]*|пункт[а-яё]*)?\s*(?=«)/gi;
+  // Между указателем места и кавычкой встречается разное — «после слов»,
+  // «после фразы», «после цифр», «после слов пункта». Перечислять формы
+  // бессмысленно: достаточно короткого промежутка без кавычек.
+  const re = /(после|перед)\s+[^«»]{0,30}(?=«)/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const anchor = quotes.find((q) => q.start >= m!.index);
     if (!anchor) continue;
     const rest = text.slice(anchor.end + 1);
-    const verb = rest.match(
-      /^\s*,?\s*(?:дополнить|добавить|включить)\s+(?:слов[а-яё]*|фраз[а-яё]*|формулировк[а-яё]*|предлог[а-яё]*|текст[а-яё]*|цифр[а-яё]*|числ[а-яё]*|абзац[а-яё]*|предложени[а-яё]*)?\s*(?=«)/i,
-    );
+    // Так же и после глагола: «дополнить словами», «дополнить фразой»,
+    // «дополнить следующими компаниями:» — важно лишь, что дальше идёт кавычка.
+    const verb = rest.match(/^\s*,?\s*(?:дополнить|добавить|включить)\s+[^«»]{0,40}(?=«)/i);
     if (!verb) continue;
     const payload = quotes.find((q) => q.start > anchor.end);
     if (!payload) continue;

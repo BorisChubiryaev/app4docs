@@ -10,6 +10,7 @@
 //   npx esbuild scripts/parser-corpus.ts --bundle --platform=node --format=esm \
 //     --outfile=scripts/parser-corpus.mjs && node scripts/parser-corpus.mjs
 import { parseInstruction, type Ctx } from "../src/pages/OfferMerge/engine/parse-instruction";
+import { parseInstructionsOffline } from "../src/pages/OfferMerge/engine/offline";
 import type { OpType } from "../src/pages/OfferMerge/engine/types";
 
 interface Case {
@@ -223,6 +224,79 @@ const CASES: Case[] = [
   // Не правки — не должны попадать в список операций.
   { text: "Настоящие Изменения вступают в силу через 10 рабочих дней.", expect: [] },
   { text: "Внести в Приложение № 7 «Публичная оферта» следующие изменения:", expect: [] },
+  // ── случаи из первых документов «Изменения»: незакрытые кавычки и
+  //    формулировки, которых нет в поздних документах ─────────────────────────
+
+  // В исходном документе внешняя кавычка якоря не закрыта. Сбалансированный
+  // разбор проглатывал остаток инструкции вместе с новой редакцией.
+  {
+    text: "Сноску 32 после слов «ООО СК «Сбербанк Страхование» дополнить следующими компаниями: «ООО «ДубльГИС», ООО «НТС».».",
+    expect: ["insert_after"],
+    check: (op) =>
+      (op.target as { kind: string; number?: number }).number === 32
+        ? null
+        : `цель=${JSON.stringify(op.target)}`,
+  },
+  {
+    text: "Сноску 57 после слов «ТС (СТС, ПТС, ЭПТС)» дополнить следующими словами: «код цвета Транспортного средства.».",
+    expect: ["insert_after"],
+  },
+  // Между глаголом и кавычкой стоит двоеточие, а перед пунктом — раздел.
+  {
+    text: "Пункт 7.6. раздела 7 «ПЕРСОНАЛЬНЫЕ ДАННЫЕ» после слов «реквизиты свидетельства» дополнить словами: «код цвета Транспортного средства;» с последующей перенумерацией сносок.",
+    expect: ["insert_after"],
+    check: (op) =>
+      (op.target as { point?: string }).point === "7.6" ? null : `цель=${JSON.stringify(op.target)}`,
+  },
+  {
+    text: `В разделе 2 «Термины» п. 2.44. изложить в следующей редакции: ${P}`,
+    expect: ["replace"],
+  },
+];
+
+// ── проверки уровня документа ───────────────────────────────────────────────
+// Заголовок «Внести … изменения» задаёт и начало перечня правок, и то, к чему
+// документ адресован. Порядок слов в нём свободный, и привязка к началу абзаца
+// однажды превратила целый документ в список «внесите вручную».
+
+interface DocCase {
+  name: string;
+  paragraphs: string[];
+  expectTypes: OpType[];
+}
+
+const DOC_CASES: DocCase[] = [
+  {
+    name: "заголовок начинается со слова «Внести»",
+    paragraphs: [
+      "ИЗМЕНЕНИЯ № 67",
+      "Внести в Приложение № 7 «Публичная оферта» Альбома форм следующие изменения:",
+      `Пункт 3.5 изложить в следующей редакции: ${P}`,
+    ],
+    expectTypes: ["replace"],
+  },
+  {
+    name: "заголовок со словом «внести» в конце",
+    paragraphs: [
+      "Изменения № 2",
+      "В Приложение 7 к Альбому форм «Публичная оферта» (далее – Оферта) внести следующие изменения:",
+      `Пункт 3.5 изложить в следующей редакции: ${P}`,
+    ],
+    expectTypes: ["replace"],
+  },
+  {
+    name: "документ не про Оферту — правки уходят оператору",
+    paragraphs: [
+      "Внести следующие изменения в Альбом форм:",
+      "Исключить пункт 1.4.10 раздела «Общие положения».",
+    ],
+    expectTypes: ["manual"],
+  },
+  {
+    name: "заголовка нет — считаем документ адресованным Оферте",
+    paragraphs: [`Пункт 3.5 изложить в следующей редакции: ${P}`],
+    expectTypes: ["replace"],
+  },
 ];
 
 function run(): number {
@@ -249,7 +323,19 @@ function run(): number {
     }
     ok++;
   }
-  console.log(`Корпус формулировок: ${ok} из ${CASES.length}`);
+  for (const d of DOC_CASES) {
+    const ops = parseInstructionsOffline(d.paragraphs, [], "проба");
+    const types = ops.map((o) => o.type);
+    const same =
+      types.length === d.expectTypes.length && types.every((t, i) => t === d.expectTypes[i]);
+    if (same) ok++;
+    else
+      failures.push(
+        `  ✗ [документ] ${d.name}\n      ожидали [${d.expectTypes.join(", ")}], получили [${types.join(", ") || "—"}]`,
+      );
+  }
+  const total = CASES.length + DOC_CASES.length;
+  console.log(`Корпус формулировок: ${ok} из ${total}`);
   if (failures.length) {
     console.log(failures.join("\n"));
   }

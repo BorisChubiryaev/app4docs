@@ -20,6 +20,7 @@ import {
   appendixOffset,
 } from "./locate";
 import type { ParaSpan } from "./locate";
+import { indexNumberedParagraphs } from "./numbering";
 import { findAppendixTable, replaceRows, buildRow } from "./tables";
 import {
   sortTableAlphabetically,
@@ -142,6 +143,18 @@ function resolveFootnoteNumber(op: Operation, state: ApplyState): number | null 
   return null;
 }
 
+/** Номера пунктов, в тексте которых встречается фраза. */
+function pointsContaining(state: ApplyState, phrase: string): string[] {
+  const index = indexNumberedParagraphs(state.document, state.numbering, state.styles);
+  const out: string[] = [];
+  let current: string | null = null;
+  for (const p of index) {
+    if (p.number) current = p.number;
+    if (current && countPhrase(p.inner, phrase) > 0 && !out.includes(current)) out.push(current);
+  }
+  return out;
+}
+
 /** Номер пункта, на который направлена операция (если он есть). */
 function opPoint(op: Operation): string | null {
   if (op.target.kind === "point" || op.target.kind === "appendix_point") return op.target.point;
@@ -230,9 +243,13 @@ export function applyOneOp(
           };
         }
       }
-      // Номер не совпал (нумерация «поехала») — ищем сноску по якорю.
+      // Номер не совпал (нумерация «поехала») — ищем сноску по якорю. Но
+      // только если якорь встречается РОВНО В ОДНОЙ сноске: иначе две правки
+      // с одинаковым якорем молча уедут в одну и ту же сноску.
       const blocks = allFootnotes(state.footnotes);
-      for (const b of blocks) {
+      const matching = blocks.filter((b) => countPhrase(b.inner, op.anchor!) > 0);
+      if (matching.length === 1) {
+        const b = matching[0];
         const res = insertAfterAnchor(b.inner, op.anchor, runs);
         if (res.ok) {
           state.footnotes =
@@ -247,6 +264,21 @@ export function applyOneOp(
           };
         }
       }
+      if (matching.length > 1) {
+        // Номера кандидатов — это не украшение отчёта: без них оператору
+        // пришлось бы искать нужную сноску вручную по всему документу.
+        const fnIdx = indexFootnotes(state.document);
+        const idToDisplay = new Map<number, number>();
+        fnIdx.displayToId.forEach((fid, display) => idToDisplay.set(fid, display));
+        const numbers = matching
+          .map((b) => idToDisplay.get(b.id))
+          .filter((n): n is number => n !== undefined)
+          .sort((a, b) => a - b);
+        return fail(
+          `сноска № ${op.target.number}: в ней якоря «${op.anchor.slice(0, 40)}» нет; ` +
+            `он есть в сносках № ${numbers.join(", ")} — укажите нужный номер вручную`,
+        );
+      }
       return fail(`сноска № ${op.target.number}: якорь «${op.anchor}» не найден ни по номеру, ни по содержимому`);
     }
 
@@ -255,8 +287,16 @@ export function applyOneOp(
     // документу молча вставил бы все правки в первое попавшееся место.
     const point = opPoint(op);
     if (point) {
-      const span = locatePointSpan(state.document, state.numbering, point, state.styles, searchFrom(op, state.document));
-      if (span) {
+      // Ищем по всему блоку пункта: «пункт 7.6» — это и его подпункты, а
+      // якорная фраза нередко лежит именно в подпункте.
+      const block = locatePointBlock(
+        state.document,
+        state.numbering,
+        point,
+        state.styles,
+        searchFrom(op, state.document),
+      );
+      for (const span of block) {
         // Уже внесено (повторный прогон, или правка была в предыдущей
         // редакции) — не дублируем текст. Проверяем именно СВЯЗКУ «якорь +
         // вставка»: короткая вставка вроде предлога «с» встречается в пункте
@@ -294,14 +334,20 @@ export function applyOneOp(
       return fail(
         `якорь «${op.anchor.slice(0, 60)}» не найден${point ? ` ни в п. ${point}, ни в остальном тексте` : ""}`,
       );
-    if (hits > 1)
+    if (hits > 1) {
+      // Подсказываем номера пунктов, где якорь есть: чаще всего расхождение —
+      // это сдвиг нумерации на один-два пункта, и оператору достаточно
+      // поправить номер в карточке.
+      const where = pointsContaining(state, op.anchor).slice(0, 6);
+      const hint = where.length ? `; он есть в п. ${where.join(", ")}` : "";
       return fail(
-        pointFound
-          ? `п. ${point} найден, но якоря «${op.anchor.slice(0, 40)}» в нём нет; ` +
-              `в остальном тексте он встречается ${hits} раз — куда вставлять, определить нельзя`
-          : `якорь «${op.anchor.slice(0, 40)}» встречается в Оферте ${hits} раз, ` +
-              `а п. ${point ?? "?"} по этому номеру не найден — куда вставлять, определить нельзя`,
+        (pointFound
+          ? `п. ${point} найден, но якоря «${op.anchor.slice(0, 40)}» в нём нет`
+          : `п. ${point ?? "?"} по этому номеру не найден, а якорь «${op.anchor.slice(0, 40)}» встречается ${hits} раз`) +
+          hint +
+          " — укажите нужный пункт вручную",
       );
+    }
     const res = (op.type === "insert_before" ? insertBeforeAnchor : insertAfterAnchor)(
       state.document,
       op.anchor,

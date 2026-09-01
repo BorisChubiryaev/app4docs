@@ -50,7 +50,7 @@ function describe(op: Operation): string {
 
 async function main() {
   const files = readdirSync(dir).filter((f) => f.endsWith(".docx") && !f.startsWith("~"));
-  const offerName = files.find((f) => /Приложение\s*7/i.test(f));
+  const offerName = files.find((f) => /offer|Приложение 7/i.test(f));
   if (!offerName) {
     console.error("не найден файл Оферты (Приложение 7)");
     process.exit(1);

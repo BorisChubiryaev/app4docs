@@ -622,6 +622,7 @@ function OpCard({
         <ManualBuilder op={op} onChange={onChange} />
       ) : (
         <>
+          <TargetField op={op} onChange={onChange} />
           {op.anchor !== undefined && (
             <Field
               label={op.type === "insert_before" ? "Перед словами (якорь)" : "После слов (якорь)"}
@@ -685,6 +686,45 @@ function DocSummary({
       ))}
     </ul>
   );
+}
+
+/**
+ * Номер цели правки — редактируемый.
+ *
+ * Номера в документах «Изменения» относятся к своей редакции и расходятся с
+ * текущей. Движок в таких случаях пишет, в каких пунктах или сносках нужная
+ * фраза есть; без поля для номера эта подсказка остаётся бесполезной.
+ */
+function TargetField({
+  op,
+  onChange,
+}: {
+  op: Operation;
+  onChange: (patch: Partial<Operation>) => void;
+}) {
+  const t = op.target;
+  if (t.kind === "footnote") {
+    return (
+      <Field
+        label="Номер сноски"
+        value={String(t.number || "")}
+        onChange={(v) =>
+          onChange({ target: { ...t, number: parseInt(v, 10) || 0, atPoint: undefined } })
+        }
+      />
+    );
+  }
+  if (t.kind === "point" || t.kind === "appendix_point" || t.kind === "term") {
+    const point = t.kind === "term" ? (t.point ?? "") : t.point;
+    return (
+      <Field
+        label={t.kind === "appendix_point" ? `Номер пункта Приложения №${t.appendix}` : "Номер пункта"}
+        value={point}
+        onChange={(v) => onChange({ target: { ...t, point: v.trim() } })}
+      />
+    );
+  }
+  return null;
 }
 
 /** Типы правок, которые оператор может собрать руками, и их поля. */

@@ -7,6 +7,7 @@
 // которые пробуются по очереди; всё, что не распозналось, помечается как
 // требующее ручной обработки — молча терять правки нельзя, оператор должен
 // увидеть каждую строку исходного документа.
+import { ACTION_VERBS, OBJECTS } from "./lexicon";
 import { parseInstruction, type Ctx, type Draft } from "./parse-instruction";
 import type { Operation } from "./types";
 
@@ -71,10 +72,24 @@ function mergeUnits(paras: string[]): string[] {
   return out;
 }
 
-/** Абзац начинается как новая директива, а не как продолжение редакции. */
+/**
+ * Абзац начинается как новая директива, а не как продолжение редакции.
+ *
+ * Проверка нужна из-за незакрытых кавычек в исходных документах: без неё
+ * «Сноску 32 после слов «ООО СК «Сбербанк Страхование» дополнить…» тянет за
+ * собой следующую инструкцию, и обе правки достаются одной сноске.
+ *
+ * Признак — первое слово абзаца: либо глагол-директива, либо объект правки
+ * (пункт, сноска, абзац, преамбула). Список берётся из словаря, а не из
+ * отдельного перечня, чтобы расширялся вместе с ним.
+ */
 function startsNewDirective(text: string): boolean {
-  return /^(?:в\s+раздел|в\s+приложени|пункт\s|п\.\s?\d|изложить|дополнить|исключить|преамбул|внести)/i.test(
-    text,
+  if (/^(?:в\s+раздел|в\s+приложени|внести)/i.test(text)) return true;
+  const firstWord = text.match(/^[А-Яа-яЁёA-Za-z]+/);
+  if (!firstWord) return false;
+  const w = firstWord[0].toLowerCase();
+  return (
+    ACTION_VERBS.some((v) => w.startsWith(v.stem)) || OBJECTS.some((o) => w.startsWith(o.stem))
   );
 }
 
@@ -248,14 +263,28 @@ function looksLikeInstruction(text: string): boolean {
   );
 }
 
-/** Где начинается собственно перечень правок («Внести … изменения …»). */
+/**
+ * Где начинается собственно перечень правок.
+ *
+ * Заголовок пишут в обоих порядках: «Внести в Приложение № 7 … следующие
+ * изменения:» и «В Приложение 7 … внести следующие изменения:». Привязка к
+ * началу абзаца отсекала второй вариант целиком, поэтому ищем сочетание слов
+ * где угодно в абзаце.
+ */
 function instructionsStart(paras: string[]): number {
-  const i = paras.findIndex((p) => /^внести[\s,]/i.test(p) && /изменени/i.test(p));
-  return i >= 0 ? i : -1;
+  return paras.findIndex((p) => /внести/i.test(p) && /изменени/i.test(p));
 }
 
-/** К чему адресован документ: к Оферте (Приложение 7) или к другому документу. */
-function detectScope(header: string): { scope: Ctx["scope"]; note?: string } {
+/**
+ * К чему адресован документ: к Оферте (Приложение 7) или к другому документу.
+ *
+ * Если заголовка нет вовсе, считаем документ адресованным Оферте. Обратное
+ * умолчание опаснее: одна неузнанная строка-заголовок превращала весь документ
+ * в список «внесите вручную», и правки молча не применялись. Здесь же ошибка
+ * видна сразу — правки просто не найдут своих мест.
+ */
+function detectScope(header: string | null): { scope: Ctx["scope"]; note?: string } {
+  if (header === null) return { scope: "offer" };
   if (/приложени[ея]\s*№?\s*7|оферт/i.test(header)) return { scope: "offer" };
   return {
     scope: "other",
@@ -272,7 +301,7 @@ export function parseInstructionsOffline(
 ): Operation[] {
   const paras = rawParas.map((p) => fixTypos(tidy(p))).filter(Boolean);
   const start = instructionsStart(paras);
-  const { scope, note } = detectScope(start >= 0 ? paras[start] : "");
+  const { scope, note } = detectScope(start >= 0 ? paras[start] : null);
   const ctx: Ctx = { scope, scopeNote: note };
   const units = mergeUnits(paras.slice(start + 1));
 
