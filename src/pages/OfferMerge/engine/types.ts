@@ -30,8 +30,11 @@ export type OpType =
   | "replace_table_rows"
   | "sort_table_alpha" // пересортировать таблицу приложения по алфавиту
   | "insert_table_row_alpha" // вставить строку в таблицу по алфавиту
-  | "replace_sentence" // изложить первое/последнее предложение пункта
+  | "insert_before" // вставить текст перед указанными словами
+  | "replace_sentence" // изложить предложение пункта в новой редакции
+  | "replace_paragraph" // изложить абзац пункта в новой редакции
   | "append_sentence" // дополнить пункт предложением
+  | "append_paragraph" // дополнить пункт абзацем
   | "replace_words" // заменить слово/фразу внутри пункта
   | "delete_words" // удалить слова внутри пункта
   | "delete_point" // исключить пункт (с перенумерацией последующих)
@@ -51,8 +54,10 @@ export interface Operation {
   anchor?: string;
   /** Что искать внутри пункта (для replace_words / delete_words). */
   find?: string;
-  /** Какое предложение пункта затрагивает правка (для replace_sentence). */
-  sentence?: "first" | "last";
+  /** Номер предложения в пункте: 1 — первое, -1 — последнее. */
+  sentenceIndex?: number;
+  /** Номер абзаца в пункте: 1 — первый, -1 — последний. */
+  paragraphIndex?: number;
   /** Вставляемый / заменяющий текст (уже без внешних кавычек-ёлочек). */
   payload?: string;
   /** Строки таблицы (для append/replace_table_rows): массив строк, каждая — массив ячеек. */

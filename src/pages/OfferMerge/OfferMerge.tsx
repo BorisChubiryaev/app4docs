@@ -28,7 +28,10 @@ const OP_TYPE_LABEL: Record<Operation["type"], string> = {
   replace_table_rows: "изменить строки таблицы",
   sort_table_alpha: "сортировка по алфавиту",
   insert_table_row_alpha: "добавить по алфавиту",
+  insert_before: "вставка перед словами",
   replace_sentence: "изложить предложение заново",
+  replace_paragraph: "изложить абзац заново",
+  append_paragraph: "дополнить абзацем",
   append_sentence: "дополнить предложением",
   replace_words: "заменить слова",
   delete_words: "удалить слова",
@@ -46,7 +49,10 @@ const OP_TYPE_ICON: Record<Operation["type"], string> = {
   replace_table_rows: "▦",
   sort_table_alpha: "🔤",
   insert_table_row_alpha: "🔤",
+  insert_before: "➕",
   replace_sentence: "✏️",
+  replace_paragraph: "✏️",
+  append_paragraph: "➕",
   append_sentence: "➕",
   replace_words: "🔁",
   delete_words: "🗑️",
@@ -606,16 +612,29 @@ function OpCard({
 
       {preview && <PreviewBlock preview={preview} />}
 
-      {op.anchor !== undefined && (
-        <Field label="После слов (якорь)" value={op.anchor} onChange={(v) => onChange({ anchor: v })} />
-      )}
-      {op.payload !== undefined && (
-        <Field
-          label={op.type === "replace" ? "Новая редакция" : "Вставляемый текст"}
-          value={op.payload}
-          onChange={(v) => onChange({ payload: v })}
-          multiline
-        />
+      {op.type === "manual" ? (
+        <ManualBuilder op={op} onChange={onChange} />
+      ) : (
+        <>
+          {op.anchor !== undefined && (
+            <Field
+              label={op.type === "insert_before" ? "Перед словами (якорь)" : "После слов (якорь)"}
+              value={op.anchor}
+              onChange={(v) => onChange({ anchor: v })}
+            />
+          )}
+          {op.find !== undefined && (
+            <Field label="Что найти в пункте" value={op.find} onChange={(v) => onChange({ find: v })} />
+          )}
+          {op.payload !== undefined && (
+            <Field
+              label={op.type === "replace" ? "Новая редакция" : "Вставляемый текст"}
+              value={op.payload}
+              onChange={(v) => onChange({ payload: v })}
+              multiline
+            />
+          )}
+        </>
       )}
       {op.rows && <p className="om-card__rows">Строк таблицы к добавлению: {op.rows.length}</p>}
     </div>
@@ -659,6 +678,109 @@ function DocSummary({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Типы правок, которые оператор может собрать руками, и их поля. */
+const MANUAL_TYPES: {
+  type: Operation["type"];
+  label: string;
+  needs: ("anchor" | "find" | "payload")[];
+}[] = [
+  { type: "replace", label: "изложить пункт в новой редакции", needs: ["payload"] },
+  { type: "replace_sentence", label: "изложить последнее предложение", needs: ["payload"] },
+  { type: "append_sentence", label: "дополнить пункт предложением", needs: ["payload"] },
+  { type: "append_paragraph", label: "дополнить пункт абзацем", needs: ["payload"] },
+  { type: "insert_after", label: "вставить после слов", needs: ["anchor", "payload"] },
+  { type: "insert_before", label: "вставить перед словами", needs: ["anchor", "payload"] },
+  { type: "replace_words", label: "заменить слова", needs: ["find", "payload"] },
+  { type: "delete_words", label: "удалить слова", needs: ["find"] },
+  { type: "delete_point", label: "исключить пункт", needs: [] },
+];
+
+/**
+ * Конструктор правки для строк, которые парсер не разобрал.
+ *
+ * Никакой разбор не покроет все формулировки нормативных документов, поэтому у
+ * оператора должен быть способ довести правку руками — иначе единственный
+ * выход это «не распозналось, вносите в Word самостоятельно».
+ */
+function ManualBuilder({
+  op,
+  onChange,
+}: {
+  op: Operation;
+  onChange: (patch: Partial<Operation>) => void;
+}) {
+  const [type, setType] = useState<Operation["type"]>("replace");
+  // У нераспознанной строки номер пункта — заглушка «—»: показывать её в поле
+  // нельзя, иначе оператор отправит её как настоящий номер.
+  const guessed =
+    op.target.kind === "point" || op.target.kind === "appendix_point" ? op.target.point : "";
+  const [point, setPoint] = useState(/^\d/.test(guessed) ? guessed : "");
+  const [anchor, setAnchor] = useState("");
+  const [find, setFind] = useState("");
+  const [payload, setPayload] = useState("");
+  const spec = MANUAL_TYPES.find((t) => t.type === type)!;
+  const ready = point.trim() !== "" && (!spec.needs.includes("payload") || payload.trim() !== "");
+
+  return (
+    <div className="om-manual">
+      <div className="om-manual__title">Собрать правку вручную</div>
+      <div className="om-manual__row">
+        <label className="om-field">
+          <span>Что сделать</span>
+          <select
+            className="ds-select"
+            value={type}
+            onChange={(e) => setType(e.target.value as Operation["type"])}
+          >
+            {MANUAL_TYPES.map((t) => (
+              <option key={t.type} value={t.type}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="om-field">
+          <span>Номер пункта</span>
+          <input
+            className="ds-input"
+            value={point}
+            placeholder="например, 5.3.1"
+            onChange={(e) => setPoint(e.target.value)}
+          />
+        </label>
+      </div>
+      {spec.needs.includes("anchor") && (
+        <Field label="Якорные слова" value={anchor} onChange={setAnchor} />
+      )}
+      {spec.needs.includes("find") && (
+        <Field label="Что найти в пункте" value={find} onChange={setFind} />
+      )}
+      {spec.needs.includes("payload") && (
+        <Field label="Текст правки" value={payload} onChange={setPayload} multiline />
+      )}
+      <button
+        type="button"
+        className="om-btn om-btn--sm"
+        disabled={!ready}
+        onClick={() =>
+          onChange({
+            type,
+            target: { kind: "point", section: point.split(".")[0], point: point.trim() },
+            anchor: spec.needs.includes("anchor") ? anchor : undefined,
+            find: spec.needs.includes("find") ? find : undefined,
+            payload: spec.needs.includes("payload") ? payload : undefined,
+            sentenceIndex: type === "replace_sentence" ? -1 : undefined,
+            warnings: ["правка собрана оператором вручную"],
+            confidence: 1,
+          })
+        }
+      >
+        Применить как правку
+      </button>
+    </div>
   );
 }
 

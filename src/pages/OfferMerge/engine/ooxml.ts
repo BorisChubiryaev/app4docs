@@ -282,6 +282,33 @@ export function insertAfterAnchor(
 }
 
 /**
+ * Вставить раны ПЕРЕД якорной фразой. Нужно для формулировок «перед словами
+ * «X» дополнить словами «Y»» — зеркало insertAfterAnchor.
+ */
+export function insertBeforeAnchor(
+  xml: string,
+  anchor: string,
+  newRuns: string,
+): InsertResult {
+  const tokens = tokenizeRuns(xml);
+  const range = findPhrase(tokens, anchor);
+  if (!range) {
+    return { xml, ok: false, message: `якорь не найден: «${anchor}»`, orderKey: -1 };
+  }
+  const tok = tokens[range.from.runIdx];
+  if (!tok.simple) {
+    const newXml = xml.slice(0, tok.start) + newRuns + xml.slice(tok.start);
+    return { xml: newXml, ok: true, message: "вставлено перед раном", orderKey: tok.start };
+  }
+  const tAttrs = tok.tAttrs || ' xml:space="preserve"';
+  const cut = range.from.offInRun;
+  const head = cut ? `<w:r>${tok.rPr}<w:t${tAttrs}>${escapeXml(tok.text.slice(0, cut))}</w:t></w:r>` : "";
+  const tail = `<w:r>${tok.rPr}<w:t${tAttrs}>${escapeXml(tok.text.slice(cut))}</w:t></w:r>`;
+  const newXml = xml.slice(0, tok.start) + head + newRuns + tail + xml.slice(tok.end);
+  return { xml: newXml, ok: true, message: "вставлено перед якорем", orderKey: tok.start };
+}
+
+/**
  * Найти абзац <w:p>, содержащий заданную литеральную фразу, и вернуть его
  * границы + позицию. Используется для замены/локации пунктов и терминов.
  */

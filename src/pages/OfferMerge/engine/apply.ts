@@ -5,6 +5,7 @@ import { saveDocx } from "./docx";
 import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
 import {
   insertAfterAnchor,
+  insertBeforeAnchor,
   replacePhraseRuns,
   phraseOccurrenceAfter,
   countPhrase,
@@ -112,6 +113,19 @@ function opPoint(op: Operation): string | null {
 }
 
 /**
+ * Порядковый номер в человеческом виде: 1 — первый, −1 — последний.
+ * Отрицательные значения считаются с конца, как в срезах.
+ */
+function pickIndex(wanted: number, length: number): number {
+  return wanted < 0 ? length + wanted : wanted - 1;
+}
+
+function ordinalWord(n: number): string {
+  const names = ["первое", "второе", "третье", "четвёртое", "пятое", "шестое"];
+  return n < 0 ? "последнее" : (names[n - 1] ?? `${n}-е`);
+}
+
+/**
  * Разбить текст пункта на предложения.
  *
  * Точка в «п. 5.3» или «т.д.» — не конец предложения, поэтому границей
@@ -148,8 +162,8 @@ export function applyOneOp(
     orderKey: Number.MAX_SAFE_INTEGER,
   });
 
-  // ── Вставка после якоря ────────────────────────────────────────────
-  if (op.type === "insert_after") {
+  // ── Вставка относительно якоря ─────────────────────────────────────
+  if (op.type === "insert_after" || op.type === "insert_before") {
     if (!op.anchor || op.payload === undefined) return fail("нет якоря/текста");
     const runs = renderInsertRuns(op.payload, opts);
 
@@ -215,13 +229,14 @@ export function applyOneOp(
             orderKey: span.start,
           };
         }
-        const inside = insertAfterAnchor(span.inner, op.anchor, runs);
+        const insertAt = op.type === "insert_before" ? insertBeforeAnchor : insertAfterAnchor;
+        const inside = insertAt(span.inner, op.anchor, runs);
         if (inside.ok) {
           state.document = spliceSpan(state.document, span, inside.xml);
           return {
             operationId: op.id,
             ok: true,
-            message: `п. ${point}: вставлено после слов «${op.anchor.slice(0, 40)}»`,
+            message: `п. ${point}: вставлено ${op.type === "insert_before" ? "перед" : "после"} слов${op.type === "insert_before" ? "ами" : ""} «${op.anchor.slice(0, 40)}»`,
             orderKey: span.start,
           };
         }
@@ -239,7 +254,11 @@ export function applyOneOp(
         `якорь «${op.anchor.slice(0, 40)}» встречается в Оферте ${hits} раз, ` +
           `а п. ${point ?? "?"} по этому номеру не найден — куда вставлять, определить нельзя`,
       );
-    const res = insertAfterAnchor(state.document, op.anchor, runs);
+    const res = (op.type === "insert_before" ? insertBeforeAnchor : insertAfterAnchor)(
+      state.document,
+      op.anchor,
+      runs,
+    );
     if (!res.ok) return fail(res.message);
     state.document = res.xml;
     return {
@@ -508,9 +527,9 @@ export function applyOneOp(
     };
   }
 
-  // ── Изложить первое/последнее предложение пункта ───────────────────
-  if (op.type === "replace_sentence") {
-    if (op.payload === undefined) return fail("нет текста новой редакции предложения");
+  // ── Изложить предложение или абзац пункта в новой редакции ─────────
+  if (op.type === "replace_sentence" || op.type === "replace_paragraph") {
+    if (op.payload === undefined) return fail("нет текста новой редакции");
     const point = opPoint(op);
     if (!point) return fail("не указан номер пункта");
     const block = locatePointBlock(
@@ -520,18 +539,38 @@ export function applyOneOp(
       state.styles,
       searchFrom(op, state.document),
     );
-    if (block.length === 0) return fail(`пункт ${point} не найден в документе`);
-    const which = op.sentence ?? "last";
-    // Первое предложение — в абзаце-зачине, последнее — в завершающем абзаце
-    // пункта, а он может идти после перечисления.
     const withText = block.filter((b) => paragraphText(b.inner).trim().length > 0);
-    const span = which === "first" ? withText[0] : withText[withText.length - 1];
-    if (!span) return fail(`пункт ${point} пуст`);
+    if (withText.length === 0) return fail(`пункт ${point} не найден в документе`);
+    const body = stripLeadingNumber(stripOuterQuotes(op.payload));
+
+    // Абзац пункта: «второй абзац п. 7.6 изложить…». Отрицательный номер —
+    // отсчёт с конца, так что −1 это последний абзац.
+    if (op.type === "replace_paragraph") {
+      const idx = pickIndex(op.paragraphIndex ?? -1, withText.length);
+      const span = withText[idx];
+      if (!span) return fail(`в п. ${point} нет абзаца № ${op.paragraphIndex}`);
+      const keptRefs = footnoteRefRuns(span.inner);
+      const old = paragraphText(span.inner).replace(/\s+/g, " ").trim();
+      const runs = renderDeleteRuns(old, opts) + renderInsertRuns(" " + body, opts) + keptRefs;
+      state.document = spliceSpan(state.document, span, replaceParagraphRuns(span.inner, runs));
+      return {
+        operationId: op.id,
+        ok: true,
+        message: `п. ${point}: ${ordinalWord(op.paragraphIndex ?? -1)} абзац изложен в новой редакции (абзацев в пункте: ${withText.length})`,
+        orderKey: span.start,
+      };
+    }
+
+    // Предложение. Первое ищем в абзаце-зачине, последнее — в завершающем
+    // абзаце пункта: он может идти после перечисления подпунктов.
+    const wanted = op.sentenceIndex ?? -1;
+    const span = wanted === 1 ? withText[0] : withText[withText.length - 1];
     const plain = paragraphText(span.inner).replace(/\s+/g, " ").trim();
     const parts = sentences(plain);
     if (parts.length === 0) return fail(`пункт ${point} пуст`);
-    const oldSentence = which === "first" ? parts[0] : parts[parts.length - 1];
-    const body = stripLeadingNumber(stripOuterQuotes(op.payload));
+    const sIdx = pickIndex(wanted, parts.length);
+    const oldSentence = parts[sIdx];
+    if (oldSentence === undefined) return fail(`в п. ${point} нет предложения № ${wanted}`);
     if (plain.includes(body.trim())) {
       return {
         operationId: op.id,
@@ -543,17 +582,45 @@ export function applyOneOp(
     const runs = renderDeleteRuns(oldSentence, opts) + renderInsertRuns(" " + body, opts);
     const res = replacePhraseRuns(span.inner, oldSentence, runs);
     if (!res.ok)
-      return fail(
-        `п. ${point}: ${which === "first" ? "первое" : "последнее"} предложение не удалось выделить — ${res.message}`,
-      );
+      return fail(`п. ${point}: ${ordinalWord(wanted)} предложение не удалось выделить — ${res.message}`);
     state.document = spliceSpan(state.document, span, res.xml);
     return {
       operationId: op.id,
       ok: true,
       message:
-        `п. ${point}: ${which === "first" ? "первое" : "последнее"} предложение изложено в новой редакции` +
-        (block.length > 1 ? ` (пункт из ${block.length} абз., правка в ${which === "first" ? "первом" : "последнем"})` : ""),
+        `п. ${point}: ${ordinalWord(wanted)} предложение изложено в новой редакции` +
+        (block.length > 1 ? ` (пункт из ${block.length} абз.)` : ""),
       orderKey: span.start,
+    };
+  }
+
+  // ── Дополнить пункт новым абзацем ──────────────────────────────────
+  if (op.type === "append_paragraph") {
+    if (op.payload === undefined) return fail("нет текста абзаца");
+    const point = opPoint(op);
+    if (!point) return fail("не указан номер пункта");
+    const block = locatePointBlock(
+      state.document,
+      state.numbering,
+      point,
+      state.styles,
+      searchFrom(op, state.document),
+    );
+    const withText = block.filter((b) => paragraphText(b.inner).trim().length > 0);
+    const span = withText[withText.length - 1];
+    if (!span) return fail(`пункт ${point} не найден в документе`);
+    const body = stripLeadingNumber(stripOuterQuotes(op.payload));
+    // Абзац внутри пункта своего номера не получает, поэтому автонумерацию с
+    // него снимаем — иначе Word посчитает его следующим пунктом.
+    const pPr = extractPPr(span.inner).replace(/<w:numPr>[\s\S]*?<\/w:numPr>/, "");
+    const newPara = `<w:p>${pPr}${renderInsertRuns(body, opts)}</w:p>`;
+    state.document =
+      state.document.slice(0, span.end) + newPara + state.document.slice(span.end);
+    return {
+      operationId: op.id,
+      ok: true,
+      message: `п. ${point}: добавлен абзац`,
+      orderKey: span.end,
     };
   }
 

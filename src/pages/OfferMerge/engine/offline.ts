@@ -7,8 +7,8 @@
 // которые пробуются по очереди; всё, что не распозналось, помечается как
 // требующее ручной обработки — молча терять правки нельзя, оператор должен
 // увидеть каждую строку исходного документа.
-import { extractGuillemet } from "./text";
-import type { Operation, OpTarget, OpType } from "./types";
+import { parseInstruction, type Ctx, type Draft } from "./parse-instruction";
+import type { Operation } from "./types";
 
 let idc = 0;
 function nid(src: string) {
@@ -41,12 +41,6 @@ function quoteDepth(s: string): number {
     else if (ch === "»") d--;
   }
   return d;
-}
-
-/** Содержимое сбалансированных «…» начиная с позиции from. */
-function quoted(s: string, from = 0): { text: string; end: number } | null {
-  const g = extractGuillemet(s, from);
-  return g ? { text: tidy(g.content), end: g.endIndex } : null;
 }
 
 /**
@@ -86,17 +80,6 @@ function startsNewDirective(text: string): boolean {
 
 // ── контекст разбора ────────────────────────────────────────────────────────
 
-interface Ctx {
-  /** Номер раздела из строки-заголовка «В разделе 6 «…»:». */
-  section?: string;
-  sectionTitle?: string;
-  /** Номер приложения из «В приложении 1 к Договору…». */
-  appendix?: string;
-  /** Адресован ли документ Оферте (Приложению 7) или чему-то ещё. */
-  scope: "offer" | "other";
-  scopeNote?: string;
-}
-
 /**
  * Заголовок раздела/приложения: задаёт контекст для следующих строк, сам
  * правкой не является. Отличаем по отсутствию глагола-директивы: «В разделе 6
@@ -120,74 +103,7 @@ function asContextLine(text: string, ctx: Ctx): boolean {
   return false;
 }
 
-// ── разбор фрагментов инструкции ────────────────────────────────────────────
-
-/** Номера пунктов в «шапке» инструкции: «п.9.7 и 9.8», «пунктах 1.1. и 1.2». */
-function pointsIn(prefix: string): string[] {
-  const marker = prefix.search(/(?:пункт|п\.)/i);
-  if (marker < 0) return [];
-  const seg = prefix.slice(marker);
-  const nums = seg.match(/\d+(?:\.\d+)*/g) ?? [];
-  return nums.map((n) => n.replace(/\.$/, "")).filter(Boolean);
-}
-
-/** Первый номер пункта в тексте («Пункт 5.3.1.2 …», «в п. 4.1.3.»). */
-function firstPoint(text: string): string | null {
-  const m = text.match(/(?:пункт[а-я]*|п\.)\s*(\d+(?:\.\d+)*)/i);
-  return m ? m[1].replace(/\.$/, "") : null;
-}
-
-/** Номер приложения, если инструкция его называет. */
-function appendixIn(text: string): string | null {
-  const m = text.match(/приложени[а-я]*\s*№?\s*(\d+)/i);
-  return m ? m[1] : null;
-}
-
-/**
- * Похож ли текст на определение термина («Стороны – совместное упоминание…»)?
- * В разделе «Термины» правки адресуют пункт, но опознаётся он по имени: номера
- * терминов сдвигаются от редакции к редакции, а имя остаётся.
- */
-function termName(payload: string): string | null {
-  const body = payload.replace(/^\s*\d+(?:\.\d+)*\.?\s*/, "").trim();
-  const dash = body.search(/\s[–—-]\s/);
-  if (dash <= 0 || dash > 140) return null;
-  return body.slice(0, dash).trim();
-}
-
-function targetForPoint(point: string, ctx: Ctx, text: string, payload?: string): OpTarget {
-  const app = ctx.appendix ?? (/приложени/i.test(text) ? appendixIn(text) : null);
-  if (app) return { kind: "appendix_point", appendix: app, point };
-  const inTerms =
-    point.startsWith("2.") || ctx.section === "2" || /термин/i.test(ctx.sectionTitle ?? "");
-  if (inTerms && payload) {
-    const term = termName(payload);
-    if (term) return { kind: "term", section: ctx.section, point, term };
-  }
-  return {
-    kind: "point",
-    section: ctx.section ?? point.split(".")[0],
-    point,
-    heading: ctx.sectionTitle,
-  };
-}
-
 // ── сборка операций ─────────────────────────────────────────────────────────
-
-interface Draft {
-  type: OpType;
-  target: OpTarget;
-  anchor?: string;
-  find?: string;
-  payload?: string;
-  sentence?: "first" | "last";
-  rows?: string[][];
-  rowNumbers?: number[];
-  rowRange?: { from: number; to: number };
-  confidence: number;
-  warnings?: string[];
-  note?: string;
-}
 
 function toOperation(d: Draft, text: string, sourceDoc: string): Operation {
   return {
@@ -198,7 +114,8 @@ function toOperation(d: Draft, text: string, sourceDoc: string): Operation {
     anchor: d.anchor,
     find: d.find,
     payload: d.payload,
-    sentence: d.sentence,
+    sentenceIndex: d.sentenceIndex,
+    paragraphIndex: d.paragraphIndex,
     rows: d.rows,
     rowNumbers: d.rowNumbers,
     rowRange: d.rowRange,
@@ -211,253 +128,21 @@ function toOperation(d: Draft, text: string, sourceDoc: string): Operation {
   };
 }
 
-// ── правила ─────────────────────────────────────────────────────────────────
 
-type Rule = (text: string, ctx: Ctx, tables: string[][][]) => Draft[] | null;
+// ── табличные правила ───────────────────────────────────────────────────────
+//
+// Правки приложений разбираются отдельно: их «текст» лежит не в кавычках, а в
+// таблице документа «Изменения», и слотовый разбор тут не помощник.
 
-/** Изложить сноску N в следующей редакции. */
-const ruleFootnoteReplace: Rule = (text) => {
-  const m = text.match(/Изложить\s+сноску\s+(\d+)/i);
-  if (!m || !/следующей редакции/i.test(text)) return null;
-  const q = quoted(text, text.search(/следующей редакции/i));
-  return [
-    {
-      type: "replace_footnote",
-      target: { kind: "footnote", number: parseInt(m[1], 10) },
-      payload: q?.text ?? "",
-      confidence: q ? 0.85 : 0.4,
-      warnings: q ? undefined : ["не найден текст новой редакции сноски"],
-    },
-  ];
-};
+type TableRule = (text: string, ctx: Ctx, tables: string[][][]) => Draft[] | null;
 
-/** Сноску N после слов «…» дополнить … */
-const ruleFootnoteInsert: Rule = (text) => {
-  const m = text.match(/Сноску\s+(\d+)\s+после\s+слов\s*/i);
-  if (!m) return null;
-  const anchorQ = quoted(text, m.index! + m[0].length);
-  if (!anchorQ) return null;
-  const payloadQ = quoted(text, anchorQ.end + 1);
-  return [
-    {
-      type: "insert_after",
-      target: { kind: "footnote", number: parseInt(m[1], 10) },
-      anchor: anchorQ.text,
-      payload: ", " + (payloadQ?.text ?? "").replace(/\.$/, "") + ".",
-      confidence: payloadQ ? 0.9 : 0.4,
-    },
-  ];
-};
-
-/** … дополнить сноской следующего содержания: «…» */
-const ruleFootnoteAdd: Rule = (text, ctx) => {
-  if (!/дополнить\s+сноской/i.test(text)) return null;
-  const am = text.match(/(?:после\s+слов[а]?|к\s+слов[ауе]м?)\s*/i);
-  const anchorQ = am ? quoted(text, am.index! + am[0].length) : null;
-  const ci = text.search(/содержания/i);
-  const payloadQ = ci >= 0 ? quoted(text, ci) : quoted(text, 0);
-  const point = firstPoint(text);
-  return [
-    {
-      type: "add_footnote",
-      target: point ? targetForPoint(point, ctx, text) : { kind: "point", point: "?" },
-      anchor: anchorQ?.text ?? "",
-      payload: payloadQ?.text ?? "",
-      confidence: anchorQ && payloadQ ? 0.8 : 0.4,
-      warnings: anchorQ ? undefined : ["не найдены слова-якорь для сноски"],
-    },
-  ];
-};
-
-/** Преамбулу изложить в следующей редакции: «…» */
-const rulePreamble: Rule = (text) => {
-  if (!/^преамбул[уа]/i.test(text) || !/следующей редакции/i.test(text)) return null;
-  const q = quoted(text, text.search(/следующей редакции/i));
-  return [
-    {
-      type: "replace",
-      target: { kind: "preamble" },
-      payload: q?.text ?? "",
-      confidence: q ? 0.85 : 0.4,
-      warnings: q ? undefined : ["не найден текст новой редакции преамбулы"],
-    },
-  ];
-};
-
-/** Исключить п. X (с перенумерацией последующих). */
-const ruleDeletePoint: Rule = (text, ctx) => {
-  const m = text.match(/^(?:Исключить|Удалить)\s+(?:пункт|п\.)\s*(\d+(?:\.\d+)*)/i);
-  if (!m) return null;
-  const point = m[1].replace(/\.$/, "");
-  return [{ type: "delete_point", target: targetForPoint(point, ctx, text), confidence: 0.85 }];
-};
-
-/** Первое/последнее предложение п. X изложить в следующей редакции: «…» */
-const ruleSentence: Rule = (text, ctx) => {
-  const m = text.match(
-    /(Первое|Последнее)\s+предложени[ея]\s+(?:в\s+)?(?:пункт[а-я]*|п\.)\s*(\d+(?:\.\d+)*)/i,
-  );
-  if (!m || !/следующей редакции/i.test(text)) return null;
-  const point = m[2].replace(/\.$/, "");
-  const q = quoted(text, text.search(/следующей редакции/i));
-  return [
-    {
-      type: "replace_sentence",
-      target: targetForPoint(point, ctx, text),
-      sentence: /Первое/i.test(m[1]) ? "first" : "last",
-      payload: q?.text ?? "",
-      confidence: q ? 0.85 : 0.4,
-      warnings: q ? undefined : ["не найден текст новой редакции предложения"],
-    },
-  ];
-};
-
-/** дополнить п. X предложением в следующей редакции: «…» */
-const ruleAppendSentence: Rule = (text, ctx) => {
-  const m = text.match(/дополнить\s+(?:пункт|п\.)\s*(\d+(?:\.\d+)*)\.?\s*предложением/i);
-  if (!m) return null;
-  const point = m[1].replace(/\.$/, "");
-  const q = quoted(text, m.index! + m[0].length);
-  return [
-    {
-      type: "append_sentence",
-      target: targetForPoint(point, ctx, text),
-      payload: q?.text ?? "",
-      confidence: q ? 0.85 : 0.4,
-    },
-  ];
-};
-
-/** слово «X» заменить на фразу «Y» — в одном или нескольких пунктах. */
-const ruleReplaceWords: Rule = (text, ctx) => {
-  const rep = text.match(/заменить\s+(?:на\s+)?(?:фраз[а-я]*|слов[а-я]*|формулировк[а-я]*)?\s*/i);
-  if (!rep) return null;
-  const m = text.match(/(?:слов[а-я]*|фраз[а-я]*|формулировк[а-я]*)\s*(?=«)/i);
-  if (!m || m.index! > rep.index!) return null;
-  const findQ = quoted(text, m.index! + m[0].length);
-  if (!findQ || findQ.end > rep.index!) return null;
-  const toQ = quoted(text, rep.index! + rep[0].length);
-  if (!toQ) return null;
-  const points = pointsIn(text.slice(0, m.index!));
-  if (points.length === 0) return null;
-  return points.map((point) => ({
-    type: "replace_words" as OpType,
-    target: targetForPoint(point, ctx, text),
-    find: findQ.text,
-    payload: toQ.text,
-    confidence: 0.85,
-  }));
-};
-
-/** после слов «A» удалить слова «B» */
-const ruleDeleteWords: Rule = (text, ctx) => {
-  const m = text.match(/удалить\s+(?:слов[а-я]*|фраз[а-я]*|формулировк[а-я]*)\s*(?=«)/i);
-  if (!m) return null;
-  const findQ = quoted(text, m.index! + m[0].length);
-  if (!findQ) return null;
-  const am = text.slice(0, m.index!).match(/после\s+слов[а]?\s*(?=«)/i);
-  const anchorQ = am ? quoted(text, am.index! + am[0].length) : null;
-  const point = firstPoint(text);
-  if (!point) return null;
-  return [
-    {
-      type: "delete_words",
-      target: targetForPoint(point, ctx, text),
-      find: findQ.text,
-      anchor: anchorQ?.text,
-      confidence: 0.85,
-    },
-  ];
-};
-
-/**
- * Дополнить пунктом X … : «…» — новый пункт.
- * Идёт ПОСЛЕ правила о предложении: «дополнить п. 8.5 предложением» — это
- * дополнение существующего пункта, а не новый пункт.
- */
-const ruleInsertPoint: Rule = (text, ctx) => {
-  const m = text.match(/Дополнить\s+(?:пункт(?:ом)?|п\.)\s*(\d+(?:\.\d+)*)/i);
-  if (!m) return null;
-  if (/приложени/i.test(text.slice(0, m.index!))) return null;
-  const point = m[1].replace(/\.$/, "");
-  const colon = text.indexOf(":", m.index!);
-  const q = quoted(text, colon >= 0 ? colon : m.index! + m[0].length);
-  const payload = q?.text ?? "";
-  return [
-    {
-      type: "insert_point",
-      target: targetForPoint(point, ctx, text, payload),
-      payload,
-      confidence: payload ? 0.8 : 0.4,
-      warnings: payload ? undefined : ["не найден текст нового пункта"],
-    },
-  ];
-};
-
-/**
- * Изложить п. X в следующей редакции — в обоих порядках слов и с возможным
- * «Оферты» между номером и глаголом.
- */
-const ruleReplacePoint: Rule = (text, ctx) => {
-  if (!/следующей редакции/i.test(text)) return null;
-  const direct = text.match(
-    /(?:пункт|п\.)\s*(\d+(?:\.\d+)*)\.?\s*(?:Оферты\s*)?изложить\s+в\s+следующей редакции/i,
-  );
-  const inverted = text.match(
-    /изложить\s+(?:пункт|п\.)\s*(\d+(?:\.\d+)*)\.?\s*(?:Оферты\s*)?в\s+следующей редакции/i,
-  );
-  const m = direct ?? inverted;
-  if (!m) return null;
-  const point = m[1].replace(/\.$/, "");
-  const q = quoted(text, text.search(/следующей редакции/i));
-  const payload = q?.text ?? "";
-  return [
-    {
-      type: "replace",
-      target: targetForPoint(point, ctx, text, payload),
-      payload,
-      confidence: payload ? 0.85 : 0.4,
-      warnings: payload ? undefined : ["не найден текст новой редакции"],
-    },
-  ];
-};
-
-/**
- * после слов «A» дополнить «B» — в одной инструкции таких пар может быть
- * несколько: «после слов «X» дополнить словами «Y», после слова «Z» дополнить
- * предлогом «с»». Раньше в текст пункта уезжала вся эта фраза целиком, поэтому
- * пары разбираются по очереди.
- */
-const ruleInsertAfter: Rule = (text, ctx) => {
-  const point = firstPoint(text);
-  if (!point) return null;
-  const drafts: Draft[] = [];
-  const re = /после\s+(?:слов[а]?|фразы|слова)\s*(?=«)/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    const anchorQ = quoted(text, m.index + m[0].length);
-    if (!anchorQ) continue;
-    const rest = text.slice(anchorQ.end + 1);
-    const verb = rest.match(
-      /^\s*,?\s*(?:дополнить|добавить)\s+(?:слов[а-я]*|фраз[а-я]*|формулировк[а-я]*|предлог[а-я]*)?\s*(?=«)/i,
-    );
-    if (!verb) continue;
-    const payloadQ = quoted(rest, verb[0].length);
-    if (!payloadQ) continue;
-    drafts.push({
-      type: "insert_after",
-      target: targetForPoint(point, ctx, text),
-      anchor: anchorQ.text,
-      payload: " " + payloadQ.text,
-      confidence: 0.85,
-    });
-    re.lastIndex = anchorQ.end + 1 + payloadQ.end;
-  }
-  return drafts.length ? drafts : null;
-};
+function appendixIn(text: string): string | null {
+  const m = text.match(/приложени[а-я]*\s*№?\s*(\d+)/i);
+  return m ? m[1] : null;
+}
 
 /** Приложение N: пункты 17, 24, … изложить в следующей редакции + таблица. */
-const ruleAppendixRows: Rule = (text, ctx, tables) => {
+const ruleAppendixRows: TableRule = (text, ctx, tables) => {
   if (!/приложени/i.test(text) || !/изложить в следующей редакции/i.test(text)) return null;
   if (!/пункт[ыа]?\s+\d+\s*,/i.test(text)) return null;
   const appendix = appendixIn(text) ?? ctx.appendix ?? "?";
@@ -485,7 +170,7 @@ const ruleAppendixRows: Rule = (text, ctx, tables) => {
 };
 
 /** Изложить Приложение N в алфавитном порядке. */
-const ruleSortAlpha: Rule = (text) => {
+const ruleSortAlpha: TableRule = (text) => {
   if (!/алфавитн/i.test(text) || !/приложени/i.test(text) || /Дополнить/i.test(text)) return null;
   return [
     {
@@ -497,7 +182,7 @@ const ruleSortAlpha: Rule = (text) => {
 };
 
 /** Дополнить Приложение N пунктом следующего содержания (строка таблицы). */
-const ruleAppendixNewRow: Rule = (text, _ctx, tables) => {
+const ruleAppendixNewRow: TableRule = (text, _ctx, tables) => {
   if (!/Дополнить\s+Приложени/i.test(text)) return null;
   if (!/пункт(?:ом)?\s+следующего содержания/i.test(text)) return null;
   const appendix = appendixIn(text) ?? "1";
@@ -518,7 +203,7 @@ const ruleAppendixNewRow: Rule = (text, _ctx, tables) => {
 };
 
 /** Дополнить таблицу в п. K Приложения N строками X–Y. */
-const ruleAppendRowsRange: Rule = (text, _ctx, tables) => {
+const ruleAppendRowsRange: TableRule = (text, _ctx, tables) => {
   const m = text.match(
     /Дополнить таблицу[\s\S]*?Приложени[а-я]*\s*№?\s*(\d+)[\s\S]*?строками\s+(\d+)\s*[-–—]\s*(\d+)/i,
   );
@@ -548,30 +233,19 @@ const ruleAppendRowsRange: Rule = (text, _ctx, tables) => {
   ];
 };
 
-// Порядок важен: более узкие правила идут раньше общих.
-const RULES: Rule[] = [
-  ruleFootnoteReplace,
-  ruleFootnoteInsert,
-  ruleFootnoteAdd,
-  rulePreamble,
-  ruleDeletePoint,
-  ruleSentence,
-  ruleAppendSentence,
+const TABLE_RULES: TableRule[] = [
   ruleAppendixRows,
   ruleSortAlpha,
   ruleAppendixNewRow,
   ruleAppendRowsRange,
-  ruleReplaceWords,
-  ruleDeleteWords,
-  ruleInsertPoint,
-  ruleReplacePoint,
-  ruleInsertAfter,
 ];
 
 /** Похоже ли, что абзац вообще содержит правку (а не шапку документа). */
 function looksLikeInstruction(text: string): boolean {
   if (text.length < 15) return false;
-  return /(изложить|дополнить|исключить|заменить|добавить|удалить|признать утратившим)/i.test(text);
+  return /(изложить|изложи|дополнить|дополни|исключить|заменить|замени|добавить|добави|удалить|удали|включить|сформулировать|признать утратившим)/i.test(
+    text,
+  );
 }
 
 /** Где начинается собственно перечень правок («Внести … изменения …»). */
@@ -625,16 +299,20 @@ export function parseInstructionsOffline(
       continue;
     }
 
-    let matched: Draft[] | null = null;
-    for (const rule of RULES) {
+    // Сначала таблицы приложений: их содержимое лежит вне текста инструкции.
+    let drafts: Draft[] | null = null;
+    for (const rule of TABLE_RULES) {
       const res = rule(text, ctx, docTables);
       if (res && res.length) {
-        matched = res;
+        drafts = res;
         break;
       }
     }
-    if (matched) {
-      for (const d of matched) ops.push(toOperation(d, text, sourceDoc));
+    // Затем общий разбор по слотам.
+    if (!drafts) drafts = parseInstruction(text, ctx);
+
+    if (drafts && drafts.length) {
+      for (const d of drafts) ops.push(toOperation(d, text, sourceDoc));
       continue;
     }
     // Ничего не подошло — правка всё равно должна дойти до оператора.
@@ -642,7 +320,7 @@ export function parseInstructionsOffline(
       toOperation(
         {
           type: "manual",
-          target: { kind: "point", point: firstPoint(text) ?? "—" },
+          target: { kind: "point", point: "—" },
           note: "формулировка не распознана автоматически",
           confidence: 0.3,
           warnings: ["формулировка не распознана — внесите правку вручную"],

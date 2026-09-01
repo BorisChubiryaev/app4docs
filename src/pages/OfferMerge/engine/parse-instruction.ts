@@ -1,0 +1,541 @@
+// Разбор одной инструкции по слотам.
+//
+// Вместо набора шаблонов «под каждую формулировку» инструкция раскладывается на
+// составляющие: действие (что делаем), объект (над чем), цель (где), якорь
+// (относительно каких слов) и текст. Дальше пара «действие × объект» однозначно
+// даёт операцию движка.
+//
+// Такой разбор устойчив к порядку слов («Изложить п. 4.8 в новой редакции» и
+// «Пункт 4.8 изложить в следующей редакции» дают одно и то же) и к падежам, а
+// расширяется словарём в lexicon.ts, а не новым ветвлением в коде.
+//
+// Отдельно стоит правило творительного падежа: в русском языке им помечают то,
+// ЧЕМ дополняют. «Дополнить пунктом 2.15» — добавляем пункт; «дополнить п. 8.5
+// предложением» — добавляем предложение В пункт 8.5. Без этого различия обе
+// формулировки выглядят одинаково, а смысл у них противоположный.
+import {
+  ACTION_VERBS,
+  DELETE_PHRASES,
+  EDGE_POSITIONS,
+  OBJECTS,
+  ORDINALS,
+  POSITIONS,
+  RENUMBER_FOOTNOTES,
+  RENUMBER_POINTS,
+  containsAny,
+  findStems,
+  isInstrumental,
+  type Action,
+  type ObjectKind,
+  type Position,
+} from "./lexicon";
+import { extractGuillemet } from "./text";
+import type { OpTarget, OpType } from "./types";
+
+export interface Ctx {
+  section?: string;
+  sectionTitle?: string;
+  appendix?: string;
+  scope: "offer" | "other";
+  scopeNote?: string;
+}
+
+export interface Draft {
+  type: OpType;
+  target: OpTarget;
+  anchor?: string;
+  find?: string;
+  payload?: string;
+  sentenceIndex?: number;
+  paragraphIndex?: number;
+  rows?: string[][];
+  rowNumbers?: number[];
+  rowRange?: { from: number; to: number };
+  confidence: number;
+  warnings?: string[];
+  note?: string;
+}
+
+interface Quote {
+  text: string;
+  start: number;
+  end: number;
+}
+
+function tidy(s: string): string {
+  return s.replace(/\u00A0/g, " ").trim().replace(/\s+/g, " ");
+}
+
+/** Все сбалансированные «…» с позициями. */
+function allQuotes(text: string): Quote[] {
+  const out: Quote[] = [];
+  let from = 0;
+  for (;;) {
+    const open = text.indexOf("«", from);
+    if (open < 0) break;
+    const g = extractGuillemet(text, open);
+    if (!g) break;
+    out.push({ text: tidy(g.content), start: open, end: g.endIndex });
+    from = g.endIndex + 1;
+  }
+  return out;
+}
+
+interface PointRef {
+  num: string;
+  index: number;
+}
+
+/**
+ * Номера пунктов с позициями. Перечисления вида «п. 1, 2.2 и 2.3» дают
+ * несколько номеров: после маркера «п.»/«пункт» подхватываются и последующие
+ * номера, пока они идут через запятую или «и».
+ */
+function findPoints(text: string): PointRef[] {
+  const out: PointRef[] = [];
+  const re = /(?:подпункт[а-яё]*|пункт[а-яё]*|пп\.\s*|п\.\s*)\s*(\d+(?:\.\d+)*)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    out.push({ num: m[1].replace(/\.$/, ""), index: m.index });
+    // Хвост перечисления: «, 2.2 и 2.3.»
+    let tail = re.lastIndex;
+    const chain = /^\s*(?:,|и)\s*(\d+(?:\.\d+)*)/;
+    for (;;) {
+      const rest = text.slice(tail);
+      const c = rest.match(chain);
+      if (!c) break;
+      out.push({ num: c[1].replace(/\.$/, ""), index: tail });
+      tail += c[0].length;
+    }
+    re.lastIndex = Math.max(re.lastIndex, tail);
+  }
+  return out;
+}
+
+function appendixIn(text: string): string | null {
+  const m = text.match(/приложени[а-я]*\s*№?\s*(\d+)/i);
+  return m ? m[1] : null;
+}
+
+function footnoteNumberIn(text: string): number | null {
+  const m = text.match(/сноск[а-я]*\s*№?\s*(\d+)/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** Имя термина из новой редакции («Стороны – совместное упоминание…»). */
+function termName(payload: string): string | null {
+  const body = payload.replace(/^\s*\d+(?:\.\d+)*\.?\s*/, "").trim();
+  const dash = body.search(/\s[–—-]\s/);
+  if (dash <= 0 || dash > 140) return null;
+  return body.slice(0, dash).trim();
+}
+
+function targetForPoint(point: string, ctx: Ctx, text: string, payload?: string): OpTarget {
+  const app = ctx.appendix ?? (/приложени/i.test(text) ? appendixIn(text) : null);
+  if (app) return { kind: "appendix_point", appendix: app, point };
+  const inTerms =
+    point.startsWith("2.") || ctx.section === "2" || /термин/i.test(ctx.sectionTitle ?? "");
+  if (inTerms && payload) {
+    const term = termName(payload);
+    if (term) return { kind: "term", section: ctx.section, point, term };
+  }
+  return {
+    kind: "point",
+    section: ctx.section ?? point.split(".")[0],
+    point,
+    heading: ctx.sectionTitle,
+  };
+}
+
+// ── слоты ───────────────────────────────────────────────────────────────────
+
+interface Slots {
+  action: Action | null;
+  actionAt: number;
+  /** Объект сразу после глагола — он и задаёт, над чем работаем. */
+  object: ObjectKind | null;
+  objectWord: string;
+  objectInstrumental: boolean;
+  ordinal: number | null;
+  position: Position | null;
+  positionAt: number;
+  points: PointRef[];
+  quotes: Quote[];
+}
+
+/**
+ * Текст директивы без содержимого кавычек.
+ *
+ * Внутри «…» лежит НОВАЯ РЕДАКЦИЯ — это содержание, а не грамматика правки.
+ * Если искать слова-подсказки по всему тексту, редакция «…персонализации
+ * предложений.» превратит замену пункта в замену предложения. Позиции
+ * символов сохраняем, заменяя содержимое пробелами.
+ */
+function maskQuotes(text: string, quotes: Quote[]): string {
+  const chars = Array.from(text);
+  for (const q of quotes) {
+    for (let i = q.start; i <= q.end && i < chars.length; i++) chars[i] = " ";
+  }
+  return chars.join("");
+}
+
+function readSlots(text: string): Slots {
+  const quotes = allQuotes(text);
+  const grammar = maskQuotes(text, quotes);
+  const verbs = findStems(grammar, ACTION_VERBS);
+  const objects = findStems(grammar, OBJECTS);
+  const ordinals = findStems(grammar, ORDINALS);
+  const positions = findStems(grammar, POSITIONS);
+
+  let action: Action | null = verbs.length ? verbs[0].value : null;
+  let actionAt = verbs.length ? verbs[0].index : -1;
+  if (!action && containsAny(text, DELETE_PHRASES)) {
+    action = "delete";
+    actionAt = 0;
+  }
+  // «Дополнить пунктом 5.6 и изложить в следующей редакции» — ведёт первый
+  // глагол: он определяет, что вообще делаем, остальные лишь уточняют.
+
+  // Объект — ближайшее подходящее слово ПОСЛЕ глагола; если после глагола
+  // объекта нет (например, «Пункт 2.14 … дополнить фразой»), берём ближайший
+  // до него.
+  const after = objects.filter((o) => o.index > actionAt);
+  const before = objects.filter((o) => o.index < actionAt);
+  let chosen = after[0] ?? before[before.length - 1] ?? null;
+
+  // Порядковое числительное относится к объекту, если стоит прямо перед ним.
+  // Такой объект главнее прочих: во фразе «Последнее предложение пункта 6.1
+  // изложить…» речь о предложении, а «пункт» лишь указывает, где его искать.
+  let ordinal: number | null = null;
+  let ordinalObject: (typeof objects)[number] | null = null;
+  for (const o of ordinals) {
+    const near = objects.find((x) => x.index > o.index && x.index - o.index <= 20);
+    if (near && (near.value === "sentence" || near.value === "paragraph")) {
+      ordinal = o.value;
+      ordinalObject = near;
+      break;
+    }
+  }
+
+  if (ordinalObject) chosen = ordinalObject;
+
+  // Указатель места учитываем только если за ним идёт кавычка-якорь.
+  let position: Position | null = null;
+  let positionAt = -1;
+  for (const p of positions) {
+    const q = quotes.find((x) => x.start > p.index && x.start - p.index <= 40);
+    if (q) {
+      position = p.value;
+      positionAt = p.index;
+      break;
+    }
+  }
+  if (!position) {
+    for (const e of EDGE_POSITIONS) {
+      const at = grammar.toLowerCase().indexOf(e.stem);
+      if (at >= 0) {
+        position = e.value;
+        positionAt = at;
+        break;
+      }
+    }
+  }
+
+  return {
+    action,
+    actionAt,
+    object: chosen ? chosen.value : null,
+    objectWord: chosen ? chosen.word : "",
+    objectInstrumental: chosen ? isInstrumental(chosen.word) : false,
+    ordinal,
+    position,
+    positionAt,
+    points: findPoints(grammar),
+    quotes,
+  };
+}
+
+// ── сборка операций ─────────────────────────────────────────────────────────
+
+/**
+ * Пары «после слов «A» дополнить «B»». Их в одной инструкции может быть
+ * несколько: «после слов «X» дополнить словами «Y», после слова «Z» дополнить
+ * предлогом «с»» — раньше в текст пункта уезжала вся фраза целиком.
+ */
+function insertionPairs(
+  text: string,
+  quotes: Quote[],
+): { position: Position; anchor: string; payload: string }[] {
+  const pairs: { position: Position; anchor: string; payload: string }[] = [];
+  const re = /(после|перед)\s+(?:слов[а-яё]*|фраз[а-яё]*|абзац[а-яё]*|пункт[а-яё]*)?\s*(?=«)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const anchor = quotes.find((q) => q.start >= m!.index);
+    if (!anchor) continue;
+    const rest = text.slice(anchor.end + 1);
+    const verb = rest.match(
+      /^\s*,?\s*(?:дополнить|добавить|включить)\s+(?:слов[а-яё]*|фраз[а-яё]*|формулировк[а-яё]*|предлог[а-яё]*|текст[а-яё]*|абзац[а-яё]*|предложени[а-яё]*)?\s*(?=«)/i,
+    );
+    if (!verb) continue;
+    const payload = quotes.find((q) => q.start > anchor.end);
+    if (!payload) continue;
+    pairs.push({
+      position: m[1].toLowerCase() === "перед" ? "before" : "after",
+      anchor: anchor.text,
+      payload: payload.text,
+    });
+    re.lastIndex = payload.end;
+  }
+  return pairs;
+}
+
+const OP_BY_ADD_OBJECT: Partial<Record<ObjectKind, OpType>> = {
+  point: "insert_point",
+  sentence: "append_sentence",
+  paragraph: "append_paragraph",
+  footnote: "add_footnote",
+};
+
+/**
+ * Разобрать инструкцию. Возвращает набор операций (в одной строке их может быть
+ * несколько) либо null, если строка на правку не похожа.
+ */
+export function parseInstruction(text: string, ctx: Ctx): Draft[] | null {
+  const s = readSlots(text);
+  if (!s.action) return null;
+
+  const renumberPoints = containsAny(text, RENUMBER_POINTS);
+  const renumberFootnotes = containsAny(text, RENUMBER_FOOTNOTES);
+  void renumberPoints;
+  void renumberFootnotes;
+
+  const lastQuote = s.quotes.length ? s.quotes[s.quotes.length - 1] : null;
+  const pointNums = s.points.map((p) => p.num);
+  const firstPoint = pointNums[0] ?? null;
+
+  // ── сноски ────────────────────────────────────────────────────────────────
+  if (s.object === "footnote") {
+    const num = footnoteNumberIn(text);
+    if (s.action === "add" && s.objectInstrumental) {
+      const pair = insertionPairs(text, s.quotes)[0];
+      const contentIdx = text.search(/содержания|редакции/i);
+      const payload =
+        (contentIdx >= 0 ? s.quotes.find((q) => q.start > contentIdx)?.text : undefined) ??
+        lastQuote?.text ??
+        "";
+      return [
+        {
+          type: "add_footnote",
+          target: firstPoint
+            ? targetForPoint(firstPoint, ctx, text)
+            : { kind: "point", point: "?" },
+          anchor: pair?.anchor ?? "",
+          payload,
+          confidence: pair && payload ? 0.8 : 0.4,
+          warnings: pair ? undefined : ["не найдены слова-якорь для сноски"],
+        },
+      ];
+    }
+    if (num !== null && s.action === "replace") {
+      return [
+        {
+          type: "replace_footnote",
+          target: { kind: "footnote", number: num },
+          payload: lastQuote?.text ?? "",
+          confidence: lastQuote ? 0.85 : 0.4,
+        },
+      ];
+    }
+    if (num !== null && s.action === "add") {
+      const pair = insertionPairs(text, s.quotes)[0];
+      if (pair) {
+        return [
+          {
+            type: "insert_after",
+            target: { kind: "footnote", number: num },
+            anchor: pair.anchor,
+            payload: ", " + pair.payload.replace(/\.$/, "") + ".",
+            confidence: 0.85,
+          },
+        ];
+      }
+    }
+  }
+
+  // ── преамбула ─────────────────────────────────────────────────────────────
+  if (s.object === "preamble" && s.action === "replace") {
+    return [
+      {
+        type: "replace",
+        target: { kind: "preamble" },
+        payload: lastQuote?.text ?? "",
+        confidence: lastQuote ? 0.85 : 0.4,
+        warnings: lastQuote ? undefined : ["не найден текст новой редакции преамбулы"],
+      },
+    ];
+  }
+
+  // ── вставка относительно якоря (может быть несколько в одной инструкции) ──
+  if (s.action === "add" && (s.position === "after" || s.position === "before")) {
+    const pairs = insertionPairs(text, s.quotes);
+    // Вставлять можно и в пункт, и в сноску — «Сноску 5 после слов … дополнить».
+    const fnNum = footnoteNumberIn(text);
+    const target: OpTarget | null = firstPoint
+      ? targetForPoint(firstPoint, ctx, text)
+      : fnNum !== null
+        ? { kind: "footnote", number: fnNum }
+        : null;
+    if (pairs.length && target) {
+      const intoFootnote = target.kind === "footnote";
+      return pairs.map((p) => ({
+        type: (p.position === "before" ? "insert_before" : "insert_after") as OpType,
+        target,
+        anchor: p.anchor,
+        // В сноске вставка идёт продолжением перечисления, в тексте — просто
+        // отдельными словами.
+        payload: intoFootnote ? ", " + p.payload.replace(/\.$/, "") + "." : " " + p.payload,
+        confidence: 0.85,
+      }));
+    }
+  }
+
+  // ── удаление слов ─────────────────────────────────────────────────────────
+  if (s.action === "delete" && s.object === "word") {
+    const findQuote = s.quotes.find((q) => q.start > s.actionAt);
+    const anchorQuote = s.position ? s.quotes.find((q) => q.start > s.positionAt) : undefined;
+    if (findQuote && firstPoint) {
+      return [
+        {
+          type: "delete_words",
+          target: targetForPoint(firstPoint, ctx, text),
+          find: findQuote.text,
+          anchor: anchorQuote && anchorQuote !== findQuote ? anchorQuote.text : undefined,
+          confidence: 0.85,
+        },
+      ];
+    }
+  }
+
+  // ── замена слов ───────────────────────────────────────────────────────────
+  if (s.action === "substitute" && s.quotes.length >= 2 && pointNums.length) {
+    const find = s.quotes[0];
+    const to = s.quotes.find((q) => q.start > find.end);
+    if (to) {
+      return pointNums.map((point) => ({
+        type: "replace_words" as OpType,
+        target: targetForPoint(point, ctx, text),
+        find: find.text,
+        payload: to.text,
+        confidence: 0.85,
+      }));
+    }
+  }
+
+  // ── исключение пункта ─────────────────────────────────────────────────────
+  if (s.action === "delete" && (s.object === "point" || (!s.object && firstPoint))) {
+    // Диапазон «пункты 5.1–5.3» раскрыть нельзя, не зная, какие номера есть в
+    // документе, а угадывать здесь опаснее, чем отдать оператору.
+    const range = text.match(/(\d+(?:\.\d+)*)\s*[-–—]\s*(\d+(?:\.\d+)*)/);
+    if (range) {
+      return [
+        {
+          type: "manual",
+          target: targetForPoint(range[1], ctx, text),
+          note: `исключение диапазона пунктов ${range[1]}–${range[2]}: перечислите пункты по отдельности или удалите их вручную`,
+          confidence: 0.4,
+          warnings: ["диапазон пунктов не раскрывается автоматически"],
+        },
+      ];
+    }
+    if (firstPoint) {
+      return pointNums.map((point) => ({
+        type: "delete_point" as OpType,
+        target: targetForPoint(point, ctx, text),
+        confidence: 0.85,
+      }));
+    }
+  }
+
+  // ── дополнение ────────────────────────────────────────────────────────────
+  if (s.action === "add") {
+    const payload = lastQuote?.text ?? "";
+    // Творительный падеж указывает, ЧЕМ дополняем.
+    if (s.objectInstrumental && s.object) {
+      const type = OP_BY_ADD_OBJECT[s.object];
+      if (type === "insert_point") {
+        // «Дополнить пунктом 2.15»: номер после объекта — номер НОВОГО пункта.
+        const newPoint =
+          s.points.find((p) => p.index > s.actionAt)?.num ?? firstPoint ?? "?";
+        return [
+          {
+            type,
+            target: targetForPoint(newPoint, ctx, text, payload),
+            payload,
+            confidence: payload ? 0.8 : 0.4,
+            warnings: payload ? undefined : ["не найден текст нового пункта"],
+          },
+        ];
+      }
+      if (type && firstPoint) {
+        return [
+          {
+            type,
+            target: targetForPoint(firstPoint, ctx, text),
+            payload,
+            confidence: payload ? 0.85 : 0.4,
+          },
+        ];
+      }
+    }
+    // Без творительного падежа «дополнить п. 7.3 … в следующей редакции»
+    // означает добавление самого пункта 7.3.
+    if (firstPoint) {
+      return [
+        {
+          type: "insert_point",
+          target: targetForPoint(firstPoint, ctx, text, payload),
+          payload,
+          confidence: payload ? 0.8 : 0.4,
+          warnings: payload ? undefined : ["не найден текст нового пункта"],
+        },
+      ];
+    }
+  }
+
+  // ── изложение в новой редакции ────────────────────────────────────────────
+  if (s.action === "replace" || s.action === "substitute") {
+    const payload = lastQuote?.text ?? "";
+    if (!firstPoint) return null;
+    if (s.object === "sentence") {
+      return [
+        {
+          type: "replace_sentence",
+          target: targetForPoint(firstPoint, ctx, text),
+          sentenceIndex: s.ordinal ?? -1,
+          payload,
+          confidence: payload ? 0.85 : 0.4,
+        },
+      ];
+    }
+    if (s.object === "paragraph") {
+      return [
+        {
+          type: "replace_paragraph",
+          target: targetForPoint(firstPoint, ctx, text),
+          paragraphIndex: s.ordinal ?? -1,
+          payload,
+          confidence: payload ? 0.85 : 0.4,
+        },
+      ];
+    }
+    return pointNums.slice(0, 1).map((point) => ({
+      type: "replace" as OpType,
+      target: targetForPoint(point, ctx, text, payload),
+      payload,
+      confidence: payload ? 0.85 : 0.4,
+      warnings: payload ? undefined : ["не найден текст новой редакции"],
+    }));
+  }
+
+  return null;
+}
