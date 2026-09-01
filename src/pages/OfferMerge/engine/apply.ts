@@ -84,6 +84,20 @@ function replaceParagraphRuns(pXml: string, newRuns: string): string {
 }
 
 /** Убрать ведущий номер пункта («2.44.», «7.6 ») — он даётся автонумерацией. */
+/** Совпадение текстов «по существу»: без номера, кавычек-ёлочек и пробелов. */
+function sameText(a: string, b: string): boolean {
+  const norm = (t: string) =>
+    stripLeadingNumber(t)
+      .replace(/[«»"']/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  const x = norm(a);
+  const y = norm(b);
+  if (!x || !y) return false;
+  return x === y || x.startsWith(y) || y.startsWith(x);
+}
+
 function stripLeadingNumber(text: string): string {
   return text.replace(/^\s*\d+(?:\.\d+)*\.?\s*/, "");
 }
@@ -457,9 +471,21 @@ export function applyOneOp(
     if (op.payload === undefined) return fail("нет текста нового пункта");
     const point = opPoint(op);
     if (!point) return fail("не указан номер нового пункта");
+    const body = stripLeadingNumber(stripOuterQuotes(op.payload));
+    // Правка могла быть уже учтена в загруженной редакции Оферты: пункт с
+    // таким номером есть, и текст у него тот же. Это не ошибка размещения —
+    // добавлять второй такой же пункт нельзя.
+    const existing = locatePointSpan(state.document, state.numbering, point, state.styles);
+    if (existing && sameText(paragraphText(existing.inner), body)) {
+      return {
+        operationId: op.id,
+        ok: true,
+        message: `п. ${point} уже присутствует в этой редакции — правка не требуется`,
+        orderKey: existing.start,
+      };
+    }
     const loc = locatePointInsertion(state.document, state.numbering, point, state.styles);
     if (!loc) return fail(`не найдено место для нового пункта ${point} (раздел/соседний пункт)`);
-    const body = stripLeadingNumber(stripOuterQuotes(op.payload));
     // Новый абзац наследует стиль/нумерацию (numPr) соседнего пункта — тогда
     // Word сам присвоит номер и перенумерует последующие.
     const pPr = extractPPr(loc.span.inner);
@@ -655,11 +681,13 @@ export function applyOneOp(
       inserted.push(`${name} → позиция ${pos}`);
     }
     if (inserted.length === 0) {
+      // Все строки уже в таблице — правка учтена в этой редакции Приложения.
+      // Это результат, а не сбой: сообщаем, но не помечаем ошибкой.
       return {
         operationId: op.id,
-        ok: false,
+        ok: skipped.length > 0,
         message: skipped.length
-          ? `Приложение №${appendix}: пропущено — ${skipped.join("; ")}`
+          ? `Приложение №${appendix}: уже присутствует, добавлять нечего — ${skipped.join("; ")}`
           : "не удалось определить наименование новой строки",
         orderKey: table.start,
       };

@@ -147,12 +147,48 @@ function renderNumber(
     Array.from({ length: ilvl + 1 }, (_, i) => `%${i + 1}.`).join("");
   const rendered = template.replace(/%(\d)/g, (_m, d: string) => {
     const i = parseInt(d, 10) - 1;
+    const lf = levels.get(i)?.fmt ?? "decimal";
+    // Уровень с numFmt="none" Word не печатает вовсе. Без этого шаблон
+    // «%15.%2.» (то есть %1 + литерал «5.» + %2) читается как «15.N.»
+    // вместо «5.N.» — и пункт 5.5 перестаёт находиться по номеру.
+    if (lf === "none" || lf === "bullet") return "";
     const value = counters[i] ?? levels.get(i)?.start ?? 1;
-    return formatCounter(value, levels.get(i)?.fmt ?? "decimal");
+    return formatCounter(value, lf);
   });
   const clean = rendered.trim();
   // Шаблон без единого счётчика (маркер-символ) номером не является.
   return /\d|[a-zA-Zа-яА-Я]/.test(clean) ? clean : null;
+}
+
+/** Ключ «зрительной» последовательности уровня — либо null.
+ *
+ *  Бывает, что соседние пункты одного раздела заведены РАЗНЫМИ списками
+ *  (5.1 — один numId, 5.2–5.6 — другой). Каждый список считает с единицы, и
+ *  реконструкция даёт два пункта «5.1». Но если номер уровня зависит только
+ *  от собственного счётчика (все ссылки на верхние уровни — это уровни с
+ *  numFmt="none", то есть константа) и в шаблоне зашит номер раздела, то
+ *  списки с одинаковым шаблоном человек видит как одну сквозную нумерацию.
+ *  Такие уровни считаем общим счётчиком.
+ *
+ *  Требование «в шаблоне есть зашитая цифра» важно: без него один ключ
+ *  получили бы все обычные списки вида «%1.» — включая заголовки разделов.
+ */
+function sharedSequenceKey(ilvl: number, levels: Map<number, Level>): string | null {
+  const level = levels.get(ilvl);
+  if (!level?.text) return null;
+  const literal = level.text.replace(/%\d/g, "");
+  if (!/\d/.test(literal)) return null;
+  let usesOwn = false;
+  for (const m of level.text.matchAll(/%(\d)/g)) {
+    const i = parseInt(m[1], 10) - 1;
+    if (i === ilvl) {
+      usesOwn = true;
+      continue;
+    }
+    const f = levels.get(i)?.fmt;
+    if (f !== "none" && f !== "bullet") return null;
+  }
+  return usesOwn ? `${ilvl}|${level.text}` : null;
 }
 
 export interface NumberedPara {
@@ -208,6 +244,7 @@ export function indexNumberedParagraphs(
 ): NumberedPara[] {
   const defs = parseNumbering(numberingXml, stylesXml);
   const counters = new Map<string, number[]>(); // numId -> счётчики по уровням
+  const shared = new Map<string, number>(); // сквозные счётчики (см. sharedSequenceKey)
   const out: NumberedPara[] = [];
 
   let m: RegExpExecArray | null;
@@ -220,7 +257,13 @@ export function indexNumberedParagraphs(
       const levels = defs.levels.get(np.numId) ?? new Map<number, Level>();
       const startOf = (lv: number) => levels.get(lv)?.start ?? 1;
       const c = counters.get(np.numId) ?? [];
-      if (c[np.ilvl] == null) c[np.ilvl] = startOf(np.ilvl);
+      const seqKey = sharedSequenceKey(np.ilvl, levels);
+      if (seqKey) {
+        const prev = shared.get(seqKey);
+        const value = prev == null ? startOf(np.ilvl) : prev + 1;
+        shared.set(seqKey, value);
+        c[np.ilvl] = value;
+      } else if (c[np.ilvl] == null) c[np.ilvl] = startOf(np.ilvl);
       else c[np.ilvl] = c[np.ilvl] + 1;
       // Вложенные уровни начинают счёт заново.
       for (let k = np.ilvl + 1; k < c.length; k++) c[k] = undefined as unknown as number;

@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { parseAllChangeDocs, buildOutputs } from "../src/pages/OfferMerge/engine/pipeline";
 import { loadDocx } from "../src/pages/OfferMerge/engine/docx";
 import { paragraphs } from "../src/pages/OfferMerge/engine/text";
-import { indexNumberedParagraphs } from "../src/pages/OfferMerge/engine/numbering";
+import { indexNumberedParagraphs, normNumber } from "../src/pages/OfferMerge/engine/numbering";
 import { previewOperations } from "../src/pages/OfferMerge/engine/preview";
 import type { Operation } from "../src/pages/OfferMerge/engine/types";
 
@@ -127,6 +127,25 @@ async function main() {
       sameSections ? "совпадают" : "РАСХОЖДЕНИЕ"
     }`,
   );
+  // Инвариант согласованности нумерации. Часть номеров зашита в шаблонах
+  // <w:lvlText> подпунктов («5.2.1.%4.»), а номер самого пункта Word считает
+  // по счётчикам. Если реконструкция счётчиков врёт, подпункт 5.2.1 остаётся
+  // на месте, а его пункт «уезжает» — и правка к п. 5.5 уходит не туда.
+  // Поэтому проверяем: у каждого подпункта есть пункт-родитель с таким номером.
+  const numbersBefore = new Set(
+    indexNumberedParagraphs(before.document, before.numbering, before.styles)
+      .map((p) => p.number && normNumber(p.number))
+      .filter(Boolean) as string[],
+  );
+  const orphans = [...numbersBefore]
+    .filter((n) => n.split(".").length >= 3)
+    .filter((n) => !numbersBefore.has(n.split(".").slice(0, -1).join(".")));
+  console.log(
+    `подпунктов без пункта-родителя: ${orphans.length}${
+      orphans.length ? ` (${orphans.slice(0, 8).join(" ")})` : ""
+    }`,
+  );
+
   const paras = paragraphs(after.document);
   console.log(`абзацев всего: ${paras.length} (было ${paragraphs(before.document).length})`);
   console.log(`\nфайлы: ${outDir}`);
