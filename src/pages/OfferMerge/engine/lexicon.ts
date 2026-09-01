@@ -17,6 +17,7 @@ export type Action = "replace" | "add" | "delete" | "substitute";
 /** Над чем именно она это делает. */
 export type ObjectKind =
   | "point"
+  | "heading"
   | "sentence"
   | "word"
   | "paragraph"
@@ -70,6 +71,11 @@ export const OBJECTS: StemEntry<ObjectKind>[] = [
   { stem: "абзац", value: "paragraph" },
   { stem: "слов", value: "word" },
   { stem: "фраз", value: "word" },
+  { stem: "цифр", value: "word" },
+  { stem: "числ", value: "word" },
+  { stem: "текст", value: "word" },
+  { stem: "наименовани", value: "heading" },
+  { stem: "заголов", value: "heading" },
   { stem: "формулировк", value: "word" },
   { stem: "предлог", value: "word" },
   { stem: "сноск", value: "footnote" },
@@ -116,6 +122,12 @@ export const REDACTION_MARKERS = [
   "следующего содержания",
   "следующим образом",
 ];
+
+/**
+ * Правка «по тексту»: относится ко всему документу, а не к пункту. Такие
+ * инструкции опасно применять как точечные — их надо отличать явно.
+ */
+export const GLOBAL_MARKERS = ["по тексту", "по всему тексту", "во всем тексте", "во всём тексте"];
 
 /** Пометки о перенумерации. */
 export const RENUMBER_POINTS = [

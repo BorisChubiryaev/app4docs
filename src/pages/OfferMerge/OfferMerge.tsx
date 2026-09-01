@@ -35,6 +35,9 @@ const OP_TYPE_LABEL: Record<Operation["type"], string> = {
   append_sentence: "дополнить предложением",
   replace_words: "заменить слова",
   delete_words: "удалить слова",
+  replace_words_global: "заменить по всему тексту",
+  delete_paragraph: "исключить абзац",
+  delete_footnote: "исключить сноску",
   delete_point: "исключить пункт",
   manual: "ручная обработка",
 };
@@ -56,6 +59,9 @@ const OP_TYPE_ICON: Record<Operation["type"], string> = {
   append_sentence: "➕",
   replace_words: "🔁",
   delete_words: "🗑️",
+  replace_words_global: "🔁",
+  delete_paragraph: "🗑️",
+  delete_footnote: "🗑️",
   delete_point: "🗑️",
   manual: "✋",
 };

@@ -107,9 +107,26 @@ async function main() {
   const fnBefore = (before.document.match(/<w:footnoteReference\b/g) ?? []).length;
   const fnAfter = (after.document.match(/<w:footnoteReference\b/g) ?? []).length;
   console.log(`\nсноски в тексте: ${fnBefore} → ${fnAfter}`);
-  const idxAfter = indexNumberedParagraphs(after.document, after.numbering);
+  const idxAfter = indexNumberedParagraphs(after.document, after.numbering, after.styles);
   const nums = idxAfter.map((p) => p.number).filter(Boolean) as string[];
   console.log(`нумерованных абзацев: ${nums.length}`);
+
+  // Инвариант нумерации разделов. Абзац, у которого нумерация приходит из
+  // стиля, легко превратить в новый раздел — и тогда «6.1» начнёт указывать на
+  // чужой пункт. Проверяем, что заголовки разделов идут теми же номерами.
+  const sectionsOf = (idx: ReturnType<typeof indexNumberedParagraphs>) =>
+    idx.filter((p) => p.ilvl === 0 && p.numId === "3" && p.number).map((p) => p.number as string);
+  const secBefore = sectionsOf(
+    indexNumberedParagraphs(before.document, before.numbering, before.styles),
+  );
+  const secAfter = sectionsOf(idxAfter);
+  const sameSections =
+    secBefore.length === secAfter.length && secBefore.every((v, i) => v === secAfter[i]);
+  console.log(
+    `разделы: было [${secBefore.join(" ")}] стало [${secAfter.join(" ")}] — ${
+      sameSections ? "совпадают" : "РАСХОЖДЕНИЕ"
+    }`,
+  );
   const paras = paragraphs(after.document);
   console.log(`абзацев всего: ${paras.length} (было ${paragraphs(before.document).length})`);
   console.log(`\nфайлы: ${outDir}`);

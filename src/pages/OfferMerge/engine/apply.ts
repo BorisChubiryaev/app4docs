@@ -50,6 +50,24 @@ function replaceFootnoteBody(inner: string, text: string, opts: BuildOptions): s
   return `${open}${pPr ? pPr[0] : ""}${ref ? ref[0] : ""}${runs}</w:p>`;
 }
 
+/**
+ * Свойства абзаца с ЯВНО отключённой нумерацией.
+ *
+ * Просто убрать <w:numPr> недостаточно: нумерация может приходить из стиля
+ * абзаца, и абзац без собственного numPr молча становится новым пунктом (а со
+ * стилем заголовка — новым разделом, сдвигая нумерацию всего документа).
+ * Отключение в OOXML — это numId="0", его и ставим.
+ */
+function withoutNumbering(pPr: string): string {
+  const cleaned = pPr.replace(/<w:numPr>[\s\S]*?<\/w:numPr>/g, "");
+  const off = '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr>';
+  if (!cleaned) return `<w:pPr>${off}</w:pPr>`;
+  // По схеме numPr идёт сразу после pStyle.
+  const style = cleaned.match(/<w:pStyle\b[^>]*\/>/);
+  if (style) return cleaned.replace(style[0], style[0] + off);
+  return cleaned.replace("<w:pPr>", "<w:pPr>" + off);
+}
+
 /** Извлечь <w:pPr>…</w:pPr> из начала абзаца (стиль/нумерация сохраняются). */
 function extractPPr(pXml: string): string {
   const m = pXml.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
@@ -105,6 +123,25 @@ function searchFrom(op: Operation, document: string): number {
     : 0;
 }
 
+/**
+ * Видимый номер сноски для операции. Сноску можно задать номером
+ * («сноску 4») или пунктом («сноска к пункту 5.3») — во втором случае берём
+ * первую ссылку на сноску внутри этого пункта.
+ */
+function resolveFootnoteNumber(op: Operation, state: ApplyState): number | null {
+  if (op.target.kind !== "footnote") return null;
+  if (op.target.number > 0) return op.target.number;
+  const point = op.target.atPoint;
+  if (!point) return null;
+  const block = locatePointBlock(state.document, state.numbering, point, state.styles);
+  if (!block.length) return null;
+  const idx = indexFootnotes(state.document);
+  for (const [display, pos] of idx.displayToBodyPos) {
+    if (block.some((b) => pos >= b.start && pos < b.end)) return display;
+  }
+  return null;
+}
+
 /** Номер пункта, на который направлена операция (если он есть). */
 function opPoint(op: Operation): string | null {
   if (op.target.kind === "point" || op.target.kind === "appendix_point") return op.target.point;
@@ -120,9 +157,14 @@ function pickIndex(wanted: number, length: number): number {
   return wanted < 0 ? length + wanted : wanted - 1;
 }
 
-function ordinalWord(n: number): string {
-  const names = ["первое", "второе", "третье", "четвёртое", "пятое", "шестое"];
-  return n < 0 ? "последнее" : (names[n - 1] ?? `${n}-е`);
+/** Порядковое слово с согласованием: абзац мужского рода, предложение — среднего. */
+function ordinalWord(n: number, gender: "m" | "n" = "n"): string {
+  const forms = {
+    n: ["первое", "второе", "третье", "четвёртое", "пятое", "шестое"],
+    m: ["первый", "второй", "третий", "четвёртый", "пятый", "шестой"],
+  }[gender];
+  if (n < 0) return gender === "m" ? "последний" : "последнее";
+  return forms[n - 1] ?? `${n}-й`;
 }
 
 /**
@@ -244,6 +286,9 @@ export function applyOneOp(
     }
     // В пункте якоря нет (номера пунктов в разных редакциях расходятся).
     // Тогда опираемся на содержимое — но только если оно однозначно.
+    const pointFound = point
+      ? !!locatePointSpan(state.document, state.numbering, point, state.styles, searchFrom(op, state.document))
+      : false;
     const hits = countPhrase(state.document, op.anchor);
     if (hits === 0)
       return fail(
@@ -251,8 +296,11 @@ export function applyOneOp(
       );
     if (hits > 1)
       return fail(
-        `якорь «${op.anchor.slice(0, 40)}» встречается в Оферте ${hits} раз, ` +
-          `а п. ${point ?? "?"} по этому номеру не найден — куда вставлять, определить нельзя`,
+        pointFound
+          ? `п. ${point} найден, но якоря «${op.anchor.slice(0, 40)}» в нём нет; ` +
+              `в остальном тексте он встречается ${hits} раз — куда вставлять, определить нельзя`
+          : `якорь «${op.anchor.slice(0, 40)}» встречается в Оферте ${hits} раз, ` +
+              `а п. ${point ?? "?"} по этому номеру не найден — куда вставлять, определить нельзя`,
       );
     const res = (op.type === "insert_before" ? insertBeforeAnchor : insertAfterAnchor)(
       state.document,
@@ -382,10 +430,11 @@ export function applyOneOp(
     if (op.target.kind !== "footnote") return fail("цель не является сноской");
     if (op.payload === undefined) return fail("нет текста замены");
     if (!state.footnotes) return fail("в документе нет сносок");
+    const number = resolveFootnoteNumber(op, state) ?? op.target.number;
     const idx = indexFootnotes(state.document);
-    const id = idx.displayToId.get(op.target.number);
+    const id = idx.displayToId.get(number);
     const fn = id !== undefined ? findFootnoteById(state.footnotes, id) : null;
-    if (!fn) return fail(`сноска № ${op.target.number} не найдена`);
+    if (!fn) return fail(`сноска № ${number} не найдена`);
     const rebuilt = replaceFootnoteBody(fn.inner, op.payload, opts);
     state.footnotes =
       state.footnotes.slice(0, fn.start) +
@@ -393,8 +442,12 @@ export function applyOneOp(
     return {
       operationId: op.id,
       ok: true,
-      message: `сноска № ${op.target.number}: изложена в новой редакции`,
-      orderKey: idx.displayToBodyPos.get(op.target.number) ?? fn.start,
+      message:
+        `сноска № ${number}: изложена в новой редакции` +
+        (op.target.kind === "footnote" && op.target.atPoint
+          ? ` (найдена как первая сноска п. ${op.target.atPoint})`
+          : ""),
+      orderKey: idx.displayToBodyPos.get(number) ?? fn.start,
     };
   }
 
@@ -556,7 +609,7 @@ export function applyOneOp(
       return {
         operationId: op.id,
         ok: true,
-        message: `п. ${point}: ${ordinalWord(op.paragraphIndex ?? -1)} абзац изложен в новой редакции (абзацев в пункте: ${withText.length})`,
+        message: `п. ${point}: ${ordinalWord(op.paragraphIndex ?? -1, "m")} абзац изложен в новой редакции (абзацев в пункте: ${withText.length})`,
         orderKey: span.start,
       };
     }
@@ -612,7 +665,7 @@ export function applyOneOp(
     const body = stripLeadingNumber(stripOuterQuotes(op.payload));
     // Абзац внутри пункта своего номера не получает, поэтому автонумерацию с
     // него снимаем — иначе Word посчитает его следующим пунктом.
-    const pPr = extractPPr(span.inner).replace(/<w:numPr>[\s\S]*?<\/w:numPr>/, "");
+    const pPr = withoutNumbering(extractPPr(span.inner));
     const newPara = `<w:p>${pPr}${renderInsertRuns(body, opts)}</w:p>`;
     state.document =
       state.document.slice(0, span.end) + newPara + state.document.slice(span.end);
@@ -719,7 +772,7 @@ export function applyOneOp(
     const plain = paragraphText(span.inner).replace(/\s+/g, " ").trim();
     // Снимаем автонумерацию: тогда Word перенумерует последующие пункты, а сам
     // текст остаётся зачёркнутым — читатель видит, что именно исключено.
-    const pPr = extractPPr(span.inner).replace(/<w:numPr>[\s\S]*?<\/w:numPr>/, "");
+    const pPr = withoutNumbering(extractPPr(span.inner));
     const openMatch = span.inner.match(/^<w:p(?:\s[^>]*)?>/);
     const open = openMatch ? openMatch[0] : "<w:p>";
     const body = stripLeadingNumber(plain);
@@ -730,6 +783,100 @@ export function applyOneOp(
       ok: true,
       message: `пункт ${point} исключён (зачёркнут, последующие перенумеровываются автоматически)`,
       orderKey: span.start,
+    };
+  }
+
+  // ── Замена слов по всему тексту ────────────────────────────────────
+  if (op.type === "replace_words_global") {
+    if (!op.find) return fail("не указано, что заменять");
+    const replacement = stripOuterQuotes(op.payload ?? "");
+    const total = countPhrase(state.document, op.find);
+    if (total === 0) {
+      const already = countPhrase(state.document, replacement);
+      if (replacement && already > 0) {
+        return {
+          operationId: op.id,
+          ok: true,
+          message: `«${replacement}» уже стоит вместо «${op.find}» (${already} мест) — правка не требуется`,
+          orderKey: 0,
+        };
+      }
+      return fail(`«${op.find}» в тексте не найдено`);
+    }
+    const runs = renderDeleteRuns(op.find, opts) + renderInsertRuns(replacement, opts);
+    let done = 0;
+    let skipped = 0;
+    // Идём с конца: каждая замена меняет длину строки, и позиции более ранних
+    // вхождений от этого не сдвигаются.
+    for (let i = total - 1; i >= 0; i--) {
+      const res = replacePhraseRuns(state.document, op.find, runs, i);
+      if (res.ok) {
+        state.document = res.xml;
+        done++;
+      } else {
+        skipped++;
+      }
+    }
+    if (done === 0) return fail(`замены не удались: ${skipped} мест пересекают сноски или объекты`);
+    return {
+      operationId: op.id,
+      ok: true,
+      message:
+        `по всему тексту заменено «${op.find}» → «${replacement}»: ${done} мест` +
+        (skipped ? `; пропущено ${skipped} (пересекают сноску или объект — проверьте вручную)` : ""),
+      orderKey: 0,
+    };
+  }
+
+  // ── Исключить абзац пункта ─────────────────────────────────────────
+  if (op.type === "delete_paragraph") {
+    const point = opPoint(op);
+    if (!point) return fail("не указан номер пункта");
+    const block = locatePointBlock(
+      state.document,
+      state.numbering,
+      point,
+      state.styles,
+      searchFrom(op, state.document),
+    );
+    const withText = block.filter((b) => paragraphText(b.inner).trim().length > 0);
+    if (!withText.length) return fail(`пункт ${point} не найден в документе`);
+    const idx = pickIndex(op.paragraphIndex ?? -1, withText.length);
+    const span = withText[idx];
+    if (!span) return fail(`в п. ${point} нет абзаца № ${op.paragraphIndex}`);
+    const plain = paragraphText(span.inner).replace(/\s+/g, " ").trim();
+    const pPr = withoutNumbering(extractPPr(span.inner));
+    const openMatch = span.inner.match(/^<w:p(?:\s[^>]*)?>/);
+    const rebuilt = `${openMatch ? openMatch[0] : "<w:p>"}${pPr}${renderDeleteRuns(plain, opts)}</w:p>`;
+    state.document = spliceSpan(state.document, span, rebuilt);
+    return {
+      operationId: op.id,
+      ok: true,
+      message: `п. ${point}: ${ordinalWord(op.paragraphIndex ?? -1, "m")} абзац исключён (зачёркнут; всего абзацев было ${withText.length})`,
+      orderKey: span.start,
+    };
+  }
+
+  // ── Исключить сноску ───────────────────────────────────────────────
+  if (op.type === "delete_footnote") {
+    const number = resolveFootnoteNumber(op, state);
+    if (number === null) return fail("не удалось определить, какую сноску исключить");
+    const idx = indexFootnotes(state.document);
+    const pos = idx.displayToBodyPos.get(number);
+    if (pos === undefined) return fail(`сноска № ${number} не найдена в тексте`);
+    // Убираем ссылку из текста: без неё Word перестаёт показывать сноску и
+    // перенумеровывает последующие. Сам текст сноски остаётся в footnotes.xml —
+    // он не отображается, но и не теряется безвозвратно.
+    const runStart = state.document.lastIndexOf("<w:r", pos);
+    const runEnd = state.document.indexOf("</w:r>", pos);
+    if (runStart < 0 || runEnd < 0) return fail(`не удалось выделить ссылку на сноску № ${number}`);
+    state.document =
+      state.document.slice(0, runStart) + state.document.slice(runEnd + "</w:r>".length);
+    return {
+      operationId: op.id,
+      ok: true,
+      message: `сноска № ${number} исключена (последующие перенумеровываются автоматически)`,
+      orderKey: runStart,
     };
   }
 
