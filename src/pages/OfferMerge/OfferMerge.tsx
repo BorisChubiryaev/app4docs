@@ -6,7 +6,7 @@ import { saveAs } from "file-saver";
 import PageShell from "../../components/PageShell";
 import { parseAllChangeDocs, buildOutputs } from "./engine/pipeline";
 import { loadDocx } from "./engine/docx";
-import { previewOperation, type PreviewSnippet } from "./engine/preview";
+import { previewOperations, type PreviewSnippet } from "./engine/preview";
 import type { Operation, HighlightMode } from "./engine/types";
 import "./OfferMerge.css";
 
@@ -28,7 +28,17 @@ const OP_TYPE_LABEL: Record<Operation["type"], string> = {
   replace_table_rows: "изменить строки таблицы",
   sort_table_alpha: "сортировка по алфавиту",
   insert_table_row_alpha: "добавить по алфавиту",
-  delete: "исключить",
+  insert_before: "вставка перед словами",
+  replace_sentence: "изложить предложение заново",
+  replace_paragraph: "изложить абзац заново",
+  append_paragraph: "дополнить абзацем",
+  append_sentence: "дополнить предложением",
+  replace_words: "заменить слова",
+  delete_words: "удалить слова",
+  replace_words_global: "заменить по всему тексту",
+  delete_paragraph: "исключить абзац",
+  delete_footnote: "исключить сноску",
+  delete_point: "исключить пункт",
   manual: "ручная обработка",
 };
 
@@ -42,7 +52,17 @@ const OP_TYPE_ICON: Record<Operation["type"], string> = {
   replace_table_rows: "▦",
   sort_table_alpha: "🔤",
   insert_table_row_alpha: "🔤",
-  delete: "🗑️",
+  insert_before: "➕",
+  replace_sentence: "✏️",
+  replace_paragraph: "✏️",
+  append_paragraph: "➕",
+  append_sentence: "➕",
+  replace_words: "🔁",
+  delete_words: "🗑️",
+  replace_words_global: "🔁",
+  delete_paragraph: "🗑️",
+  delete_footnote: "🗑️",
+  delete_point: "🗑️",
   manual: "✋",
 };
 
@@ -55,6 +75,8 @@ function targetLabel(op: Operation): string {
       return `Термин${t.point ? ` (п. ${t.point})` : ""}: «${t.term}»`;
     case "point":
       return `Пункт ${t.point}${t.heading ? ` — ${t.heading}` : ""}`;
+    case "preamble":
+      return "Преамбула";
     case "appendix_point":
       return `Приложение №${t.appendix}, п. ${t.point}`;
     case "appendix_table":
@@ -71,6 +93,8 @@ function targetShort(op: Operation): string {
       return `Термин «${t.term}»`;
     case "point":
       return `Пункт ${t.point}`;
+    case "preamble":
+      return "Преамбула";
     case "appendix_point":
       return `Прил. ${t.appendix} · п. ${t.point}`;
     case "appendix_table":
@@ -106,6 +130,7 @@ export default function OfferMerge() {
     document: string;
     footnotes: string | null;
     numbering: string | null;
+    styles: string | null;
   } | null>(null);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
@@ -122,15 +147,12 @@ export default function OfferMerge() {
     [operations, excluded],
   );
 
-  // Предпросмотр «места правки» для каждой операции (пересчитывается при правках).
+  // Предпросмотр: прогоняем движок на включённых правках в том же порядке, что
+  // и при сборке, — карточка показывает ровно то, что окажется в файле.
   const previews = useMemo(() => {
-    const map = new Map<string, PreviewSnippet>();
-    if (!offerParts) return map;
-    for (const op of operations) {
-      map.set(op.id, previewOperation(offerParts.document, offerParts.footnotes, op, offerParts.numbering));
-    }
-    return map;
-  }, [operations, offerParts]);
+    if (!offerParts) return new Map<string, PreviewSnippet>();
+    return previewOperations(offerParts, includedOps);
+  }, [includedOps, offerParts]);
 
   // Доступность этапов для переключения.
   const canReview = operations.length > 0;
@@ -175,7 +197,12 @@ export default function OfferMerge() {
       const bytes = await fileBytes(offer);
       setOfferBytes(bytes);
       const parts = await loadDocx(bytes);
-      setOfferParts({ document: parts.document, footnotes: parts.footnotes, numbering: parts.numbering });
+      setOfferParts({
+        document: parts.document,
+        footnotes: parts.footnotes,
+        numbering: parts.numbering,
+        styles: parts.styles,
+      });
       const docs = [];
       for (const c of changes) docs.push({ name: c.name, data: await fileBytes(c) });
       const { operations: ops } = await parseAllChangeDocs(docs);
@@ -356,6 +383,7 @@ export default function OfferMerge() {
                 Распознано операций: <b>{operations.length}</b>. Разбор —
                 детерминированный алгоритм, без ИИ и без сети. Проверьте правки,
                 при необходимости отредактируйте текст или отключите ошибочные.
+                <DocSummary operations={operations} previews={previews} />
               </div>
 
               {operations.map((op, i) => (
@@ -590,18 +618,214 @@ function OpCard({
 
       {preview && <PreviewBlock preview={preview} />}
 
-      {op.anchor !== undefined && (
-        <Field label="После слов (якорь)" value={op.anchor} onChange={(v) => onChange({ anchor: v })} />
-      )}
-      {op.payload !== undefined && (
-        <Field
-          label={op.type === "replace" ? "Новая редакция" : "Вставляемый текст"}
-          value={op.payload}
-          onChange={(v) => onChange({ payload: v })}
-          multiline
-        />
+      {op.type === "manual" ? (
+        <ManualBuilder op={op} onChange={onChange} />
+      ) : (
+        <>
+          <TargetField op={op} onChange={onChange} />
+          {op.anchor !== undefined && (
+            <Field
+              label={op.type === "insert_before" ? "Перед словами (якорь)" : "После слов (якорь)"}
+              value={op.anchor}
+              onChange={(v) => onChange({ anchor: v })}
+            />
+          )}
+          {op.find !== undefined && (
+            <Field label="Что найти в пункте" value={op.find} onChange={(v) => onChange({ find: v })} />
+          )}
+          {op.payload !== undefined && (
+            <Field
+              label={op.type === "replace" ? "Новая редакция" : "Вставляемый текст"}
+              value={op.payload}
+              onChange={(v) => onChange({ payload: v })}
+              multiline
+            />
+          )}
+        </>
       )}
       {op.rows && <p className="om-card__rows">Строк таблицы к добавлению: {op.rows.length}</p>}
+    </div>
+  );
+}
+
+/**
+ * Сводка по каждому загруженному документу «Изменения».
+ *
+ * Без неё легко не заметить, что из одного файла не подхватилась ни одна
+ * правка: в общем списке это выглядит как «просто меньше карточек».
+ */
+function DocSummary({
+  operations,
+  previews,
+}: {
+  operations: Operation[];
+  previews: Map<string, PreviewSnippet>;
+}) {
+  const docs = new Map<string, { total: number; ok: number; manual: number; miss: number }>();
+  for (const op of operations) {
+    const row = docs.get(op.sourceDoc) ?? { total: 0, ok: 0, manual: 0, miss: 0 };
+    row.total++;
+    const pv = previews.get(op.id);
+    if (op.type === "manual") row.manual++;
+    else if (pv && !pv.ok) row.miss++;
+    else row.ok++;
+    docs.set(op.sourceDoc, row);
+  }
+  if (docs.size === 0) return null;
+  return (
+    <ul className="om-docsum">
+      {[...docs.entries()].map(([name, r]) => (
+        <li key={name} className={r.ok === 0 ? "om-docsum__row om-docsum__row--empty" : "om-docsum__row"}>
+          <span className="om-docsum__name">{name}</span>
+          <span className="om-docsum__stats">
+            применится {r.ok} из {r.total}
+            {r.miss ? ` · не найдено мест: ${r.miss}` : ""}
+            {r.manual ? ` · вручную: ${r.manual}` : ""}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Номер цели правки — редактируемый.
+ *
+ * Номера в документах «Изменения» относятся к своей редакции и расходятся с
+ * текущей. Движок в таких случаях пишет, в каких пунктах или сносках нужная
+ * фраза есть; без поля для номера эта подсказка остаётся бесполезной.
+ */
+function TargetField({
+  op,
+  onChange,
+}: {
+  op: Operation;
+  onChange: (patch: Partial<Operation>) => void;
+}) {
+  const t = op.target;
+  if (t.kind === "footnote") {
+    return (
+      <Field
+        label="Номер сноски"
+        value={String(t.number || "")}
+        onChange={(v) =>
+          onChange({ target: { ...t, number: parseInt(v, 10) || 0, atPoint: undefined } })
+        }
+      />
+    );
+  }
+  if (t.kind === "point" || t.kind === "appendix_point" || t.kind === "term") {
+    const point = t.kind === "term" ? (t.point ?? "") : t.point;
+    return (
+      <Field
+        label={t.kind === "appendix_point" ? `Номер пункта Приложения №${t.appendix}` : "Номер пункта"}
+        value={point}
+        onChange={(v) => onChange({ target: { ...t, point: v.trim() } })}
+      />
+    );
+  }
+  return null;
+}
+
+/** Типы правок, которые оператор может собрать руками, и их поля. */
+const MANUAL_TYPES: {
+  type: Operation["type"];
+  label: string;
+  needs: ("anchor" | "find" | "payload")[];
+}[] = [
+  { type: "replace", label: "изложить пункт в новой редакции", needs: ["payload"] },
+  { type: "replace_sentence", label: "изложить последнее предложение", needs: ["payload"] },
+  { type: "append_sentence", label: "дополнить пункт предложением", needs: ["payload"] },
+  { type: "append_paragraph", label: "дополнить пункт абзацем", needs: ["payload"] },
+  { type: "insert_after", label: "вставить после слов", needs: ["anchor", "payload"] },
+  { type: "insert_before", label: "вставить перед словами", needs: ["anchor", "payload"] },
+  { type: "replace_words", label: "заменить слова", needs: ["find", "payload"] },
+  { type: "delete_words", label: "удалить слова", needs: ["find"] },
+  { type: "delete_point", label: "исключить пункт", needs: [] },
+];
+
+/**
+ * Конструктор правки для строк, которые парсер не разобрал.
+ *
+ * Никакой разбор не покроет все формулировки нормативных документов, поэтому у
+ * оператора должен быть способ довести правку руками — иначе единственный
+ * выход это «не распозналось, вносите в Word самостоятельно».
+ */
+function ManualBuilder({
+  op,
+  onChange,
+}: {
+  op: Operation;
+  onChange: (patch: Partial<Operation>) => void;
+}) {
+  const [type, setType] = useState<Operation["type"]>("replace");
+  // У нераспознанной строки номер пункта — заглушка «—»: показывать её в поле
+  // нельзя, иначе оператор отправит её как настоящий номер.
+  const guessed =
+    op.target.kind === "point" || op.target.kind === "appendix_point" ? op.target.point : "";
+  const [point, setPoint] = useState(/^\d/.test(guessed) ? guessed : "");
+  const [anchor, setAnchor] = useState("");
+  const [find, setFind] = useState("");
+  const [payload, setPayload] = useState("");
+  const spec = MANUAL_TYPES.find((t) => t.type === type)!;
+  const ready = point.trim() !== "" && (!spec.needs.includes("payload") || payload.trim() !== "");
+
+  return (
+    <div className="om-manual">
+      <div className="om-manual__title">Собрать правку вручную</div>
+      <div className="om-manual__row">
+        <label className="om-field">
+          <span>Что сделать</span>
+          <select
+            className="ds-select"
+            value={type}
+            onChange={(e) => setType(e.target.value as Operation["type"])}
+          >
+            {MANUAL_TYPES.map((t) => (
+              <option key={t.type} value={t.type}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="om-field">
+          <span>Номер пункта</span>
+          <input
+            className="ds-input"
+            value={point}
+            placeholder="например, 5.3.1"
+            onChange={(e) => setPoint(e.target.value)}
+          />
+        </label>
+      </div>
+      {spec.needs.includes("anchor") && (
+        <Field label="Якорные слова" value={anchor} onChange={setAnchor} />
+      )}
+      {spec.needs.includes("find") && (
+        <Field label="Что найти в пункте" value={find} onChange={setFind} />
+      )}
+      {spec.needs.includes("payload") && (
+        <Field label="Текст правки" value={payload} onChange={setPayload} multiline />
+      )}
+      <button
+        type="button"
+        className="om-btn om-btn--sm"
+        disabled={!ready}
+        onClick={() =>
+          onChange({
+            type,
+            target: { kind: "point", section: point.split(".")[0], point: point.trim() },
+            anchor: spec.needs.includes("anchor") ? anchor : undefined,
+            find: spec.needs.includes("find") ? find : undefined,
+            payload: spec.needs.includes("payload") ? payload : undefined,
+            sentenceIndex: type === "replace_sentence" ? -1 : undefined,
+            warnings: ["правка собрана оператором вручную"],
+            confidence: 1,
+          })
+        }
+      >
+        Применить как правку
+      </button>
     </div>
   );
 }
@@ -611,49 +835,40 @@ function PreviewBlock({ preview }: { preview: PreviewSnippet }) {
     return (
       <div className="om-preview om-preview--manual">
         <span className="om-preview__badge">✋ ручная обработка</span>
-        <span className="om-preview__note">{preview.hit}</span>
+        <span className="om-preview__note">{preview.message}</span>
       </div>
     );
   }
-  if (!preview.ok && preview.kind === "none") {
+  if (!preview.ok) {
     return (
       <div className="om-preview om-preview--miss">
-        <span className="om-preview__badge">
-          {preview.willApply === false ? "⏭ будет пропущено" : "📍 место не найдено"}
-        </span>
-        <span className="om-preview__note">
-          {preview.note ?? "не удалось показать место правки"}
-          {preview.willApply === false
-            ? ""
-            : " — правка всё равно будет применена по указанным данным"}
-        </span>
+        <span className="om-preview__badge">📍 правка не будет применена</span>
+        <span className="om-preview__note">{preview.message}</span>
       </div>
     );
   }
   return (
     <div className="om-preview">
-      <div className="om-preview__label">
-        📍 Предпросмотр места правки{preview.note ? ` · ${preview.note}` : ""}
-      </div>
-      <div className="om-preview__doc">
-        {preview.kind === "replace" ? (
-          <>
-            {preview.removed && <span className="om-old">{preview.removed}</span>}
-            <span className="om-new">{preview.hit}</span>
-          </>
-        ) : preview.kind === "table" ? (
-          <>
-            <span className="om-new">{preview.hit}</span>
-            {preview.after && <span className="om-preview__ctx"> — {preview.after}</span>}
-          </>
-        ) : (
-          <>
-            <span className="om-ctx">{preview.before}</span>
-            <mark className="om-mark">{preview.hit}</mark>
-            <span className="om-ctx">{preview.after}</span>
-          </>
-        )}
-      </div>
+      <div className="om-preview__label">📍 Как будет в документе · {preview.message}</div>
+      {preview.segments && (
+        <div className="om-preview__doc">
+          {preview.segments.map((seg, i) =>
+            seg.mark === "ins" ? (
+              <mark key={i} className="om-mark">
+                {seg.text}
+              </mark>
+            ) : seg.mark === "del" ? (
+              <span key={i} className="om-old">
+                {seg.text}
+              </span>
+            ) : (
+              <span key={i} className="om-ctx">
+                {seg.text}
+              </span>
+            ),
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -673,7 +888,14 @@ function Field({
     <label className="om-field">
       <span>{label}</span>
       {multiline ? (
-        <textarea className="ds-textarea" value={value} rows={2} onChange={(e) => onChange(e.target.value)} />
+        // Юридическая формулировка бывает в 20 строк: поле подстраивается под
+        // текст, иначе оператор проверяет правку через щёлку в три строки.
+        <textarea
+          className="ds-textarea om-textarea"
+          value={value}
+          rows={Math.min(24, Math.max(3, Math.ceil(value.length / 80) + value.split("\n").length))}
+          onChange={(e) => onChange(e.target.value)}
+        />
       ) : (
         <input className="ds-input" value={value} onChange={(e) => onChange(e.target.value)} />
       )}

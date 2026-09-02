@@ -5,7 +5,7 @@ import { loadDocx } from "./docx";
 import { applyOperations, applyOneOp } from "./apply";
 import { buildCombinedDocx } from "./combined";
 import { parseInstructionsOffline, resetIds } from "./offline";
-import { paragraphs, tables } from "./text";
+import { paragraphsOutsideTables, tables } from "./text";
 import type { BuildOptions, BuildResult, Operation } from "./types";
 
 export interface ChangeDocInput {
@@ -21,7 +21,7 @@ export async function parseAllChangeDocs(
   const all: Operation[] = [];
   for (const cd of changeDocs) {
     const parts = await loadDocx(cd.data);
-    const paras = paragraphs(parts.document);
+    const paras = paragraphsOutsideTables(parts.document);
     const docTables = tables(parts.document);
     all.push(...parseInstructionsOffline(paras, docTables, cd.name));
   }
@@ -36,7 +36,12 @@ export async function orderOperations(
 ): Promise<Operation[]> {
   const offer = await loadDocx(offerData);
   const keyed = operations.map((op) => {
-    const state = { document: offer.document, footnotes: offer.footnotes, numbering: offer.numbering };
+    const state = {
+      document: offer.document,
+      footnotes: offer.footnotes,
+      numbering: offer.numbering,
+      styles: offer.styles,
+    };
     const r = applyOneOp(op, state, opts);
     return { op, key: r.ok ? r.orderKey : Number.MAX_SAFE_INTEGER };
   });

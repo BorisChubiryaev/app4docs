@@ -101,7 +101,14 @@ function isIgnorable(ch: string): boolean {
   return /\s/.test(ch) || ch === "«" || ch === "»";
 }
 
-function findAnchorEnd(tokens: RunToken[], anchor: string): CharPos | null {
+/** Диапазон фразы в ранах: от первого символа до последнего включительно. */
+interface PhraseRange {
+  from: CharPos;
+  to: CharPos;
+}
+
+/** Найти фразу в тексте ранов, игнорируя пробелы и «ёлочки». */
+function findPhrase(tokens: RunToken[], phrase: string, occurrence = 0): PhraseRange | null {
   const chars: { ch: string; pos: CharPos }[] = [];
   tokens.forEach((t, runIdx) => {
     for (let i = 0; i < t.text.length; i++) {
@@ -111,14 +118,111 @@ function findAnchorEnd(tokens: RunToken[], anchor: string): CharPos | null {
     }
   });
   const flat = chars.map((c) => c.ch).join("");
-  const needle = Array.from(anchor)
+  const needle = Array.from(phrase)
     .filter((ch) => !isIgnorable(ch))
     .join("")
     .toLowerCase();
   if (!needle) return null;
-  const idx = flat.indexOf(needle);
-  if (idx < 0) return null;
-  return chars[idx + needle.length - 1].pos;
+  let idx = -1;
+  for (let n = 0; n <= occurrence; n++) {
+    idx = flat.indexOf(needle, idx + 1);
+    if (idx < 0) return null;
+  }
+  return { from: chars[idx].pos, to: chars[idx + needle.length - 1].pos };
+}
+
+/**
+ * Номер вхождения `find`, которое идёт ПОСЛЕ фразы `anchor`.
+ *
+ * Инструкции вида «после слов A удалить слова B» опираются на порядок: сами
+ * по себе слова B могут встречаться в пункте несколько раз, и без привязки к A
+ * мы вырежем не то место.
+ */
+export function phraseOccurrenceAfter(
+  xml: string,
+  anchor: string,
+  find: string,
+): number | null {
+  const flatten = (t: string) =>
+    Array.from(t)
+      .filter((ch) => !isIgnorable(ch))
+      .join("")
+      .toLowerCase();
+  const tokens = tokenizeRuns(xml);
+  const text = flatten(tokens.map((t) => t.text).join(""));
+  const a = flatten(anchor);
+  const f = flatten(find);
+  if (!f) return null;
+  const anchorAt = a ? text.indexOf(a) : 0;
+  if (anchorAt < 0) return null;
+  const target = text.indexOf(f, anchorAt + (a ? a.length : 0));
+  if (target < 0) return null;
+  let n = 0;
+  for (let i = text.indexOf(f); i >= 0 && i < target; i = text.indexOf(f, i + 1)) n++;
+  return n;
+}
+
+/** Сколько раз фраза встречается в ранах. */
+export function countPhrase(xml: string, phrase: string): number {
+  const tokens = tokenizeRuns(xml);
+  let n = 0;
+  while (findPhrase(tokens, phrase, n)) n++;
+  return n;
+}
+
+function findAnchorEnd(tokens: RunToken[], anchor: string): CharPos | null {
+  const r = findPhrase(tokens, anchor);
+  return r ? r.to : null;
+}
+
+/** Собрать ран с тем же оформлением и заданным куском текста. */
+function sliceRun(tok: RunToken, from: number, to: number): string {
+  const text = tok.text.slice(from, to);
+  if (!text) return "";
+  const tAttrs = tok.tAttrs || ' xml:space="preserve"';
+  return `<w:r>${tok.rPr}<w:t${tAttrs}>${escapeXml(text)}</w:t></w:r>`;
+}
+
+/**
+ * Заменить фразу `find` на готовые раны `newRuns`.
+ *
+ * Фраза может быть разорвана на несколько ранов (Word режет текст произвольно),
+ * поэтому режем крайние раны и выбрасываем те, что целиком внутри фразы. Раны
+ * со сносками/картинками внутри диапазона — стоп-сигнал: вырезав их, мы молча
+ * потеряем ссылку на сноску, поэтому в таком случае честно отказываемся.
+ */
+export function replacePhraseRuns(
+  xml: string,
+  find: string,
+  newRuns: string,
+  occurrence = 0,
+): InsertResult {
+  const tokens = tokenizeRuns(xml);
+  const range = findPhrase(tokens, find, occurrence);
+  if (!range) {
+    return { xml, ok: false, message: `фраза не найдена: «${find}»`, orderKey: -1 };
+  }
+  const a = tokens[range.from.runIdx];
+  const b = tokens[range.to.runIdx];
+  for (let i = range.from.runIdx; i <= range.to.runIdx; i++) {
+    if (!tokens[i].simple) {
+      return {
+        xml,
+        ok: false,
+        message: `фраза «${find}» пересекает сноску или объект — правка требует ручной обработки`,
+        orderKey: -1,
+      };
+    }
+  }
+  const head = sliceRun(a, 0, range.from.offInRun);
+  const tail = sliceRun(b, range.to.offInRun + 1, b.text.length);
+  const rebuilt = head + newRuns + tail;
+  return {
+    xml: xml.slice(0, a.start) + rebuilt + xml.slice(b.end),
+    ok: true,
+    message: "фраза заменена",
+    orderKey: a.start,
+  };
 }
 
 export interface InsertResult {
@@ -145,16 +249,13 @@ export function insertAfterAnchor(
     return { xml, ok: false, message: `якорь не найден: «${anchor}»`, orderKey: -1 };
   }
   const tok = tokens[end.runIdx];
-  let cut = end.offInRun + 1; // режем после последнего символа якоря
-  // Проскочить закрывающие » (и пробелы перед ними), чтобы вставка встала
-  // ПОСЛЕ кавычки, а не внутри неё: «…Страхование»‹сюда›.
-  while (cut < tok.text.length && (tok.text[cut] === "»" || /\s/.test(tok.text[cut]))) {
-    if (tok.text[cut] === "»") {
-      cut++;
-      break;
-    }
-    cut++;
-  }
+  let cut = end.offInRun + 1; // режем сразу после последнего символа якоря
+  // Если дальше (через пробелы) стоит закрывающая », вставка должна встать
+  // ПОСЛЕ неё: «…Страхование»‹сюда›. Но сами пробелы забирать нельзя — иначе
+  // они уедут в «левую» часть, и получится «заключения  Банком и ККИПДоговора».
+  let look = cut;
+  while (look < tok.text.length && /\s/.test(tok.text[look])) look++;
+  if (tok.text[look] === "»") cut = look + 1;
 
   if (tok.simple) {
     const before = tok.text.slice(0, cut);
@@ -178,6 +279,33 @@ export function insertAfterAnchor(
     message: "вставлено после рана (ран сложный, резка пропущена)",
     orderKey: tok.end,
   };
+}
+
+/**
+ * Вставить раны ПЕРЕД якорной фразой. Нужно для формулировок «перед словами
+ * «X» дополнить словами «Y»» — зеркало insertAfterAnchor.
+ */
+export function insertBeforeAnchor(
+  xml: string,
+  anchor: string,
+  newRuns: string,
+): InsertResult {
+  const tokens = tokenizeRuns(xml);
+  const range = findPhrase(tokens, anchor);
+  if (!range) {
+    return { xml, ok: false, message: `якорь не найден: «${anchor}»`, orderKey: -1 };
+  }
+  const tok = tokens[range.from.runIdx];
+  if (!tok.simple) {
+    const newXml = xml.slice(0, tok.start) + newRuns + xml.slice(tok.start);
+    return { xml: newXml, ok: true, message: "вставлено перед раном", orderKey: tok.start };
+  }
+  const tAttrs = tok.tAttrs || ' xml:space="preserve"';
+  const cut = range.from.offInRun;
+  const head = cut ? `<w:r>${tok.rPr}<w:t${tAttrs}>${escapeXml(tok.text.slice(0, cut))}</w:t></w:r>` : "";
+  const tail = `<w:r>${tok.rPr}<w:t${tAttrs}>${escapeXml(tok.text.slice(cut))}</w:t></w:r>`;
+  const newXml = xml.slice(0, tok.start) + head + newRuns + tail + xml.slice(tok.end);
+  return { xml: newXml, ok: true, message: "вставлено перед якорем", orderKey: tok.start };
 }
 
 /**

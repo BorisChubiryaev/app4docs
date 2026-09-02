@@ -27,6 +27,30 @@ export function paragraphs(documentXml: string): string[] {
 }
 
 /**
+ * Абзацы ВНЕ таблиц. Ячейка таблицы состоит из тех же <w:p>, поэтому обычный
+ * разбор смешивает инструкции с содержимым таблиц: строка «ООО «СберЛогистика»»
+ * попадает в поток инструкций и мешает склейке многоабзацных редакций.
+ */
+export function paragraphsOutsideTables(documentXml: string): string[] {
+  const gaps: { from: number; to: number }[] = [];
+  let t: RegExpExecArray | null;
+  TBL_RE.lastIndex = 0;
+  while ((t = TBL_RE.exec(documentXml)) !== null) {
+    gaps.push({ from: t.index, to: t.index + t[0].length });
+  }
+  const inTable = (pos: number) => gaps.some((g) => pos >= g.from && pos < g.to);
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  P_RE.lastIndex = 0;
+  while ((m = P_RE.exec(documentXml)) !== null) {
+    if (inTable(m.index)) continue;
+    const txt = xmlText(m[0]);
+    if (txt) out.push(txt);
+  }
+  return out;
+}
+
+/**
  * Извлечь содержимое сбалансированных кавычек-«ёлочек», начиная с позиции
  * первого «. Учитывает вложенность («ООО СК «Сбербанк Страхование»»).
  */
@@ -63,7 +87,13 @@ export function tables(documentXml: string): string[][][] {
       const cells: string[] = [];
       const tcRe = /<w:tc>[\s\S]*?<\/w:tc>/g;
       let tc: RegExpExecArray | null;
-      while ((tc = tcRe.exec(tr[0])) !== null) cells.push(xmlText(tc[0]));
+      while ((tc = tcRe.exec(tr[0])) !== null) {
+        // Ячейка нередко состоит из нескольких абзацев — наименование компании
+        // и её сайт. Склеив их подряд, получаем «ООО «Ромашка»https://…»,
+        // поэтому границы абзацев сохраняем переводом строки.
+        const parts = (tc[0].match(P_RE) ?? []).map((x) => xmlText(x)).filter(Boolean);
+        cells.push(parts.length ? parts.join("\n") : xmlText(tc[0]));
+      }
       rows.push(cells);
     }
     result.push(rows);

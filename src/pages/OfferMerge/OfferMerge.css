@@ -589,7 +589,9 @@
 .om-old {
   color: var(--muted);
   text-decoration: line-through;
-  margin-right: 6px;
+  background: rgba(255, 59, 48, 0.12);
+  border-radius: 3px;
+  padding: 0 2px;
 }
 .om-preview__ctx {
   color: var(--muted);
@@ -664,4 +666,74 @@
   20% {
     box-shadow: 0 0 0 3px rgba(130, 150, 255, 0.5);
   }
+}
+
+/* Сводка по загруженным документам «Изменения». */
+.om-docsum {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.om-docsum__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.om-docsum__name {
+  color: var(--ink);
+  font-weight: 600;
+  word-break: break-word;
+}
+/* Файл, из которого не применится ни одна правка, должен бросаться в глаза:
+   именно такой случай раньше выглядел как «просто меньше карточек». */
+.om-docsum__row--empty .om-docsum__stats {
+  color: #d9480f;
+  font-weight: 600;
+}
+:root[data-theme="dark"] .om-docsum__row--empty .om-docsum__stats {
+  color: #ff922b;
+}
+/* Поле новой редакции растёт под объём текста, но не выше экрана. */
+.om-textarea {
+  max-height: 60vh;
+  line-height: 1.5;
+}
+
+/* Конструктор правки для нераспознанных формулировок. */
+.om-manual {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--panel-2, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.om-manual__title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.om-manual__row {
+  display: grid;
+  grid-template-columns: 1fr 160px;
+  gap: 10px;
+}
+@media (max-width: 700px) {
+  .om-manual__row {
+    grid-template-columns: 1fr;
+  }
+}
+.om-btn--sm {
+  align-self: flex-start;
+  padding: 7px 14px;
+  font-size: 0.85rem;
 }
