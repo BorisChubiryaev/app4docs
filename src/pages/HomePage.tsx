@@ -14,6 +14,9 @@ import "./HomePage.css";
 // в футере, и в одноразовом окне с просьбой пройти опрос.
 const SURVEY_URL = "https://public.oprosso.sber.ru/p/jgwgns80";
 
+// ⬇️ ССЫЛКА НА СБЕРЧАТ ДЛЯ РЕБРЕНДИНГА
+const SBERCHAT_URL = "https://sberchat.sberbank.ru/join-circle/0abb2491520a72356261de83e7ba96bbace14faae1248dedd3125ed476f5295b";
+
 const AnimatedBackground = memo(() => (
   <div className="lg-ambient">
     <div className="lg-orb lg-orb--1" />
@@ -63,7 +66,7 @@ const ToolCard = memo(({ tool, index }) => (
   </Link>
 ));
 
-// ─── Модальное окно ───
+// ─── Модальное окно обратной связи ───
 const FeedbackModal = memo(({ isOpen, onClose }) => {
   const handleWriteToUs = useCallback(() => {
     const subject = encodeURIComponent(
@@ -175,6 +178,77 @@ const CsiModal = memo(({ isOpen, onClose }) => {
             </a>
             <button className="lg-btn lg-btn--ghost" onClick={onClose}>
               Позже
+            </button>
+          </div>7н
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// ─── Окно с предложением участвовать в ребрендинге ───
+const RebrandingModal = memo(({ isOpen, onClose, onVote }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="lg-modal-overlay" onClick={onClose}>
+      <div className="lg-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="lg-modal__glass" />
+        <div className="lg-modal__shine" />
+
+        <div className="lg-modal__content">
+          <button className="lg-modal__close" onClick={onClose}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path
+                d="M4 4l10 10M14 4L4 14"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+
+          <h2 className="lg-modal__title">Помогите нам выбрать новое имя!</h2>
+
+          <p className="lg-modal__text">
+            <span className="lg-gradient-text">EX-EL</span> вырос из просто
+            «эксель-помощника» — теперь мы работаем с документами, изображениями,
+            таблицами и графиками. Пора менять имя!
+          </p>
+
+          <div className="lg-modal__rebranding-steps">
+            <div className="lg-modal__step">
+              <span className="lg-modal__step-num">1</span>
+              <span className="lg-modal__step-text">
+                <strong>Предложите имя</strong> — напишите свой вариант в
+                комментариях к посту в СберЧате
+              </span>
+            </div>
+            <div className="lg-modal__step">
+              <span className="lg-modal__step-num">2</span>
+              <span className="lg-modal__step-text">
+                <strong>Голосуйте</strong> — мы выберем лучшие идеи и запустим
+                второй тур, где победителя выберет сообщество
+              </span>
+            </div>
+          </div>
+
+          <p className="lg-modal__text" style={{ marginTop: 12, fontSize: 14 }}>
+            🎁 Автор победившего названия получит <strong>приз</strong>!
+          </p>
+
+          <div className="lg-modal__actions">
+            <a
+              className="lg-btn lg-btn--primary lg-footer__btn"
+              href={SBERCHAT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onVote}
+            >
+              🗳️ Проголосовать
+            </a>
+            <button className="lg-btn lg-btn--ghost" onClick={onClose}>
+              Закрыть
             </button>
           </div>
         </div>
@@ -294,7 +368,7 @@ const tools: Tool[] = [
     note: "Не подходит для документов со сложными таблицами",
   },
   {
-    title: "Объединение изменений в Оферту - 🆕",
+    title: "Объединение изменений в оферту",
     path: "/OfferMerge",
     description:
       "Собирает изменения из нескольких документов в объединённый файл и обновляет текст оферты с выделением правок",
@@ -302,8 +376,7 @@ const tools: Tool[] = [
     features: [
       "Разбор инструкций алгоритмом (без ИИ)",
       "Правки: сноски, пункты, редакции, строки таблиц",
-      "Выделение цветом или как исправления Word",
-      "✅ - Работает офлайн, файлы не покидают устройство",
+      "Выделение цветом или как исправления Word"
     ],
   },
   //   {
@@ -324,25 +397,6 @@ const LAYOUTS = [
   { id: "menu", label: "Меню", icon: "☰" },
   { id: "list", label: "Список", icon: "≣" },
 ];
-
-const LayoutSwitcher = ({ value, onChange }) => (
-  <div className="hp-switch" role="tablist" aria-label="Вид главной страницы">
-    {LAYOUTS.map((l) => (
-      <button
-        key={l.id}
-        type="button"
-        role="tab"
-        aria-selected={value === l.id}
-        className={`hp-switch__btn ${value === l.id ? "is-active" : ""}`}
-        onClick={() => onChange(l.id)}
-        title={`Вид: ${l.label}`}
-      >
-        <span className="hp-switch__ico">{l.icon}</span>
-        <span className="hp-switch__label">{l.label}</span>
-      </button>
-    ))}
-  </div>
-);
 
 // ─── Вариант «Сетка» ───
 const GridLayout = memo(() => (
@@ -1003,6 +1057,7 @@ const ListLayout = memo(() => (
 const HomePage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCsiOpen, setIsCsiOpen] = useState(false);
+  const [isRebrandingOpen, setIsRebrandingOpen] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadedFilename, setDownloadedFilename] = useState<string>("");
   const [layout, setLayout] = useState<string>(
@@ -1013,6 +1068,17 @@ const HomePage = () => {
     localStorage.setItem("hp-layout", id);
   }, []);
 
+  // Обработчики для модалок
+  const closeModal = useCallback(() => setIsModalOpen(false), []);
+  const closeCsi = useCallback(() => setIsCsiOpen(false), []);
+  const closeRebranding = useCallback(() => setIsRebrandingOpen(false), []);
+
+  const handleRebrandingVote = useCallback(() => {
+    localStorage.setItem("rebrandingVoted", "true");
+    setIsRebrandingOpen(false);
+    // Открываем СберЧат в новой вкладке
+    window.open(SBERCHAT_URL, "_blank");
+  }, []);
 
   // Добавьте эффект для обработки URL при загрузке главной страницы:
   useEffect(() => {
@@ -1038,9 +1104,12 @@ const HomePage = () => {
     processUrlDownload();
   }, []);
 
+  // Показ модальных окон с приоритетами:
+  // 1. CSI (опрос удовлетворённости) — показывается один раз
+  // 2. Ребрендинг — показывается один раз, если не проголосовали
+  // 3. Обратная связь — показывается один раз
   useEffect(() => {
-    // Один раз показываем окно опроса CSI. Пока не показан — приоритетнее
-    // окна обратной связи, чтобы модалки не накладывались друг на друга.
+    // Проверяем CSI
     if (!localStorage.getItem("csiSurveyShown")) {
       const timer = setTimeout(() => {
         setIsCsiOpen(true);
@@ -1048,7 +1117,16 @@ const HomePage = () => {
       }, 1500);
       return () => clearTimeout(timer);
     }
-    // CSI уже показывали — при необходимости показываем окно обратной связи.
+
+    // Проверяем ребрендинг
+    if (!localStorage.getItem("rebrandingVoted")) {
+      const timer = setTimeout(() => {
+        setIsRebrandingOpen(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+
+    // Проверяем feedback
     if (!localStorage.getItem("feedbackModalShown")) {
       const timer = setTimeout(() => {
         setIsModalOpen(true);
@@ -1058,15 +1136,17 @@ const HomePage = () => {
     }
   }, []);
 
-  const closeModal = useCallback(() => setIsModalOpen(false), []);
-  const closeCsi = useCallback(() => setIsCsiOpen(false), []);
-
   return (
     <div className="lg-page">
       <AnimatedBackground />
 
       <FeedbackModal isOpen={isModalOpen} onClose={closeModal} />
       <CsiModal isOpen={isCsiOpen} onClose={closeCsi} />
+      <RebrandingModal
+        isOpen={isRebrandingOpen}
+        onClose={closeRebranding}
+        onVote={handleRebrandingVote}
+      />
 
       {/* ─── Header ─── */}
       <header className="lg-header">
@@ -1230,7 +1310,7 @@ const HomePage = () => {
               ✉️ Написать нам
             </button>
             <a
-              href="https://sberchat.sberbank.ru/join-circle/0abb2491520a72356261de83e7ba96bbace14faae1248dedd3125ed476f5295b"
+              href={SBERCHAT_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="lg-btn lg-btn--sberchat"
