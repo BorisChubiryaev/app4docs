@@ -218,6 +218,98 @@
   color: var(--dk-text) !important;
 }
 
+/* ── ComparePage: таблица различий Word (inline-diff) ── */
+:root[data-theme="dark"] .word-comparison-view {
+  background: var(--dk-panel) !important;
+  box-shadow: none !important;
+  border: 1px solid var(--dk-border) !important;
+}
+:root[data-theme="dark"] .wd-table {
+  background: transparent !important;
+  border-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .wd-row {
+  border-top-color: var(--dk-border) !important;
+}
+:root[data-theme="dark"] .wd-row--head {
+  background: var(--dk-head) !important;
+  color: var(--dk-text-2) !important;
+}
+:root[data-theme="dark"] .wd-cell {
+  border-left-color: var(--dk-border) !important;
+  color: var(--dk-text) !important;
+}
+:root[data-theme="dark"] .wd-cell--loc {
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: var(--dk-text-2) !important;
+}
+:root[data-theme="dark"] .wd-plain {
+  color: var(--dk-text) !important;
+}
+:root[data-theme="dark"] .wd-empty {
+  color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* подсветка строк по типу изменения */
+:root[data-theme="dark"] .wd-row--modified {
+  background: rgba(210, 153, 34, 0.1) !important;
+}
+:root[data-theme="dark"] .wd-row--added {
+  background: rgba(63, 185, 80, 0.1) !important;
+}
+:root[data-theme="dark"] .wd-row--removed {
+  background: rgba(248, 81, 73, 0.1) !important;
+}
+
+/* пословный diff */
+:root[data-theme="dark"] .wd-tok--same {
+  color: var(--dk-text) !important;
+}
+:root[data-theme="dark"] .wd-tok--del {
+  background: rgba(248, 81, 73, 0.22) !important;
+  color: #ff9a91 !important;
+}
+:root[data-theme="dark"] .wd-tok--ins {
+  background: rgba(63, 185, 80, 0.22) !important;
+  color: #7ee787 !important;
+}
+
+/* статусы */
+:root[data-theme="dark"] .wd-status--modified {
+  background: rgba(210, 153, 34, 0.22) !important;
+  color: #e3b341 !important;
+}
+:root[data-theme="dark"] .wd-status--added {
+  background: rgba(63, 185, 80, 0.22) !important;
+  color: #7ee787 !important;
+}
+:root[data-theme="dark"] .wd-status--removed {
+  background: rgba(248, 81, 73, 0.22) !important;
+  color: #ff9a91 !important;
+}
+:root[data-theme="dark"] .wd-status--identical {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--dk-text-2) !important;
+}
+
+/* бейджи-счётчики в шапке (шапка — градиент, поэтому полупрозрачные) */
+:root[data-theme="dark"] .stat-badge--modified {
+  background: rgba(210, 153, 34, 0.28) !important;
+  color: #ffe08a !important;
+}
+:root[data-theme="dark"] .stat-badge--added {
+  background: rgba(63, 185, 80, 0.28) !important;
+  color: #a9f0bd !important;
+}
+:root[data-theme="dark"] .stat-badge--removed {
+  background: rgba(248, 81, 73, 0.28) !important;
+  color: #ffb4ae !important;
+}
+
+:root[data-theme="dark"] .no-items-message {
+  color: var(--dk-text-2) !important;
+}
+
 /* ── WorkplaceCompare ── */
 :root[data-theme="dark"] .workplace-compare-page {
   background: linear-gradient(160deg, #12131c 0%, #171a26 55%, #0f1018 100%) !important;

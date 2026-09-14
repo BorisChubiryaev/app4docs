@@ -59,6 +59,285 @@ export interface WordCompareResult {
 
 const WNS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
+/** Значение атрибута w:val (устойчиво к префиксам). */
+function wVal(el: Element | null | undefined): string | null {
+  if (!el) return null;
+  return el.getAttributeNS(WNS, "val") ?? el.getAttribute("w:val");
+}
+
+/** Первый потомок с данным localName (в пространстве имён w). */
+function firstDesc(parent: Element, name: string): Element | null {
+  const list = parent.getElementsByTagNameNS(WNS, name);
+  return list.length > 0 ? list[0] : null;
+}
+
+/** Все прямые дочерние элементы с данным localName. */
+function directChildren(parent: Element, localName: string): Element[] {
+  const res: Element[] = [];
+  for (let i = 0; i < parent.childNodes.length; i++) {
+    const n = parent.childNodes[i];
+    if (n.nodeType === 1 && (n as Element).localName === localName) {
+      res.push(n as Element);
+    }
+  }
+  return res;
+}
+
+// ─── Автонумерация (numbering.xml) ──────────────────────────────────
+//
+// Номера пунктов («2.25») в Word обычно не хранятся в тексте, а задаются
+// автонумерацией. Без их восстановления абзац «2.25 Платёжная страница…»
+// в одном файле и тот же пункт с ручным номером в другом выглядели как
+// различие. Здесь мы вычисляем номера так же, как их показывает Word.
+
+interface LevelDef {
+  start: number;
+  numFmt: string;
+  lvlText: string;
+  isLgl: boolean;
+}
+
+interface NumberingIndex {
+  /** abstractNumId → определения уровней */
+  abstract: Map<string, LevelDef[]>;
+  /** numId → abstractNumId */
+  numToAbstract: Map<string, string>;
+  /** numId → переопределения start по уровням */
+  overrides: Map<string, Map<number, number>>;
+  /** styleId → нумерация, заданная стилем абзаца */
+  styleNum: Map<string, { numId: string; ilvl: number }>;
+}
+
+function parseLevels(abstractEl: Element): LevelDef[] {
+  const levels: LevelDef[] = [];
+  const lvls = abstractEl.getElementsByTagNameNS(WNS, "lvl");
+  for (let i = 0; i < lvls.length; i++) {
+    const lvl = lvls[i];
+    const ilvlAttr =
+      lvl.getAttributeNS(WNS, "ilvl") ?? lvl.getAttribute("w:ilvl");
+    const idx = ilvlAttr ? parseInt(ilvlAttr, 10) : i;
+    if (!Number.isFinite(idx) || idx < 0 || idx > 8) continue;
+    levels[idx] = {
+      start: parseInt(wVal(firstDesc(lvl, "start")) || "1", 10) || 1,
+      numFmt: wVal(firstDesc(lvl, "numFmt")) || "decimal",
+      lvlText: wVal(firstDesc(lvl, "lvlText")) || "%1.",
+      isLgl: !!firstDesc(lvl, "isLgl"),
+    };
+  }
+  return levels;
+}
+
+async function loadNumbering(zip: JSZip): Promise<NumberingIndex> {
+  const idx: NumberingIndex = {
+    abstract: new Map(),
+    numToAbstract: new Map(),
+    overrides: new Map(),
+    styleNum: new Map(),
+  };
+
+  try {
+    const f = zip.file("word/numbering.xml");
+    if (f) {
+      const dom = new DOMParser().parseFromString(
+        await f.async("string"),
+        "application/xml",
+      );
+      const abs = dom.getElementsByTagNameNS(WNS, "abstractNum");
+      for (let i = 0; i < abs.length; i++) {
+        const el = abs[i];
+        const id =
+          el.getAttributeNS(WNS, "abstractNumId") ??
+          el.getAttribute("w:abstractNumId");
+        if (id) idx.abstract.set(id, parseLevels(el));
+      }
+      const nums = dom.getElementsByTagNameNS(WNS, "num");
+      for (let i = 0; i < nums.length; i++) {
+        const el = nums[i];
+        const numId =
+          el.getAttributeNS(WNS, "numId") ?? el.getAttribute("w:numId");
+        if (!numId) continue;
+        const aid = wVal(firstDesc(el, "abstractNumId"));
+        if (aid) idx.numToAbstract.set(numId, aid);
+        const ovs = el.getElementsByTagNameNS(WNS, "lvlOverride");
+        if (ovs.length > 0) {
+          const m = new Map<number, number>();
+          for (let k = 0; k < ovs.length; k++) {
+            const ov = ovs[k];
+            const il =
+              ov.getAttributeNS(WNS, "ilvl") ?? ov.getAttribute("w:ilvl");
+            const so = wVal(firstDesc(ov, "startOverride"));
+            if (il !== null && so !== null) {
+              m.set(parseInt(il, 10), parseInt(so, 10));
+            }
+          }
+          if (m.size > 0) idx.overrides.set(numId, m);
+        }
+      }
+    }
+  } catch {
+    /* без нумерации сравниваем как раньше */
+  }
+
+  try {
+    const sf = zip.file("word/styles.xml");
+    if (sf) {
+      const dom = new DOMParser().parseFromString(
+        await sf.async("string"),
+        "application/xml",
+      );
+      const styles = dom.getElementsByTagNameNS(WNS, "style");
+      for (let i = 0; i < styles.length; i++) {
+        const st = styles[i];
+        const sid =
+          st.getAttributeNS(WNS, "styleId") ?? st.getAttribute("w:styleId");
+        if (!sid) continue;
+        const numPr = firstDesc(st, "numPr");
+        if (!numPr) continue;
+        const numId = wVal(firstDesc(numPr, "numId"));
+        if (!numId) continue;
+        const ilvl = parseInt(wVal(firstDesc(numPr, "ilvl")) || "0", 10) || 0;
+        idx.styleNum.set(sid, { numId, ilvl });
+      }
+    }
+  } catch {
+    /* стилевая нумерация опциональна */
+  }
+
+  return idx;
+}
+
+function toRoman(n: number): string {
+  if (n <= 0) return String(n);
+  const map: [number, string][] = [
+    [1000, "m"],
+    [900, "cm"],
+    [500, "d"],
+    [400, "cd"],
+    [100, "c"],
+    [90, "xc"],
+    [50, "l"],
+    [40, "xl"],
+    [10, "x"],
+    [9, "ix"],
+    [5, "v"],
+    [4, "iv"],
+    [1, "i"],
+  ];
+  let out = "";
+  let v = n;
+  for (const [val, sym] of map) {
+    while (v >= val) {
+      out += sym;
+      v -= val;
+    }
+  }
+  return out;
+}
+
+function toLetter(n: number): string {
+  let v = n;
+  let out = "";
+  while (v > 0) {
+    const r = (v - 1) % 26;
+    out = String.fromCharCode(97 + r) + out;
+    v = Math.floor((v - 1) / 26);
+  }
+  return out || String(n);
+}
+
+function formatCounter(n: number, fmt: string): string {
+  switch (fmt) {
+    case "decimalZero":
+      return n < 10 ? `0${n}` : String(n);
+    case "lowerLetter":
+      return toLetter(n);
+    case "upperLetter":
+      return toLetter(n).toUpperCase();
+    case "lowerRoman":
+      return toRoman(n);
+    case "upperRoman":
+      return toRoman(n).toUpperCase();
+    case "bullet":
+      return "•";
+    case "none":
+      return "";
+    default:
+      return String(n);
+  }
+}
+
+/** Счётчики нумерации, продвигаемые в порядке следования абзацев. */
+class NumberingState {
+  private counters = new Map<string, number[]>();
+
+  constructor(private idx: NumberingIndex) {}
+
+  private startOf(numId: string, levels: LevelDef[], l: number): number {
+    const ov = this.idx.overrides.get(numId);
+    if (ov && ov.has(l)) return ov.get(l) as number;
+    return levels[l]?.start ?? 1;
+  }
+
+  /** Продвигает счётчик и возвращает отформатированный номер (или ""). */
+  next(numId: string, ilvl: number): string {
+    const aid = this.idx.numToAbstract.get(numId);
+    if (!aid) return "";
+    const levels = this.idx.abstract.get(aid);
+    if (!levels) return "";
+    const def = levels[ilvl];
+    if (!def || def.numFmt === "none") return "";
+
+    let arr = this.counters.get(aid);
+    if (!arr) {
+      arr = [];
+      for (let l = 0; l < 9; l++) arr[l] = this.startOf(numId, levels, l) - 1;
+      this.counters.set(aid, arr);
+    }
+    arr[ilvl] = (arr[ilvl] ?? this.startOf(numId, levels, ilvl) - 1) + 1;
+    for (let l = ilvl + 1; l < 9; l++) {
+      arr[l] = this.startOf(numId, levels, l) - 1;
+    }
+
+    if (def.numFmt === "bullet") return "•";
+
+    const counters = arr;
+    return def.lvlText
+      .replace(/%(\d)/g, (_m, d: string) => {
+        const l = parseInt(d, 10) - 1;
+        const v = counters[l] ?? 0;
+        const fmt = def.isLgl ? "decimal" : levels[l]?.numFmt || "decimal";
+        return formatCounter(v, fmt);
+      })
+      .trim();
+  }
+}
+
+/** Нумерация конкретного абзаца: из w:numPr или из стиля абзаца. */
+function paragraphNumbering(
+  p: Element,
+  idx: NumberingIndex,
+): { numId: string; ilvl: number } | null {
+  const pPr = directChildren(p, "pPr")[0];
+  if (!pPr) return null;
+
+  const numPr = directChildren(pPr, "numPr")[0];
+  if (numPr) {
+    const numId = wVal(directChildren(numPr, "numId")[0]);
+    const ilvlRaw = wVal(directChildren(numPr, "ilvl")[0]);
+    if (numId === "0") return null;
+    if (numId) {
+      return { numId, ilvl: parseInt(ilvlRaw || "0", 10) || 0 };
+    }
+  }
+
+  const styleId = wVal(directChildren(pPr, "pStyle")[0]);
+  if (styleId) {
+    const s = idx.styleNum.get(styleId);
+    if (s && s.numId !== "0") return s;
+  }
+  return null;
+}
+
 /** Текст одного абзаца (w:p): собираем w:t, w:tab → таб, w:br → перевод строки. */
 function paragraphText(p: Element): string {
   let out = "";
@@ -85,30 +364,45 @@ function paragraphText(p: Element): string {
   return out;
 }
 
-/** Все прямые дочерние элементы с данным localName. */
-function directChildren(parent: Element, localName: string): Element[] {
-  const res: Element[] = [];
-  for (let i = 0; i < parent.childNodes.length; i++) {
-    const n = parent.childNodes[i];
-    if (n.nodeType === 1 && (n as Element).localName === localName) {
-      res.push(n as Element);
-    }
-  }
-  return res;
+/**
+ * Полный текст абзаца с номером пункта, если он задан автонумерацией.
+ * Счётчики продвигаются для каждого нумерованного абзаца в порядке
+ * следования — включая абзацы внутри таблиц.
+ */
+function paragraphFullText(
+  p: Element,
+  idx: NumberingIndex,
+  state: NumberingState,
+): string {
+  const num = paragraphNumbering(p, idx);
+  const prefix = num ? state.next(num.numId, num.ilvl) : "";
+  const body = paragraphText(p).replace(/\u00A0/g, " ").trimEnd();
+  if (!prefix) return body;
+  return body.trim().length > 0 ? `${prefix} ${body.trim()}` : prefix;
 }
 
 /** Текст ячейки таблицы: объединяем её абзацы через перевод строки. */
-function cellText(tc: Element): string {
+function cellText(
+  tc: Element,
+  idx: NumberingIndex,
+  state: NumberingState,
+): string {
   return directChildren(tc, "p")
-    .map((p) => paragraphText(p))
+    .map((p) => paragraphFullText(p, idx, state))
     .join("\n")
     .trim();
 }
 
-function parseTable(tbl: Element): DocTable {
+function parseTable(
+  tbl: Element,
+  idx: NumberingIndex,
+  state: NumberingState,
+): DocTable {
   const rows: string[][] = [];
   for (const tr of directChildren(tbl, "tr")) {
-    const cells = directChildren(tr, "tc").map((tc) => cellText(tc));
+    const cells = directChildren(tr, "tc").map((tc) =>
+      cellText(tc, idx, state),
+    );
     rows.push(cells);
   }
   return { kind: "table", rows };
@@ -118,12 +412,17 @@ function parseTable(tbl: Element): DocTable {
  * Разбирает .docx в упорядоченный список блоков (абзацы и таблицы),
  * сохраняя порядок появления в документе.
  */
-export async function parseDocx(arrayBuffer: ArrayBuffer): Promise<WordDocModel> {
+export async function parseDocx(
+  arrayBuffer: ArrayBuffer,
+): Promise<WordDocModel> {
   const zip = await JSZip.loadAsync(arrayBuffer);
   const docFile = zip.file("word/document.xml");
   if (!docFile) {
     throw new Error("Это не похоже на .docx (нет word/document.xml)");
   }
+  const numberingIdx = await loadNumbering(zip);
+  const state = new NumberingState(numberingIdx);
+
   const xml = await docFile.async("string");
   const dom = new DOMParser().parseFromString(xml, "application/xml");
 
@@ -140,13 +439,15 @@ export async function parseDocx(arrayBuffer: ArrayBuffer): Promise<WordDocModel>
       if (node.nodeType !== 1) continue;
       const el = node as Element;
       if (el.localName === "p") {
-        const text = paragraphText(el).replace(/\u00A0/g, " ").trimEnd();
+        // Счётчик продвигается даже для пустых абзацев — иначе нумерация
+        // «съедет» относительно того, что показывает Word.
+        const text = paragraphFullText(el, numberingIdx, state);
         if (text.trim().length > 0) {
           blocks.push({ kind: "paragraph", text });
           paragraphCount++;
         }
       } else if (el.localName === "tbl") {
-        blocks.push(parseTable(el));
+        blocks.push(parseTable(el, numberingIdx, state));
         tableCount++;
       }
     }
@@ -208,6 +509,10 @@ export function inlineDiff(
   a: string,
   b: string,
 ): { left: InlineToken[]; right: InlineToken[] } {
+  // Схлопываем пробельные последовательности: табы/двойные пробелы не должны
+  // подсвечиваться как правка (для равенства мы их и так игнорируем).
+  a = a.replace(/\s+/g, " ").trim();
+  b = b.replace(/\s+/g, " ").trim();
   const ta = tokenize(a);
   const tb = tokenize(b);
   const n = ta.length;
