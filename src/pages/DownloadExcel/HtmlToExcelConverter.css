@@ -103,7 +103,7 @@
 }
 
 .html-textarea {
-  width: 92%;
+  width: 100%;
   min-height: 320px;
   padding: 20px;
   border: 1px solid rgba(108, 117, 125, 0.2);
@@ -2363,4 +2363,59 @@
   display: block !important; /* Принудительно показываем */
   overflow: hidden;
   max-height: 45px;
+}
+
+.textarea-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.textarea-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Стилизация кнопок действий, чтобы они гармонировали с вашим дизайном */
+.textarea-actions .btn-small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 13px;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.textarea-actions .btn-small:hover {
+  background-color: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.textarea-actions .btn-small:active {
+  background-color: #e5e7eb;
+}
+
+/* Адаптация под тёмную тему (если ваш useTheme добавляет data-theme="dark" или класс) */
+[data-theme="dark"] .textarea-actions .btn-small,
+.dark .textarea-actions .btn-small {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #e5e7eb;
+}
+
+[data-theme="dark"] .textarea-actions .btn-small:hover,
+.dark .textarea-actions .btn-small:hover {
+  background-color: #374151;
+  border-color: #4b5563;
+}
+
+[data-theme="dark"] .textarea-actions .btn-small:active,
+.dark .textarea-actions .btn-small:active {
+  background-color: #4b5563;
 }
