@@ -1,8 +1,15 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import * as ExcelJS from "exceljs";
-import mammoth from "mammoth";
 import InstructionsModalShell from "../../components/InstructionsModal";
 import PageShell from "../../components/PageShell";
+import {
+  parseDocx,
+  compareWordModels,
+  type WordDocModel,
+  type WordCompareResult,
+  type CompareRow,
+  type InlineToken,
+} from "./wordCompare";
 
 import "./ComparePage.css";
 
@@ -34,6 +41,8 @@ interface WordDocumentData {
   paragraphs: WordParagraph[];
   tables: WordTable[];
   fullText: string;
+  /** Структурная модель документа (абзацы + таблицы в порядке следования). */
+  model: WordDocModel;
 }
 
 // Базовые интерфейсы
@@ -46,15 +55,6 @@ interface CellDifference {
   type: "excel" | "word";
   elementType?: "paragraph" | "table" | "text";
   elementIndex?: number;
-}
-
-interface WordDifference {
-  type: "paragraph" | "table" | "text";
-  index: number;
-  file1Value: string;
-  file2Value: string;
-  position?: string;
-  hasDifference: boolean;
 }
 
 interface CellFormat {
@@ -82,7 +82,7 @@ const ComparePage: React.FC = () => {
   const [selectedSheet1, setSelectedSheet1] = useState<number>(0);
   const [selectedSheet2, setSelectedSheet2] = useState<number>(0);
   const [differences, setDifferences] = useState<CellDifference[]>([]);
-  const [wordDifferences, setWordDifferences] = useState<WordDifference[]>([]);
+  const [wordResult, setWordResult] = useState<WordCompareResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [comparisonPerformed, setComparisonPerformed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,101 +150,49 @@ const ComparePage: React.FC = () => {
 
   // Функция для загрузки Word документа
   const loadWordDocument = async (file: File): Promise<WordDocumentData> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
+    const arrayBuffer = await file.arrayBuffer();
 
-      reader.onload = async (event) => {
-        try {
-          const arrayBuffer = event.target?.result as ArrayBuffer;
+    // Структурный разбор .docx: абзацы и таблицы в порядке следования.
+    const model = await parseDocx(arrayBuffer);
 
-          // Используем mammoth для парсинга .docx
-          const result = await mammoth.extractRawText({ arrayBuffer });
-          const fullText = result.value;
+    // Для обратной совместимости с параллельным просмотром строим также
+    // плоские списки абзацев и таблиц.
+    const paragraphs: WordParagraph[] = [];
+    const tables: WordTable[] = [];
+    let paraId = 1;
+    let tableId = 1;
+    const fullTextParts: string[] = [];
 
-          // Разбиваем текст на параграфы
-          const rawParagraphs = fullText
-            .split("\n")
-            .filter((p) => p.trim().length > 0);
-
-          const paragraphs: WordParagraph[] = rawParagraphs.map((p, index) => ({
-            id: index + 1,
-            text: p.trim(),
-            originalIndex: index,
-            hash: generateHash(p.trim()),
-          }));
-
-          // Простая имитация таблиц
-          const tableRegex = /(\t|  +|,)/;
-          const lines = fullText.split("\n");
-          const tables: WordTable[] = [];
-          let currentTable: WordTable | null = null;
-          let tableId = 1;
-
-          lines.forEach((line, lineIndex) => {
-            const trimmedLine = line.trim();
-            if (trimmedLine.length === 0) return;
-
-            // Проверяем, похожа ли строка на таблицу
-            const hasTabs = line.includes("\t");
-            const hasMultipleSpaces = /\s{2,}/.test(line);
-            const hasCommas = line.split(",").length > 2;
-
-            if (hasTabs || hasMultipleSpaces || hasCommas) {
-              if (!currentTable) {
-                currentTable = {
-                  id: tableId++,
-                  rows: [],
-                  originalIndex: tables.length,
-                };
-              }
-
-              // Разбиваем строку на ячейки
-              let cells: string[];
-              if (hasTabs) {
-                cells = line.split("\t").map((c) => c.trim());
-              } else if (hasCommas) {
-                cells = line.split(",").map((c) => c.trim());
-              } else {
-                cells = line.split(/\s{2,}/).map((c) => c.trim());
-              }
-
-              const row: WordRow = {
-                cells: cells.map((cell, colIndex) => ({
-                  text: cell,
-                  rowIndex: currentTable!.rows.length,
-                  colIndex,
-                })),
-              };
-
-              currentTable.rows.push(row);
-            } else if (currentTable) {
-              // Заканчиваем текущую таблицу
-              tables.push(currentTable);
-              currentTable = null;
-            }
-          });
-
-          // Добавляем последнюю таблицу, если она есть
-          if (currentTable) {
-            tables.push(currentTable);
-          }
-
-          resolve({
-            paragraphs,
-            tables,
-            fullText,
-          });
-        } catch (err) {
-          reject(err);
-        }
-      };
-
-      reader.onerror = () => {
-        reject(new Error("Ошибка при чтении файла Word"));
-      };
-
-      reader.readAsArrayBuffer(file);
+    model.blocks.forEach((block) => {
+      if (block.kind === "paragraph") {
+        paragraphs.push({
+          id: paraId,
+          text: block.text,
+          originalIndex: paraId - 1,
+          hash: generateHash(block.text.trim()),
+        });
+        paraId++;
+        fullTextParts.push(block.text);
+      } else {
+        const rows: WordRow[] = block.rows.map((cells, rowIndex) => ({
+          cells: cells.map((text, colIndex) => ({
+            text,
+            rowIndex,
+            colIndex,
+          })),
+        }));
+        tables.push({ id: tableId, rows, originalIndex: tableId - 1 });
+        tableId++;
+        block.rows.forEach((r) => fullTextParts.push(r.join("\t")));
+      }
     });
+
+    return {
+      paragraphs,
+      tables,
+      fullText: fullTextParts.join("\n"),
+      model,
+    };
   };
 
   // Конвертация Word документа в SheetData
@@ -645,159 +593,12 @@ const ComparePage: React.FC = () => {
     return `${numberToExcelColumn(col)}${row}`;
   };
 
-  // === LCS алгоритм ===
-  const buildLCSMatrix = (
-    oldItems: WordParagraph[],
-    newItems: WordParagraph[],
-  ): number[][] => {
-    const m = oldItems.length;
-    const n = newItems.length;
-    const dp: number[][] = Array.from({ length: m + 1 }, () =>
-      new Array(n + 1).fill(0),
-    );
-
-    for (let i = 1; i <= m; i++) {
-      for (let j = 1; j <= n; j++) {
-        if (oldItems[i - 1].hash === newItems[j - 1].hash) {
-          dp[i][j] = dp[i - 1][j - 1] + 1;
-        } else {
-          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-        }
-      }
-    }
-
-    return dp;
-  };
-
-  type LCSDiffItem =
-    | { kind: "identical"; old: WordParagraph; new: WordParagraph }
-    | { kind: "inserted"; old: null; new: WordParagraph }
-    | { kind: "deleted"; old: WordParagraph; new: null };
-
-  const backtrackLCS = (
-    dp: number[][],
-    oldItems: WordParagraph[],
-    newItems: WordParagraph[],
-    i: number,
-    j: number,
-    result: LCSDiffItem[],
-  ): void => {
-    while (i > 0 || j > 0) {
-      if (i > 0 && j > 0 && oldItems[i - 1].hash === newItems[j - 1].hash) {
-        result.unshift({
-          kind: "identical",
-          old: oldItems[i - 1],
-          new: newItems[j - 1],
-        });
-        i--;
-        j--;
-      } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-        result.unshift({
-          kind: "inserted",
-          old: null,
-          new: newItems[j - 1],
-        });
-        j--;
-      } else {
-        result.unshift({
-          kind: "deleted",
-          old: oldItems[i - 1],
-          new: null,
-        });
-        i--;
-      }
-    }
-  };
-
-  // Сравнение Word документов
+  // Структурное сравнение Word через новый движок (wordCompare.ts).
   const compareWordDocuments = (
     wordData1: WordDocumentData,
     wordData2: WordDocumentData,
-  ): WordDifference[] => {
-    const diffs: WordDifference[] = [];
-
-    // === Сравнение параграфов через LCS ===
-    const dp = buildLCSMatrix(wordData1.paragraphs, wordData2.paragraphs);
-    const lcsResult: LCSDiffItem[] = [];
-    backtrackLCS(
-      dp,
-      wordData1.paragraphs,
-      wordData2.paragraphs,
-      wordData1.paragraphs.length,
-      wordData2.paragraphs.length,
-      lcsResult,
-    );
-
-    lcsResult.forEach((item, index) => {
-      if (item.kind === "identical") {
-        diffs.push({
-          type: "paragraph",
-          index: index + 1,
-          file1Value: item.old.text,
-          file2Value: item.new.text,
-          position: `Параграф ${index + 1}`,
-          hasDifference: false,
-        });
-      } else if (item.kind === "inserted") {
-        // Строка есть только в файле 2
-        diffs.push({
-          type: "paragraph",
-          index: index + 1,
-          file1Value: "",
-          file2Value: item.new.text,
-          position: `Параграф ${index + 1}`,
-          hasDifference: true,
-          diffKind: "inserted",
-        });
-      } else if (item.kind === "deleted") {
-        // Строка есть только в файле 1
-        diffs.push({
-          type: "paragraph",
-          index: index + 1,
-          file1Value: item.old.text,
-          file2Value: "",
-          position: `Параграф ${index + 1}`,
-          hasDifference: true,
-          diffKind: "deleted",
-        });
-      }
-    });
-
-    // === Сравнение таблиц (без изменений) ===
-    const maxTables = Math.max(
-      wordData1.tables.length,
-      wordData2.tables.length,
-    );
-
-    for (let i = 0; i < maxTables; i++) {
-      const table1 = wordData1.tables[i];
-      const table2 = wordData2.tables[i];
-
-      if (!table1 && !table2) continue;
-
-      const table1Text = table1
-        ? `Таблица с ${table1.rows.length} строками`
-        : "Нет таблицы";
-      const table2Text = table2
-        ? `Таблица с ${table2.rows.length} строками`
-        : "Нет таблицы";
-      const hasDiff =
-        table1Text !== table2Text ||
-        (table1 &&
-          table2 &&
-          JSON.stringify(table1.rows) !== JSON.stringify(table2.rows));
-
-      diffs.push({
-        type: "table",
-        index: i + 1,
-        file1Value: table1Text,
-        file2Value: table2Text,
-        position: `Таблица ${i + 1}`,
-        hasDifference: !!hasDiff,
-      });
-    }
-
-    return diffs;
+  ): WordCompareResult => {
+    return compareWordModels(wordData1.model, wordData2.model);
   };
 
   const compareFiles = () => {
@@ -829,11 +630,11 @@ const ComparePage: React.FC = () => {
       sheetData1.wordData &&
       sheetData2.wordData
     ) {
-      const wordDiffs = compareWordDocuments(
+      const result = compareWordDocuments(
         sheetData1.wordData,
         sheetData2.wordData,
       );
-      setWordDifferences(wordDiffs);
+      setWordResult(result);
       setDifferences([]);
       setViewMode("wordView");
       return;
@@ -870,7 +671,6 @@ const ComparePage: React.FC = () => {
     }
 
     setDifferences(diffs);
-    setWordDifferences([]);
     setHighlightedCells(highlighted);
   };
 
@@ -882,7 +682,7 @@ const ComparePage: React.FC = () => {
     setSelectedSheet1(0);
     setSelectedSheet2(0);
     setDifferences([]);
-    setWordDifferences([]);
+    setWordResult(null);
     setError(null);
     setHighlightedCells(new Set());
     setComparisonPerformed(false);
@@ -1060,47 +860,87 @@ const ComparePage: React.FC = () => {
     );
   };
 
+  // Рендер пословного inline-diff.
+  const renderTokens = (tokens: InlineToken[]) => {
+    if (!tokens || tokens.length === 0) {
+      return <span className="wd-empty">（пусто）</span>;
+    }
+    return (
+      <>
+        {tokens.map((t, i) => (
+          <span key={i} className={`wd-tok wd-tok--${t.type}`}>
+            {t.text}
+          </span>
+        ))}
+      </>
+    );
+  };
+
+  const statusMeta = (status: CompareRow["status"]) => {
+    switch (status) {
+      case "added":
+        return { label: "➕ Добавлено", cls: "added" };
+      case "removed":
+        return { label: "🗑️ Удалено", cls: "removed" };
+      case "modified":
+        return { label: "✏️ Изменено", cls: "modified" };
+      default:
+        return { label: "✅ Идентично", cls: "identical" };
+    }
+  };
+
+  const kindIcon = (kind: CompareRow["kind"]) => {
+    if (kind === "paragraph") return "📝";
+    if (kind === "table") return "📊";
+    if (kind === "table-row") return "▦";
+    return "▣"; // table-cell
+  };
+
   // Отображение сравнения Word документов
   const renderWordComparison = () => {
-    const sheetData1 = sheets1[selectedSheet1];
-    const sheetData2 = sheets2[selectedSheet2];
+    if (!wordResult) return null;
 
-    if (!sheetData1?.wordData || !sheetData2?.wordData) {
-      return null;
-    }
+    const { rows, changed, added, removed, identical } = wordResult;
+    const totalDiff = changed + added + removed;
 
-    const differentItems = wordDifferences.filter((diff) => diff.hasDifference);
-    const identicalItems = wordDifferences.filter(
-      (diff) => !diff.hasDifference,
-    );
+    const differentRows = rows.filter((r) => r.status !== "identical");
+    const identicalRows = rows.filter((r) => r.status === "identical");
 
-    // Фильтрация элементов в зависимости от активной вкладки
-    const getFilteredItems = () => {
-      switch (activeWordTab) {
-        case "differences":
-          return differentItems;
-        case "identical":
-          return identicalItems;
-        default:
-          return wordDifferences;
-      }
-    };
-
-    const filteredItems = getFilteredItems();
+    const filteredRows =
+      activeWordTab === "differences"
+        ? differentRows
+        : activeWordTab === "identical"
+          ? identicalRows
+          : rows;
 
     return (
       <div className="word-comparison-view">
         <div className="word-comparison-header">
-          <h2>Сравнение Word документов</h2>
+          <h2>Сравнение Word-документов</h2>
           <div className="comparison-stats">
             <span
-              className={`stat-badge ${differentItems.length > 0 ? "has-differences" : "no-differences"}`}
+              className={`stat-badge ${totalDiff > 0 ? "has-differences" : "no-differences"}`}
             >
-              🔍 Найдено различий: {differentItems.length}
+              {totalDiff > 0
+                ? `🔍 Различий: ${totalDiff}`
+                : "✅ Различий не найдено"}
             </span>
-            <span className="stat-badge">
-              ✅ Идентичных элементов: {identicalItems.length}
-            </span>
+            {changed > 0 && (
+              <span className="stat-badge stat-badge--modified">
+                ✏️ Изменено: {changed}
+              </span>
+            )}
+            {added > 0 && (
+              <span className="stat-badge stat-badge--added">
+                ➕ Добавлено: {added}
+              </span>
+            )}
+            {removed > 0 && (
+              <span className="stat-badge stat-badge--removed">
+                🗑️ Удалено: {removed}
+              </span>
+            )}
+            <span className="stat-badge">✅ Идентично: {identical}</span>
           </div>
         </div>
 
@@ -1109,116 +949,71 @@ const ComparePage: React.FC = () => {
             className={`ds-tab ${activeWordTab === "all" ? "ds-tab--active" : ""}`}
             onClick={() => setActiveWordTab("all")}
           >
-            Все элементы ({wordDifferences.length})
+            Все элементы ({rows.length})
           </button>
           <button
             className={`ds-tab ${activeWordTab === "differences" ? "ds-tab--active" : ""}`}
             onClick={() => setActiveWordTab("differences")}
           >
-            Различия ({differentItems.length})
+            Различия ({differentRows.length})
           </button>
           <button
             className={`ds-tab ${activeWordTab === "identical" ? "ds-tab--active" : ""}`}
             onClick={() => setActiveWordTab("identical")}
           >
-            Идентичные ({identicalItems.length})
+            Идентичные ({identicalRows.length})
           </button>
         </div>
 
         <div className="word-comparison-content">
-          <div className="comparison-table">
-            <div className="comparison-header-row">
-              <div className="comparison-cell position-cell">Элемент</div>
-              <div className="comparison-cell file-cell">Файл 1</div>
-              <div className="comparison-cell file-cell">Файл 2</div>
-              <div className="comparison-cell status-cell">Статус</div>
+          <div className="wd-table">
+            <div className="wd-row wd-row--head">
+              <div className="wd-cell wd-cell--loc">Расположение</div>
+              <div className="wd-cell">Файл 1</div>
+              <div className="wd-cell">Файл 2</div>
+              <div className="wd-cell wd-cell--status">Статус</div>
             </div>
 
-            {filteredItems.length > 0 ? (
-              filteredItems.map((diff, index) => (
-                <div
-                  key={`${diff.type}-${diff.index}`}
-                  className={`comparison-row ${diff.hasDifference ? "has-difference" : "identical"}`}
-                >
-                  <div className="comparison-cell position-cell">
-                    <div className="element-info">
-                      <span className={`element-type ${diff.type}`}>
-                        {diff.type === "paragraph"
-                          ? "📝"
-                          : diff.type === "table"
-                            ? "📊"
-                            : "📄"}
+            {filteredRows.length > 0 ? (
+              filteredRows.map((row) => {
+                const meta = statusMeta(row.status);
+                return (
+                  <div key={row.id} className={`wd-row wd-row--${meta.cls}`}>
+                    <div className="wd-cell wd-cell--loc">
+                      <span className="wd-kind">{kindIcon(row.kind)}</span>
+                      {row.location}
+                    </div>
+                    <div className="wd-cell">
+                      {row.status === "identical" ? (
+                        <span className="wd-plain">{row.leftText}</span>
+                      ) : (
+                        renderTokens(row.leftTokens)
+                      )}
+                    </div>
+                    <div className="wd-cell">
+                      {row.status === "identical" ? (
+                        <span className="wd-plain">{row.rightText}</span>
+                      ) : (
+                        renderTokens(row.rightTokens)
+                      )}
+                    </div>
+                    <div className="wd-cell wd-cell--status">
+                      <span className={`wd-status wd-status--${meta.cls}`}>
+                        {meta.label}
                       </span>
-                      <span className="element-position">{diff.position}</span>
                     </div>
                   </div>
-
-                  <div className="comparison-cell file-cell">
-                    <div
-                      className={`file-value ${
-                        diff.diffKind === "deleted" ? "value-deleted" : ""
-                      }`}
-                    >
-                      {diff.file1Value || (
-                        <span className="value-absent">（отсутствует）</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="comparison-cell file-cell">
-                    <div
-                      className={`file-value ${
-                        diff.diffKind === "inserted" ? "value-inserted" : ""
-                      }`}
-                    >
-                      {diff.file2Value || (
-                        <span className="value-absent">（отсутствует）</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="comparison-cell status-cell">
-                    <div
-                      className={`status-indicator ${
-                        diff.hasDifference ? "different" : "identical"
-                      }`}
-                    >
-                      {diff.hasDifference
-                        ? diff.diffKind === "inserted"
-                          ? "➕ Добавлено"
-                          : diff.diffKind === "deleted"
-                            ? "🗑️ Удалено"
-                            : "❌ Отличается"
-                        : "✅ Идентично"}
-                    </div>
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="no-items-message">
-                {activeWordTab === "all"
-                  ? "Нет элементов для отображения"
-                  : activeWordTab === "differences"
-                    ? "Нет различий"
-                    : "Нет идентичных элементов"}
+                {activeWordTab === "differences"
+                  ? "Различий не найдено"
+                  : activeWordTab === "identical"
+                    ? "Нет идентичных элементов"
+                    : "Нет элементов для отображения"}
               </div>
             )}
-          </div>
-        </div>
-
-        <div className="word-comparison-side-by-side">
-          <div className="word-document-comparison">
-            <h3>Параллельное сравнение</h3>
-            <div className="side-by-side-word">
-              <div className="word-preview">
-                <h4>Файл 1</h4>
-                {renderWordDocument(sheetData1.wordData, "file1")}
-              </div>
-              <div className="word-preview">
-                <h4>Файл 2</h4>
-                {renderWordDocument(sheetData2.wordData, "file2")}
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -1742,7 +1537,7 @@ const ComparePage: React.FC = () => {
           {/* Word сравнение */}
           {fileType1 === "word" &&
             fileType2 === "word" &&
-            wordDifferences.length > 0 && (
+            wordResult !== null && (
               <>
                 <div className="view-mode-toggle">
                   <button
@@ -1771,7 +1566,11 @@ const ComparePage: React.FC = () => {
               differences.length === 0) ||
               (fileType1 === "word" &&
                 fileType2 === "word" &&
-                wordDifferences.filter((d) => d.hasDifference).length === 0)) &&
+                wordResult !== null &&
+                wordResult.changed +
+                  wordResult.added +
+                  wordResult.removed ===
+                  0)) &&
             !loading &&
             file1 &&
             file2 && (

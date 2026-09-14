@@ -1550,3 +1550,136 @@
 .upload-box.drag-over {
   animation: dragPulse 1.5s ease-in-out infinite;
 }
+
+/* ==== Новый inline-diff для сравнения Word ==== */
+.wd-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line, #e5e7eb);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.wd-row {
+  display: grid;
+  grid-template-columns: 200px 1fr 1fr 130px;
+  border-top: 1px solid var(--line, #eef0f3);
+}
+.wd-row:first-child {
+  border-top: none;
+}
+.wd-row--head {
+  background: #f8fafc;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #64748b;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.wd-cell {
+  padding: 10px 12px;
+  border-left: 1px solid var(--line, #eef0f3);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.wd-cell:first-child {
+  border-left: none;
+}
+.wd-cell--loc {
+  font-size: 0.82rem;
+  color: #475569;
+  background: #fafbfc;
+  font-weight: 500;
+}
+.wd-cell--status {
+  white-space: normal;
+}
+.wd-kind {
+  margin-right: 6px;
+}
+.wd-row--modified {
+  background: #fffdf5;
+}
+.wd-row--added {
+  background: #f1fbf4;
+}
+.wd-row--removed {
+  background: #fdf3f3;
+}
+.wd-plain {
+  color: #334155;
+}
+.wd-empty {
+  color: #cbd5e1;
+  font-style: italic;
+}
+/* Токены inline-diff */
+.wd-tok--same {
+  color: #334155;
+}
+.wd-tok--del {
+  background: #fde2e1;
+  color: #b42318;
+  text-decoration: line-through;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.wd-tok--ins {
+  background: #d7f5e0;
+  color: #067647;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+/* Статус-бейджи */
+.wd-status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.wd-status--modified {
+  background: #fef3c7;
+  color: #92400e;
+}
+.wd-status--added {
+  background: #d7f5e0;
+  color: #067647;
+}
+.wd-status--removed {
+  background: #fde2e1;
+  color: #b42318;
+}
+.wd-status--identical {
+  background: #eef2f6;
+  color: #64748b;
+}
+.stat-badge--modified {
+  background: #fef3c7;
+  color: #92400e;
+}
+.stat-badge--added {
+  background: #d7f5e0;
+  color: #067647;
+}
+.stat-badge--removed {
+  background: #fde2e1;
+  color: #b42318;
+}
+@media (max-width: 720px) {
+  .wd-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .wd-cell--loc {
+    grid-column: 1 / -1;
+  }
+  .wd-cell--status {
+    grid-column: 1 / -1;
+  }
+}
