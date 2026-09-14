@@ -438,69 +438,6 @@ function createTextRuns(para: TextParagraph, bodyFS: number): TextRun[] {
 
 // ========== Изображения из PDF ==========
 
-function getImgTimeout(
-  page: pdfjs.PDFPageProxy,
-  id: string,
-  ms = 3000,
-): Promise<any> {
-  return new Promise((res) => {
-    const t = setTimeout(() => res(null), ms);
-    try {
-      (page as any).objs.get(id, (d: any) => {
-        clearTimeout(t);
-        res(d || null);
-      });
-    } catch {
-      clearTimeout(t);
-      res(null);
-    }
-  });
-}
-
-async function imgToPng(d: any): Promise<Uint8Array | null> {
-  try {
-    const c = document.createElement("canvas"),
-      ctx = c.getContext("2d");
-    if (!ctx || !d.width || !d.height || d.width * d.height > 25_000_000)
-      return null;
-    c.width = d.width;
-    c.height = d.height;
-    if (d.bitmap) {
-      ctx.drawImage(d.bitmap, 0, 0);
-    } else if (d.data) {
-      const px = d.data,
-        k = d.kind;
-      let rgba: Uint8ClampedArray;
-      if (k === 3 || px.length === d.width * d.height * 4)
-        rgba = new Uint8ClampedArray(px.buffer || px);
-      else if (k === 2 || px.length === d.width * d.height * 3) {
-        rgba = new Uint8ClampedArray(d.width * d.height * 4);
-        for (let j = 0; j < d.width * d.height; j++) {
-          rgba[j * 4] = px[j * 3];
-          rgba[j * 4 + 1] = px[j * 3 + 1];
-          rgba[j * 4 + 2] = px[j * 3 + 2];
-          rgba[j * 4 + 3] = 255;
-        }
-      } else if (px.length === d.width * d.height) {
-        rgba = new Uint8ClampedArray(d.width * d.height * 4);
-        for (let j = 0; j < d.width * d.height; j++) {
-          rgba[j * 4] = px[j];
-          rgba[j * 4 + 1] = px[j];
-          rgba[j * 4 + 2] = px[j];
-          rgba[j * 4 + 3] = 255;
-        }
-      } else return null;
-      ctx.putImageData(new ImageData(rgba, d.width, d.height), 0, 0);
-    } else return null;
-    const blob = await new Promise<Blob | null>((r) =>
-      c.toBlob((b) => r(b), "image/png"),
-    );
-    return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
-  } catch {
-    return null;
-  }
-}
-
 function mulT(m1: number[], m2: number[]): number[] {
   return [
     m1[0] * m2[0] + m1[2] * m2[1],
@@ -512,54 +449,115 @@ function mulT(m1: number[], m2: number[]): number[] {
   ];
 }
 
+// Рендер страницы PDF в canvas. В pdfjs v5 render() требует поле `canvas`.
+async function renderPageToCanvas(
+  page: pdfjs.PDFPageProxy,
+  scale: number,
+): Promise<{ canvas: HTMLCanvasElement; viewport: any } | null> {
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.ceil(viewport.width));
+  canvas.height = Math.max(1, Math.ceil(viewport.height));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({
+    canvas,
+    canvasContext: ctx,
+    viewport,
+  } as any).promise;
+  return { canvas, viewport };
+}
+
+/**
+ * Извлечение изображений: раньше данные брались через page.objs.get, но в
+ * pdfjs v5 объекты не декодированы без рендера — картинки терялись. Теперь
+ * страница рендерится один раз, а области изображений вырезаются из готового
+ * растра по матрицам трансформации операторов рисования. Работает с любым
+ * кодеком (JPEG/сжатые/маски).
+ */
 async function extractImagesFromPage(
   page: pdfjs.PDFPageProxy,
 ): Promise<ExtractedImage[]> {
-  const imgs: ExtractedImage[] = [];
+  const out: ExtractedImage[] = [];
   try {
+    const scale = 2.0;
+    const rendered = await renderPageToCanvas(page, scale);
+    if (!rendered) return out;
+    const { canvas, viewport } = rendered;
+
     const ol = await page.getOperatorList();
-    const ts: number[][] = [];
+    const stack: number[][] = [];
     let ct = [1, 0, 0, 1, 0, 0];
-    const ops: { name: string; transform: number[] }[] = [];
+    const ops: number[][] = [];
     for (let i = 0; i < ol.fnArray.length; i++) {
-      const fn = ol.fnArray[i],
-        args = ol.argsArray[i];
-      if (fn === pdfjs.OPS.save) ts.push([...ct]);
-      else if (fn === pdfjs.OPS.restore && ts.length) ct = ts.pop()!;
+      const fn = ol.fnArray[i];
+      const args = ol.argsArray[i];
+      if (fn === pdfjs.OPS.save) stack.push([...ct]);
+      else if (fn === pdfjs.OPS.restore && stack.length) ct = stack.pop()!;
       else if (fn === pdfjs.OPS.transform) ct = mulT(ct, args as number[]);
       else if (
         fn === pdfjs.OPS.paintImageXObject ||
-        fn === pdfjs.OPS.paintJpegXObject
+        fn === pdfjs.OPS.paintImageXObjectRepeat
       ) {
-        const dw = Math.abs(ct[0]),
-          dh = Math.abs(ct[3]);
-        if (dw >= 10 && dh >= 10)
-          ops.push({ name: args[0] as string, transform: [...ct] });
+        // Игнорируем крошечные изображения (иконки/линии).
+        if (Math.abs(ct[0]) >= 10 || Math.abs(ct[3]) >= 10) {
+          ops.push([...ct]);
+        }
       }
     }
-    const results = await Promise.allSettled(
-      ops.slice(0, 50).map(async (op) => {
-        const d = await getImgTimeout(page, op.name, 3000);
-        if (!d) return null;
-        const png = await imgToPng(d);
-        if (!png) return null;
-        return {
-          data: png,
-          width: d.width || Math.abs(op.transform[0]),
-          height: d.height || Math.abs(op.transform[3]),
-          x: op.transform[4],
-          y: op.transform[5],
-          displayWidth: Math.abs(op.transform[0]),
-          displayHeight: Math.abs(op.transform[3]),
-        } as ExtractedImage;
-      }),
-    );
-    for (const r of results)
-      if (r.status === "fulfilled" && r.value) imgs.push(r.value);
+
+    for (const ctm of ops.slice(0, 50)) {
+      // Углы единичного квадрата изображения в пользовательском пространстве.
+      const corners = [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+      ].map(([u, v]) => [
+        ctm[0] * u + ctm[2] * v + ctm[4],
+        ctm[1] * u + ctm[3] * v + ctm[5],
+      ]);
+      // Переводим в координаты отрисованного растра.
+      const dev = corners.map(([x, y]) => viewport.convertToViewportPoint(x, y));
+      const xs = dev.map((p: number[]) => p[0]);
+      const ys = dev.map((p: number[]) => p[1]);
+      const minX = Math.max(0, Math.floor(Math.min(...xs)));
+      const maxX = Math.min(canvas.width, Math.ceil(Math.max(...xs)));
+      const minY = Math.max(0, Math.floor(Math.min(...ys)));
+      const maxY = Math.min(canvas.height, Math.ceil(Math.max(...ys)));
+      const w = maxX - minX;
+      const h = maxY - minY;
+      if (w < 8 || h < 8) continue;
+
+      const crop = document.createElement("canvas");
+      crop.width = w;
+      crop.height = h;
+      const cctx = crop.getContext("2d");
+      if (!cctx) continue;
+      cctx.drawImage(canvas, minX, minY, w, h, 0, 0, w, h);
+      const blob = await new Promise<Blob | null>((r) =>
+        crop.toBlob((b) => r(b), "image/png"),
+      );
+      if (!blob) continue;
+
+      const pdfXs = corners.map((p) => p[0]);
+      const pdfYs = corners.map((p) => p[1]);
+      out.push({
+        data: new Uint8Array(await blob.arrayBuffer()),
+        width: w,
+        height: h,
+        x: Math.min(...pdfXs),
+        y: Math.max(...pdfYs),
+        displayWidth: Math.abs(ctm[0]) || w / scale,
+        displayHeight: Math.abs(ctm[3]) || h / scale,
+      });
+    }
   } catch (e) {
     console.warn("Img extract err:", e);
   }
-  return imgs;
+  return out;
 }
 
 async function renderPageAsImage(
@@ -567,22 +565,17 @@ async function renderPageAsImage(
   scale = 2.0,
 ): Promise<ExtractedImage | null> {
   try {
-    const vp = page.getViewport({ scale }),
-      c = document.createElement("canvas");
-    c.width = vp.width;
-    c.height = vp.height;
-    const ctx = c.getContext("2d");
-    if (!ctx) return null;
-    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    const rendered = await renderPageToCanvas(page, scale);
+    if (!rendered) return null;
     const blob = await new Promise<Blob | null>((r) =>
-      c.toBlob((b) => r(b), "image/png", 0.92),
+      rendered.canvas.toBlob((b) => r(b), "image/png", 0.92),
     );
     if (!blob) return null;
     const ovp = page.getViewport({ scale: 1.0 });
     return {
       data: new Uint8Array(await blob.arrayBuffer()),
-      width: vp.width,
-      height: vp.height,
+      width: rendered.canvas.width,
+      height: rendered.canvas.height,
       x: 0,
       y: ovp.height,
       displayWidth: ovp.width,
@@ -684,27 +677,43 @@ async function convertOnePdfToWord(
 
   for (let i = 1; i <= total; i++) {
     onProgress(i, total, `Страница ${i}/${total}`);
-    const page = await doc.getPage(i);
-    const vp = page.getViewport({ scale: 1.0 });
-    const ti = await extractTextItems(page);
-    const lines = groupIntoLines(ti);
-    const pd = detectPageDims(lines, { width: vp.width, height: vp.height });
-    const paras = groupIntoParagraphs(lines, pd);
-    for (const p of paras) for (const l of p.lines) allFS.push(l.fontSize);
-    let images: ExtractedImage[] = [];
-    if (imgMode === "extract") {
-      try {
-        images = await extractImagesFromPage(page);
-        totalImgs += images.length;
-      } catch {}
-    } else if (imgMode === "render") {
-      const r = await renderPageAsImage(page, 2.0);
-      if (r) {
-        images = [r];
-        totalImgs++;
+    // Одна проблемная страница не должна ронять всю конвертацию.
+    try {
+      const page = await doc.getPage(i);
+      const vp = page.getViewport({ scale: 1.0 });
+      const ti = await extractTextItems(page);
+      const lines = groupIntoLines(ti);
+      const pd = detectPageDims(lines, { width: vp.width, height: vp.height });
+      const paras = groupIntoParagraphs(lines, pd);
+      for (const p of paras) for (const l of p.lines) allFS.push(l.fontSize);
+      let images: ExtractedImage[] = [];
+      if (imgMode === "extract") {
+        try {
+          images = await extractImagesFromPage(page);
+          totalImgs += images.length;
+        } catch {}
+      } else if (imgMode === "render") {
+        const r = await renderPageAsImage(page, 2.0);
+        if (r) {
+          images = [r];
+          totalImgs++;
+        }
       }
+      pagesData.push({ paragraphs: paras, images, pageDims: pd });
+    } catch (e) {
+      console.warn(`Ошибка на странице ${i}:`, e);
+      pagesData.push({
+        paragraphs: [],
+        images: [],
+        pageDims: {
+          width: 612,
+          height: 792,
+          marginLeft: 72,
+          marginRight: 72,
+          contentWidth: 468,
+        },
+      });
     }
-    pagesData.push({ paragraphs: paras, images, pageDims: pd });
     await new Promise((r) => setTimeout(r, 0));
   }
 
@@ -941,12 +950,59 @@ async function htmlToPdf(
           windowWidth: PAGE_WIDTH_PX,
         });
 
-        const imgData = canvas.toDataURL("image/jpeg", 0.92);
         const imgW = pdfW;
         const imgH = (canvas.height * pdfW) / canvas.width;
 
-        // Центрируем по вертикали если контент меньше страницы
-        pdf.addImage(imgData, "JPEG", 0, 0, imgW, Math.min(imgH, pdfH));
+        if (imgH <= pdfH + 1) {
+          // Блок помещается на страницу — добавляем целиком, без искажений.
+          pdf.addImage(
+            canvas.toDataURL("image/jpeg", 0.92),
+            "JPEG",
+            0,
+            0,
+            imgW,
+            imgH,
+          );
+        } else {
+          // Блок выше страницы (например, большая таблица): режем растр по
+          // высоте на несколько страниц, СОХРАНЯЯ пропорции (не сжимаем).
+          const pxPerPage = Math.floor((canvas.width * pdfH) / pdfW);
+          let rendered = 0;
+          let firstSlice = true;
+          while (rendered < canvas.height) {
+            const sliceH = Math.min(pxPerPage, canvas.height - rendered);
+            const slice = document.createElement("canvas");
+            slice.width = canvas.width;
+            slice.height = sliceH;
+            const sctx = slice.getContext("2d");
+            if (sctx) {
+              sctx.fillStyle = "#ffffff";
+              sctx.fillRect(0, 0, slice.width, slice.height);
+              sctx.drawImage(
+                canvas,
+                0,
+                rendered,
+                canvas.width,
+                sliceH,
+                0,
+                0,
+                canvas.width,
+                sliceH,
+              );
+            }
+            if (!firstSlice) pdf.addPage();
+            pdf.addImage(
+              slice.toDataURL("image/jpeg", 0.92),
+              "JPEG",
+              0,
+              0,
+              imgW,
+              (sliceH * pdfW) / canvas.width,
+            );
+            rendered += sliceH;
+            firstSlice = false;
+          }
+        }
       } finally {
         document.body.removeChild(pageContainer);
       }
@@ -955,7 +1011,11 @@ async function htmlToPdf(
     }
 
     onProgress?.(100);
-    return { blob: pdf.output("blob"), pageCount: pageBreaks.length };
+    const actualPages =
+      typeof pdf.getNumberOfPages === "function"
+        ? pdf.getNumberOfPages()
+        : pageBreaks.length;
+    return { blob: pdf.output("blob"), pageCount: actualPages };
   } finally {
     document.body.removeChild(container);
   }
