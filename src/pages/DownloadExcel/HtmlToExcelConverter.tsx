@@ -270,6 +270,29 @@ const HtmlToExcelConverter: React.FC = () => {
     setJsonInput(e.target.value);
   };
 
+    const handleClearTextarea = () => {
+    if (converterType === "html") {
+      setHtmlInput("");
+    } else {
+      setJsonInput("");
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (converterType === "html") {
+        const normalizedHtml = normalizeHtmlInput(text);
+        setHtmlInput(normalizedHtml);
+      } else {
+        setJsonInput(text);
+      }
+    } catch (err) {
+      setError("Не удалось получить доступ к буферу обмена. Разрешите доступ в браузере или используйте Ctrl+V / Cmd+V.");
+      console.error("Clipboard error:", err);
+    }
+  };
+
   const toggleJsonKey = (key: string) => {
     setSelectedJsonKeys((prev) => {
       if (prev.includes(key)) {
@@ -1496,16 +1519,36 @@ const HtmlToExcelConverter: React.FC = () => {
                     </label>
                   </div>
 
-                  <textarea
-                    value={htmlInput}
-                    onChange={handleInputChange}
-                    placeholder={
-                      mode === "single"
-                        ? "Вставьте HTML код таблицы..."
-                        : "Вставьте HTML код всей страницы..."
-                    }
-                    className="html-textarea"
-                  />
+                                    <div className="textarea-wrapper">
+                    <div className="textarea-actions">
+                      <button
+                        type="button"
+                        onClick={handlePasteFromClipboard}
+                        className="btn btn-small"
+                        title="Вставить из буфера обмена"
+                      >
+                        📋 Вставить
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearTextarea}
+                        className="btn btn-small"
+                        title="Очистить поле"
+                      >
+                        🗑️ Очистить
+                      </button>
+                    </div>
+                    <textarea
+                      value={htmlInput}
+                      onChange={handleInputChange}
+                      placeholder={
+                        mode === "single"
+                          ? "Вставьте HTML код таблицы..."
+                          : "Вставьте HTML код всей страницы..."
+                      }
+                      className="html-textarea"
+                    />
+                  </div>
                 </>
               ) : (
                 <>
@@ -1520,12 +1563,32 @@ const HtmlToExcelConverter: React.FC = () => {
                       className="path-input"
                     />
                   </div>
-                  <textarea
-                    value={jsonInput}
-                    onChange={handleJsonInputChange}
-                    placeholder={`Вставьте JSON данные...\n\nПример:\n[\n  {"name": "John", "age": 30},\n  {"name": "Jane", "age": 25}\n]\n\nИли:\n{\n  "data": [\n    {"name": "John", "age": 30}\n  ]\n}`}
-                    className="html-textarea json-textarea"
-                  />
+                                    <div className="textarea-wrapper">
+                    <div className="textarea-actions">
+                      <button
+                        type="button"
+                        onClick={handlePasteFromClipboard}
+                        className="btn btn-small"
+                        title="Вставить из буфера обмена"
+                      >
+                        📋 Вставить
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearTextarea}
+                        className="btn btn-small"
+                        title="Очистить поле"
+                      >
+                        🗑️ Очистить
+                      </button>
+                    </div>
+                    <textarea
+                      value={jsonInput}
+                      onChange={handleJsonInputChange}
+                      placeholder={`Вставьте JSON данные...\n\nПример:\n[\n  {"name": "John", "age": 30},\n  {"name": "Jane", "age": 25}\n]\n\nИли:\n{\n  "data": [\n    {"name": "John", "age": 30}\n  ]\n}`}
+                      className="html-textarea json-textarea"
+                    />
+                  </div>
                 </>
               )}
 
