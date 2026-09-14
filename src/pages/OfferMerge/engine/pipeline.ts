@@ -58,7 +58,7 @@ export async function buildOutputs(
   const ordered = await orderOperations(offerData, operations, opts);
   const offer = await loadDocx(offerData);
   const { offerDocx, results } = await applyOperations(offer, ordered, opts);
-  const combinedDocx = await buildCombinedDocx(ordered);
+  const combinedDocx = await buildCombinedDocx(ordered, {}, results);
   return {
     offerDocx,
     combinedDocx,

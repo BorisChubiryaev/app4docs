@@ -3,13 +3,18 @@
 // В ПОРЯДКЕ СЛЕДОВАНИЯ ПУНКТОВ ОФЕРТЫ (порядок задаётся orderKey из движка).
 import JSZip from "jszip";
 import { escapeXml } from "./ooxml";
-import type { Operation } from "./types";
+import type { ApplyResult, Operation } from "./types";
 
-function para(text: string, opts: { bold?: boolean; size?: number; center?: boolean } = {}): string {
-  const rpr =
-    opts.bold || opts.size
-      ? `<w:rPr>${opts.bold ? "<w:b/>" : ""}${opts.size ? `<w:sz w:val="${opts.size}"/>` : ""}</w:rPr>`
-      : "";
+function para(
+  text: string,
+  opts: { bold?: boolean; italic?: boolean; size?: number; center?: boolean; color?: string } = {},
+): string {
+  const rprBits: string[] = [];
+  if (opts.bold) rprBits.push("<w:b/>");
+  if (opts.italic) rprBits.push("<w:i/>");
+  if (opts.color) rprBits.push(`<w:color w:val="${opts.color}"/>`);
+  if (opts.size) rprBits.push(`<w:sz w:val="${opts.size}"/>`);
+  const rpr = rprBits.length ? `<w:rPr>${rprBits.join("")}</w:rPr>` : "";
   const ppr = opts.center ? `<w:pPr><w:jc w:val="center"/></w:pPr>` : "";
   return `<w:p>${ppr}<w:r>${rpr}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
 }
@@ -40,7 +45,9 @@ export interface CombinedMeta {
 export async function buildCombinedDocx(
   orderedOps: Operation[],
   meta: CombinedMeta = {},
+  results?: ApplyResult[],
 ): Promise<Uint8Array> {
+  const resultsById = results ? new Map(results.map((r) => [r.operationId, r])) : undefined;
   const title = meta.title ?? "ИЗМЕНЕНИЯ в Публичную оферту «Удобный доступ»";
   const subtitle =
     meta.subtitle ??
@@ -59,6 +66,18 @@ export async function buildCombinedDocx(
     bodyParts.push(para(`${i + 1}. ${op.rawText}`));
     if (op.type === "append_table_rows" && op.rows && op.rows.length) {
       bodyParts.push(tableXml(op.rows));
+    }
+    // «Было / Стало»: наглядное сравнение для оператора и рецензента — не
+    // нужно открывать старую редакцию Оферты отдельно, чтобы понять, что
+    // именно менялось за формулировкой инструкции.
+    const res = resultsById?.get(op.id);
+    if (res?.oldText || res?.newText) {
+      if (res.oldText) {
+        bodyParts.push(para(`Было: ${res.oldText}`, { italic: true, color: "999999", size: 20 }));
+      }
+      if (res.newText) {
+        bodyParts.push(para(`Стало: ${res.newText}`, { italic: true, color: "1F6F3F", size: 20 }));
+      }
     }
     bodyParts.push(para(`(источник: ${op.sourceDoc})`, { size: 18 }));
     bodyParts.push(para(""));

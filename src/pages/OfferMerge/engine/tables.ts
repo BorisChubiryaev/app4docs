@@ -1,7 +1,7 @@
 // Операции над таблицами Приложений Оферты: поиск нужной таблицы, добавление
 // строк и ЗАМЕНА существующих строк по их номеру (первая ячейка).
 import { escapeXml, decodeXml } from "./ooxml";
-import { renderInsertRuns } from "./render";
+import { renderInsertRuns, renderDeleteRuns } from "./render";
 import { sortKey } from "./alpha-sort";
 import type { BuildOptions } from "./types";
 
@@ -59,9 +59,34 @@ function cellParagraphs(text: string, opts: BuildOptions): string {
   return lines.map((l) => `<w:p>${renderInsertRuns(l, opts)}</w:p>`).join("");
 }
 
-/** Пересобрать <w:tc> с новым текстом (выделенным). */
+/**
+ * Актуальный текст ячейки: без содержимого уже зачёркнутых ранов (правка
+ * предыдущего раунда). Без этой фильтрации повторный прогон на уже
+ * отредактированной таблице сравнивал бы новое значение со «старое+новое»
+ * склеенными в одну строку — редакция никогда не признавалась бы совпавшей,
+ * и старое значение задваивалось бы на каждом следующем раунде.
+ */
+function currentCellText(tcXml: string): string {
+  let out = "";
+  const re = /<w:r(?:\s[^>]*)?>[\s\S]*?<\/w:r>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(tcXml)) !== null) {
+    if (/<w:strike\s*\/>/.test(m[0])) continue;
+    out += m[0];
+  }
+  return cellText(out);
+}
+
+/** Пересобрать <w:tc> с новым текстом (выделенным), сохранив старый зачёркнутым. */
 function setCell(tcXml: string, text: string, opts: BuildOptions): string {
-  return `<w:tc>${tcPr(tcXml)}${cellParagraphs(text, opts)}</w:tc>`;
+  const oldText = currentCellText(tcXml);
+  // Если в ячейке уже стоит то же значение — не трогаем её (иначе получим
+  // бессмысленное «зачёркнуто X, вставлено X»).
+  if (oldText.replace(/\s+/g, " ").trim() === text.replace(/\s+/g, " ").trim()) {
+    return tcXml;
+  }
+  const oldPara = oldText ? `<w:p>${renderDeleteRuns(oldText, opts)}</w:p>` : "";
+  return `<w:tc>${tcPr(tcXml)}${oldPara}${cellParagraphs(text, opts)}</w:tc>`;
 }
 
 function rowCells(trXml: string): string[] {

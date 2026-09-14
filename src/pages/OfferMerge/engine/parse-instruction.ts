@@ -142,6 +142,24 @@ function appendixIn(text: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Диапазон номеров пунктов через дефис («5.1-5.3», «7.6–7.7»), который
+ * findPoints НЕ раскрывает (она понимает лишь перечисление через запятую или
+ * «и»). Без этой проверки «Пункты 7.6-7.7 изложить в редакции: …» тихо
+ * применялась бы только к пункту 7.6, а 7.7 терялся без единого предупреждения.
+ */
+function hasUnexpandedRange(text: string, points: PointRef[]): boolean {
+  return points.some((p) => {
+    // p.index — начало ВСЕГО совпадения findPoints (со слова «пункт»), а не
+    // самой цифры; ищем цифру от этой позиции, чтобы проверить символ сразу
+    // после номера.
+    const at = text.indexOf(p.num, p.index);
+    if (at < 0) return false;
+    const after = text.slice(at + p.num.length);
+    return /^\s*[-–—]\s*\d+(?:\.\d+)*/.test(after);
+  });
+}
+
 /** Номер раздела: «раздела 5», «разделе 7». */
 function sectionNumberIn(text: string): string | null {
   const m = text.match(/раздел[а-яё]*\s*№?\s*(\d+)/i);
@@ -676,6 +694,20 @@ export function parseInstruction(text: string, ctx: Ctx): Draft[] | null {
           note: `новая редакция сразу для пунктов ${pointNums.join(", ")}: разнесите правки по пунктам вручную`,
           confidence: 0.4,
           warnings: ["одна редакция на несколько пунктов не разбирается автоматически"],
+        },
+      ];
+    }
+    // Диапазон через дефис («Пункты 7.6-7.7 изложить…») findPoints не
+    // раскрывает: без этой проверки правка тихо применилась бы только к
+    // первому номеру диапазона, а остальные терялись бы бесследно.
+    if (s.object === "point" && hasUnexpandedRange(text, s.points)) {
+      return [
+        {
+          type: "manual",
+          target: targetForPoint(firstPoint, ctx, text),
+          note: `новая редакция для диапазона пунктов начиная с ${firstPoint}: диапазон не раскрывается автоматически, разнесите правки по пунктам вручную`,
+          confidence: 0.4,
+          warnings: ["диапазон пунктов в правке не раскрывается автоматически"],
         },
       ];
     }

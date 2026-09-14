@@ -7,6 +7,7 @@
 // же движок в том же порядке и показывает абзац, который реально получился.
 import { applyOneOp, applicationOrder, type ApplyState } from "./apply";
 import { decodeXml } from "./ooxml";
+import { indexFootnotes, findFootnoteById } from "./offer-index";
 import type { BuildOptions, Operation } from "./types";
 
 export type SegmentMark = "keep" | "ins" | "del";
@@ -137,7 +138,34 @@ export function previewOperations(
       result.set(op.id, { ok: false, kind: "none", message: res.message });
       continue;
     }
-    if (TABLE_OPS.has(op.type) || op.target.kind === "footnote") {
+    if (TABLE_OPS.has(op.type)) {
+      result.set(op.id, { ok: true, kind: "table", message: res.message });
+      continue;
+    }
+    // Сноски живут в footnotes.xml, а не в document.xml — обычный поиск
+    // «абзац вокруг orderKey» тут не сработает. Ищем нужную сноску отдельно,
+    // чтобы оператор видел «было / стало» и для правок сносок, а не только
+    // сообщение движка.
+    if (op.target.kind === "footnote" && state.footnotes) {
+      const idxAfter = indexFootnotes(state.document);
+      // Номер сноски: обычно он есть прямо в target; для варианта «сноска
+      // к пункту» (atPoint) реальный номер разрешается внутри applyOneOp и
+      // виден здесь только через orderKey (позицию ссылки в теле) —
+      // сопоставляем по ней.
+      const fnNumber =
+        op.target.number ||
+        [...idxAfter.displayToBodyPos.entries()].find(([, pos]) => pos === res.orderKey)?.[0];
+      const id = fnNumber ? idxAfter.displayToId.get(fnNumber) : undefined;
+      const fn = id !== undefined ? findFootnoteById(state.footnotes, id) : null;
+      if (fn) {
+        result.set(op.id, {
+          ok: true,
+          kind: "paragraph",
+          message: res.message,
+          segments: trimContext(segmentsOf(fn.inner, opts)),
+        });
+        continue;
+      }
       result.set(op.id, { ok: true, kind: "table", message: res.message });
       continue;
     }

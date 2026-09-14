@@ -48,7 +48,11 @@ function replaceFootnoteBody(inner: string, text: string, opts: BuildOptions): s
   const firstP = inner.match(/<w:p\b[^>]*>/);
   const open = firstP ? firstP[0] : "<w:p>";
   const pPr = inner.match(/<w:pPr>[\s\S]*?<\/w:pPr>/);
-  return `${open}${pPr ? pPr[0] : ""}${ref ? ref[0] : ""}${runs}</w:p>`;
+  // Старый текст сноски показываем зачёркнутым перед новым — тот же принцип
+  // «видно, как было», что и для обычных пунктов.
+  const oldPlain = currentText(inner);
+  const oldRuns = oldPlain ? renderDeleteRuns(oldPlain, opts) + renderInsertRuns(" ", opts) : "";
+  return `${open}${pPr ? pPr[0] : ""}${ref ? ref[0] : ""}${oldRuns}${runs}</w:p>`;
 }
 
 /**
@@ -85,6 +89,26 @@ function replaceParagraphRuns(pXml: string, newRuns: string): string {
 
 /** Убрать ведущий номер пункта («2.44.», «7.6 ») — он даётся автонумерацией. */
 /** Совпадение текстов «по существу»: без номера, кавычек-ёлочек и пробелов. */
+/**
+ * «Актуальный» видимый текст абзаца/сноски: без содержимого, помеченного как
+ * удалённое в ПРЕДЫДУЩЕМ раунде правок — зачёркнутого рана (цветной режим)
+ * или <w:del> (режим рецензирования, его paragraphText и так не берёт, т.к.
+ * там <w:delText>, а не <w:t>). Без этой фильтрации повторный прогон на уже
+ * отредактированной Оферте склеивает «было»+«стало» в одну строку, сравнение
+ * с новой редакцией никогда не совпадает, и старый текст задваивается на
+ * каждом следующем раунде правок.
+ */
+function currentText(innerXml: string): string {
+  let out = "";
+  const re = /<w:r(?:\s[^>]*)?>[\s\S]*?<\/w:r>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(innerXml)) !== null) {
+    if (/<w:strike\s*\/>/.test(m[0])) continue;
+    out += m[0];
+  }
+  return paragraphText(out).replace(/\s+/g, " ").trim();
+}
+
 function sameText(a: string, b: string): boolean {
   const norm = (t: string) =>
     stripLeadingNumber(t)
@@ -447,22 +471,38 @@ export function applyOneOp(
       return fail(`${what} не найден в документе — проверьте, что правка применима к этой редакции`);
     }
 
+    const oldPlain = currentText(para.inner);
+    if (sameText(oldPlain, body)) {
+      return {
+        operationId: op.id,
+        ok: true,
+        message: "пункт уже изложен в этой редакции — правка не требуется",
+        orderKey: para.start,
+      };
+    }
+
     const newRuns = buildParagraphRuns(body, op.target.kind === "term", opts);
     // Ссылки на сноски живут в ранах абзаца: заменив раны целиком, мы бы
     // осиротили сноски и сломали их сквозную нумерацию.
     const keptRefs = footnoteRefRuns(para.inner);
-    const rebuilt = replaceParagraphRuns(para.inner, newRuns + keptRefs);
+    // Прежний текст показываем зачёркнутым — читатель должен видеть, «как
+    // было», а не только итоговую редакцию (иначе правку нельзя проверить
+    // без второго открытого окна со старой Офертой).
+    const oldRuns = oldPlain ? renderDeleteRuns(oldPlain, opts) + renderInsertRuns(" ", opts) : "";
+    const rebuilt = replaceParagraphRuns(para.inner, oldRuns + newRuns + keptRefs);
     state.document = spliceSpan(state.document, para, rebuilt);
     return {
       operationId: op.id,
       ok: true,
       message:
-        "пункт изложен в новой редакции" +
+        "пункт изложен в новой редакции (прежняя редакция показана зачёркнутой)" +
         (byPrefix
           ? " (пункт с указанным номером не найден — опознан по началу текста, сверьте место правки)"
           : "") +
         (keptRefs ? " (ссылки на сноски сохранены — проверьте их уместность)" : ""),
       orderKey: para.start,
+      oldText: oldPlain,
+      newText: body,
     };
   }
 
@@ -561,7 +601,17 @@ export function applyOneOp(
     const id = idx.displayToId.get(number);
     const fn = id !== undefined ? findFootnoteById(state.footnotes, id) : null;
     if (!fn) return fail(`сноска № ${number} не найдена`);
-    const rebuilt = replaceFootnoteBody(fn.inner, op.payload, opts);
+    const body = stripOuterQuotes(op.payload);
+    const oldPlain = currentText(fn.inner);
+    if (sameText(oldPlain, body)) {
+      return {
+        operationId: op.id,
+        ok: true,
+        message: `сноска № ${number}: уже в этой редакции — правка не требуется`,
+        orderKey: idx.displayToBodyPos.get(number) ?? fn.start,
+      };
+    }
+    const rebuilt = replaceFootnoteBody(fn.inner, body, opts);
     state.footnotes =
       state.footnotes.slice(0, fn.start) +
       state.footnotes.slice(fn.start).replace(fn.inner, rebuilt);
@@ -569,11 +619,13 @@ export function applyOneOp(
       operationId: op.id,
       ok: true,
       message:
-        `сноска № ${number}: изложена в новой редакции` +
+        `сноска № ${number}: изложена в новой редакции (прежний текст показан зачёркнутым)` +
         (op.target.kind === "footnote" && op.target.atPoint
           ? ` (найдена как первая сноска п. ${op.target.atPoint})`
           : ""),
       orderKey: idx.displayToBodyPos.get(number) ?? fn.start,
+      oldText: oldPlain,
+      newText: body,
     };
   }
 
@@ -739,6 +791,8 @@ export function applyOneOp(
         ok: true,
         message: `п. ${point}: ${ordinalWord(op.paragraphIndex ?? -1, "m")} абзац изложен в новой редакции (абзацев в пункте: ${withText.length})`,
         orderKey: span.start,
+        oldText: old,
+        newText: body,
       };
     }
 
@@ -772,6 +826,8 @@ export function applyOneOp(
         `п. ${point}: ${ordinalWord(wanted)} предложение изложено в новой редакции` +
         (block.length > 1 ? ` (пункт из ${block.length} абз.)` : ""),
       orderKey: span.start,
+      oldText: oldSentence,
+      newText: body,
     };
   }
 
@@ -910,6 +966,8 @@ export function applyOneOp(
         (point ? ` в п. ${point}` : "") +
         many,
       orderKey: span ? span.start : res.orderKey,
+      oldText: op.find,
+      newText: op.type === "delete_words" ? undefined : stripOuterQuotes(op.payload ?? ""),
     };
   }
 
@@ -933,6 +991,7 @@ export function applyOneOp(
       ok: true,
       message: `пункт ${point} исключён (зачёркнут, последующие перенумеровываются автоматически)`,
       orderKey: span.start,
+      oldText: plain,
     };
   }
 
@@ -975,6 +1034,8 @@ export function applyOneOp(
         `по всему тексту заменено «${op.find}» → «${replacement}»: ${done} мест` +
         (skipped ? `; пропущено ${skipped} (пересекают сноску или объект — проверьте вручную)` : ""),
       orderKey: 0,
+      oldText: op.find,
+      newText: replacement,
     };
   }
 
@@ -1004,6 +1065,7 @@ export function applyOneOp(
       ok: true,
       message: `п. ${point}: ${ordinalWord(op.paragraphIndex ?? -1, "m")} абзац исключён (зачёркнут; всего абзацев было ${withText.length})`,
       orderKey: span.start,
+      oldText: plain,
     };
   }
 
@@ -1020,6 +1082,9 @@ export function applyOneOp(
     const runStart = state.document.lastIndexOf("<w:r", pos);
     const runEnd = state.document.indexOf("</w:r>", pos);
     if (runStart < 0 || runEnd < 0) return fail(`не удалось выделить ссылку на сноску № ${number}`);
+    const oldFnText = state.footnotes
+      ? paragraphText(findFootnoteById(state.footnotes, idx.displayToId.get(number)!)?.inner ?? "").replace(/\s+/g, " ").trim()
+      : undefined;
     state.document =
       state.document.slice(0, runStart) + state.document.slice(runEnd + "</w:r>".length);
     return {
@@ -1027,6 +1092,7 @@ export function applyOneOp(
       ok: true,
       message: `сноска № ${number} исключена (последующие перенумеровываются автоматически)`,
       orderKey: runStart,
+      oldText: oldFnText,
     };
   }
 

@@ -103,21 +103,46 @@ export function locatePointBlock(
   const i = index.findIndex(
     (p) => p.start >= from && p.number != null && normNumber(p.number) === want,
   );
-  if (i < 0) return [];
-  const head = index[i];
-  const out = [head];
-  for (let j = i + 1; j < index.length; j++) {
-    const p = index[j];
-    if (
-      p.numId !== null &&
-      head.numId !== null &&
-      p.numId === head.numId &&
-      p.ilvl !== null &&
-      head.ilvl !== null &&
-      p.ilvl <= head.ilvl
-    ) {
-      break;
+  if (i >= 0) {
+    const head = index[i];
+    const out = [head];
+    for (let j = i + 1; j < index.length; j++) {
+      const p = index[j];
+      if (
+        p.numId !== null &&
+        head.numId !== null &&
+        p.numId === head.numId &&
+        p.ilvl !== null &&
+        head.ilvl !== null &&
+        p.ilvl <= head.ilvl
+      ) {
+        break;
+      }
+      out.push(p);
     }
+    return out.map(span);
+  }
+
+  // Резерв: номер не восстановлен автонумерацией — как и locatePointSpan,
+  // ищем абзац по началу его ТЕКСТА (документ набран литеральными номерами
+  // без w:numPr; так бывает в старых или подготовленных вручную Офертах).
+  // Без этого резерва «второй абзац п. 5.1 изложить…» и «дополнить п. 5.1…»
+  // в таких документах никогда не находили бы свой пункт — хотя точечная
+  // замена всего пункта (locatePointSpan) его прекрасно находит.
+  const litRe = new RegExp("^\\s*" + want.replace(/\./g, "\\.") + "\\.?(?!\\d)");
+  const litI = index.findIndex((p) => p.start >= from && litRe.test(p.text));
+  if (litI < 0) return [];
+  const headDepth = want.split(".").length;
+  const out = [index[litI]];
+  for (let j = litI + 1; j < index.length; j++) {
+    const p = index[j];
+    // Другой автонумерованный абзац — заведомо иная (не литеральная) часть
+    // документа, дальше в неё не заходим.
+    if (p.number != null) break;
+    const lm = p.text.match(/^\s*(\d+(?:\.\d+)*)\.?(?!\d)/);
+    // Абзац с номером ТОЙ ЖЕ или МЕНЬШЕЙ глубины — начало следующего пункта
+    // (сосед или раздел выше); с БОЛЬШЕЙ глубиной — подпункт, входит в блок.
+    if (lm && lm[1].split(".").length <= headDepth) break;
     out.push(p);
   }
   return out.map(span);
