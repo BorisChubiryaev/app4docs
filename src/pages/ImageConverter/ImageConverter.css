@@ -1007,24 +1007,6 @@
 
 /* ==== Универсальный конвертер: выбор формата и доп. элементы ==== */
 
-.btn-paste-svg {
-  margin-top: 14px;
-  padding: 8px 16px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--ink);
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.btn-paste-svg:hover {
-  border-color: var(--brand-2);
-  color: var(--brand-2);
-  transform: translateY(-1px);
-}
-
 /* Панель вставки SVG-кода */
 .svg-code-panel {
   background: rgba(255, 255, 255, 0.95);
@@ -1309,4 +1291,167 @@
   font-size: 0.75rem;
   color: var(--muted);
   font-family: "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ── Редактор SVG-кода ── */
+.svg-editor-bar {
+  display: flex;
+  justify-content: flex-start;
+  margin: -8px 0 20px;
+}
+.svg-editor-toggle {
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.svg-editor-toggle:hover {
+  border-color: var(--brand-2, #667eea);
+  color: var(--brand-2, #667eea);
+  transform: translateY(-1px);
+}
+.svg-editor-toggle.active {
+  background: rgba(102, 126, 234, 0.12);
+  border-color: var(--brand-2, #667eea);
+  color: var(--brand-2, #667eea);
+}
+
+.svg-code-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.svg-mini-btn {
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink-soft, #444);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.svg-mini-btn:hover:not(:disabled) {
+  border-color: var(--brand-2, #667eea);
+  color: var(--brand-2, #667eea);
+}
+.svg-mini-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.svg-editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.svg-editor-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.svg-editor-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft, #555);
+  margin-bottom: 6px;
+}
+.svg-valid-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.svg-valid-badge.ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+.svg-valid-badge.bad {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+}
+
+.svg-preview-box {
+  flex: 1;
+  min-height: 240px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background:
+    linear-gradient(45deg, #eee 25%, transparent 25%),
+    linear-gradient(-45deg, #eee 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #eee 75%),
+    linear-gradient(-45deg, transparent 75%, #eee 75%),
+    #fff;
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: auto;
+}
+.svg-preview-inner {
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.svg-preview-inner svg {
+  max-width: 100%;
+  height: auto;
+}
+.svg-preview-empty {
+  color: var(--muted, #94a3b8);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.svg-code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.svg-filename {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.svg-filename-input {
+  border: none;
+  outline: none;
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  width: 160px;
+  background: transparent;
+  color: var(--ink);
+}
+.svg-filename-ext {
+  padding: 9px 12px 9px 0;
+  color: var(--muted, #94a3b8);
+  font-size: 0.9rem;
+}
+.svg-download-btn,
+.svg-add-btn {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .svg-editor-grid {
+    grid-template-columns: 1fr;
+  }
 }

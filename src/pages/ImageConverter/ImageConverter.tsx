@@ -127,6 +127,7 @@ const ImageConverter: React.FC = () => {
   // Вставка SVG-кода как источника.
   const [showSvgInput, setShowSvgInput] = useState(false);
   const [svgCode, setSvgCode] = useState("");
+  const [svgFileName, setSvgFileName] = useState("image");
 
   const webpSupported = React.useMemo(() => isWebpEncodingSupported(), []);
 
@@ -291,13 +292,45 @@ const ImageConverter: React.FC = () => {
         new Blob([code]).size,
       );
       setImages((prev) => [...prev, imageFile]);
-      setSvgCode("");
-      setShowSvgInput(false);
       setError(null);
     } catch {
       setError("Неверный SVG-код. Проверьте синтаксис.");
     }
   };
+
+  // Быстрая проверка валидности SVG (для индикатора и превью).
+  const isSvgValid = (code: string): boolean => {
+    const c = code.trim();
+    if (!c) return false;
+    try {
+      const doc = new DOMParser().parseFromString(c, "image/svg+xml");
+      return (
+        !doc.querySelector("parsererror") && doc.querySelector("svg") !== null
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  // Скачать текущий (в т.ч. отредактированный) код как .svg
+  const downloadSvgCode = () => {
+    const code = svgCode.trim();
+    if (!code) return;
+    if (!isSvgValid(code)) {
+      setError("Неверный SVG-код. Проверьте синтаксис перед скачиванием.");
+      return;
+    }
+    const name = (svgFileName.trim() || "image").replace(/\.svg$/i, "");
+    const blob = new Blob([code], { type: "image/svg+xml;charset=utf-8" });
+    saveAs(blob, `${name}.svg`);
+    setError(null);
+  };
+
+  const svgExample = `<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <rect x="20" y="20" width="160" height="160" rx="24" fill="#4f46e5" />
+  <circle cx="100" cy="100" r="55" fill="#ff1c77" />
+  <text x="100" y="108" text-anchor="middle" fill="#fff" font-family="Arial" font-size="28">SVG</text>
+</svg>`;
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -1419,16 +1452,6 @@ const ImageConverter: React.FC = () => {
               <div className="supported-formats">
                 Поддерживаемые форматы: {SUPPORTED_INPUT_LABEL}
               </div>
-              <button
-                type="button"
-                className="btn-paste-svg"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSvgInput(true);
-                }}
-              >
-                📝 Вставить SVG-код
-              </button>
             </div>
           ) : (
             <div
@@ -1444,32 +1467,117 @@ const ImageConverter: React.FC = () => {
           )}
         </div>
 
-        {/* Вставка SVG-кода */}
+        {/* Кнопка-переключатель редактора SVG (доступна всегда) */}
+        <div className="svg-editor-bar">
+          <button
+            type="button"
+            className={`svg-editor-toggle ${showSvgInput ? "active" : ""}`}
+            onClick={() => setShowSvgInput((v) => !v)}
+          >
+            📝 {showSvgInput ? "Скрыть редактор SVG" : "Вставить / править SVG-код"}
+          </button>
+        </div>
+
+        {/* Редактор SVG-кода: вставка, правка, предпросмотр, скачивание */}
         {showSvgInput && (
           <div className="svg-code-panel">
             <div className="svg-code-header">
-              <h3>📝 Вставьте SVG-код</h3>
-              <button
-                className="error-close"
-                onClick={() => setShowSvgInput(false)}
-              >
-                ✕
-              </button>
+              <h3>📝 Редактор SVG</h3>
+              <div className="svg-code-header-actions">
+                <button
+                  type="button"
+                  className="svg-mini-btn"
+                  onClick={() => setSvgCode(svgExample)}
+                  title="Вставить пример"
+                >
+                  Пример
+                </button>
+                <button
+                  type="button"
+                  className="svg-mini-btn"
+                  onClick={() => setSvgCode("")}
+                  disabled={!svgCode}
+                  title="Очистить поле"
+                >
+                  Очистить
+                </button>
+                <button
+                  className="error-close"
+                  onClick={() => setShowSvgInput(false)}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <textarea
-              className="svg-code-area"
-              value={svgCode}
-              onChange={(e) => setSvgCode(e.target.value)}
-              placeholder={`<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">\n  <circle cx="100" cy="100" r="80" fill="#4f46e5" />\n</svg>`}
-              rows={6}
-            />
+
+            <div className="svg-editor-grid">
+              <div className="svg-editor-col">
+                <label className="svg-editor-label">
+                  Код SVG
+                  {svgCode.trim() && (
+                    <span
+                      className={`svg-valid-badge ${
+                        isSvgValid(svgCode) ? "ok" : "bad"
+                      }`}
+                    >
+                      {isSvgValid(svgCode) ? "✓ Корректный" : "⚠ Ошибка синтаксиса"}
+                    </span>
+                  )}
+                </label>
+                <textarea
+                  className="svg-code-area"
+                  value={svgCode}
+                  onChange={(e) => setSvgCode(e.target.value)}
+                  spellCheck={false}
+                  placeholder={`<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">\n  <circle cx="100" cy="100" r="80" fill="#4f46e5" />\n</svg>`}
+                  rows={12}
+                />
+              </div>
+              <div className="svg-editor-col">
+                <label className="svg-editor-label">Предпросмотр</label>
+                <div className="svg-preview-box">
+                  {svgCode.trim() && isSvgValid(svgCode) ? (
+                    <div
+                      className="svg-preview-inner"
+                      // Код исполняется только в браузере пользователя.
+                      dangerouslySetInnerHTML={{ __html: svgCode }}
+                    />
+                  ) : (
+                    <div className="svg-preview-empty">
+                      {svgCode.trim()
+                        ? "Проверьте синтаксис SVG"
+                        : "Здесь появится предпросмотр"}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="svg-code-actions">
+              <div className="svg-filename">
+                <input
+                  type="text"
+                  value={svgFileName}
+                  onChange={(e) => setSvgFileName(e.target.value)}
+                  placeholder="имя файла"
+                  className="svg-filename-input"
+                />
+                <span className="svg-filename-ext">.svg</span>
+              </div>
               <button
-                className="btn-convert"
-                disabled={!svgCode.trim()}
-                onClick={addSvgFromCode}
+                className="btn-convert svg-download-btn"
+                disabled={!isSvgValid(svgCode)}
+                onClick={downloadSvgCode}
               >
-                ➕ Добавить как изображение
+                💾 Скачать SVG
+              </button>
+              <button
+                className="btn-convert svg-add-btn"
+                disabled={!isSvgValid(svgCode)}
+                onClick={addSvgFromCode}
+                title="Добавить в список ниже, чтобы конвертировать в PNG/JPEG/PDF/…"
+              >
+                ➕ Добавить для конвертации
               </button>
             </div>
           </div>

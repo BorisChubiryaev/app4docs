@@ -472,6 +472,41 @@
   background: #0b0c12 !important;
 }
 
+/* ── Универсальный конвертер: редактор SVG и панель форматов ── */
+:root[data-theme="dark"] .svg-code-panel,
+:root[data-theme="dark"] .output-format-bar,
+:root[data-theme="dark"] .svg-editor-toggle,
+:root[data-theme="dark"] .svg-mini-btn,
+:root[data-theme="dark"] .format-chip,
+:root[data-theme="dark"] .svg-filename,
+:root[data-theme="dark"] .svg-filename-input {
+  background: var(--dk-panel) !important;
+  border-color: var(--dk-border) !important;
+  color: var(--dk-text) !important;
+}
+:root[data-theme="dark"] .svg-code-area {
+  background: #0b0c12 !important;
+  border-color: var(--dk-border) !important;
+  color: var(--dk-text) !important;
+}
+:root[data-theme="dark"] .svg-editor-label {
+  color: var(--dk-text-2) !important;
+}
+:root[data-theme="dark"] .format-chip.active,
+:root[data-theme="dark"] .svg-editor-toggle.active {
+  background: rgba(102, 126, 234, 0.25) !important;
+  border-color: rgba(102, 126, 234, 0.6) !important;
+  color: #cdd5ff !important;
+}
+:root[data-theme="dark"] .svg-preview-empty {
+  color: var(--dk-text-2) !important;
+}
+/* превью SVG оставляем на светлой шахматке — так виден результат,
+   но слегка притемняем рамку */
+:root[data-theme="dark"] .svg-preview-box {
+  border-color: var(--dk-border) !important;
+}
+
 /* ── PDF Studio (редактор) ── */
 :root[data-theme="dark"] .pdf-editor-container {
   background: linear-gradient(135deg, #14151f 0%, #1a1d2b 100%) !important;
