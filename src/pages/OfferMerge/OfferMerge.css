@@ -247,6 +247,22 @@
   border-top: 1px solid var(--line);
   padding-top: 16px;
 }
+
+/* Плавающая панель действий на шаге «Проверка»: «Выделение» + «Собрать
+   файлы» всегда под рукой — не нужно скроллить в самый низ длинного списка
+   правок. Прилипает к низу окна, пока список не прокручен до конца, затем
+   мягко встаёт на своё место. */
+.om-review__main .om-actions {
+  position: sticky;
+  bottom: 12px;
+  z-index: 6;
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  padding: 12px 16px;
+}
 .om-hl {
   display: inline-flex;
   align-items: center;
@@ -280,7 +296,10 @@
   padding: 12px;
   box-shadow: var(--shadow-sm);
   max-height: calc(100vh - 40px);
-  overflow: auto;
+  /* Только вертикальная прокрутка: список сам ужимает подписи многоточием,
+     а горизонтальный скролл лишь мешал. */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .om-nav__title {
   font-weight: 700;
