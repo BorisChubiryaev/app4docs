@@ -9,6 +9,11 @@ import {
   Packer,
   Paragraph,
   TextRun,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  BorderStyle,
   AlignmentType,
   HeadingLevel,
   ImageRun,
@@ -18,6 +23,7 @@ import {
 import { saveAs } from "file-saver";
 
 import { PdfToWordInstructionsModal } from "./components/PdfToWordInstructionsModal";
+import { detectTables, type DetectedTable } from "./tableDetect";
 
 import PageShell from "../../components/PageShell";
 import "./PdfToWord.css";
@@ -94,6 +100,7 @@ interface PageDimensions {
 interface PageContent {
   paragraphs: TextParagraph[];
   images: ExtractedImage[];
+  tables: DetectedTable[];
   pageDims: PageDimensions;
 }
 
@@ -479,6 +486,7 @@ async function renderPageToCanvas(
  */
 async function extractImagesFromPage(
   page: pdfjs.PDFPageProxy,
+  operatorList?: { fnArray: number[]; argsArray: unknown[] },
 ): Promise<ExtractedImage[]> {
   const out: ExtractedImage[] = [];
   try {
@@ -487,7 +495,7 @@ async function extractImagesFromPage(
     if (!rendered) return out;
     const { canvas, viewport } = rendered;
 
-    const ol = await page.getOperatorList();
+    const ol = operatorList ?? (await page.getOperatorList());
     const stack: number[][] = [];
     let ct = [1, 0, 0, 1, 0, 0];
     const ops: number[][] = [];
@@ -614,24 +622,67 @@ function createImgParagraph(img: ExtractedImage, maxW: number): Paragraph {
   });
 }
 
+const TABLE_BORDER = {
+  style: BorderStyle.SINGLE,
+  size: 2,
+  color: "999999",
+};
+
+function buildDocxTable(t: DetectedTable): Table {
+  const colWidths = t.colXs
+    .slice(0, -1)
+    .map((x, i) => Math.max(1, Math.round((t.colXs[i + 1] - x) * 20)));
+  const rows = t.cells.map(
+    (row) =>
+      new TableRow({
+        children: row.map(
+          (text, ci) =>
+            new TableCell({
+              width: { size: colWidths[ci] ?? 1000, type: WidthType.DXA },
+              margins: { top: 40, bottom: 40, left: 80, right: 80 },
+              borders: {
+                top: TABLE_BORDER,
+                bottom: TABLE_BORDER,
+                left: TABLE_BORDER,
+                right: TABLE_BORDER,
+              },
+              children: text.split("\n").map(
+                (line) =>
+                  new Paragraph({
+                    children: [new TextRun({ text: line, size: 20, font: "Calibri" })],
+                  }),
+              ),
+            }),
+        ),
+      }),
+  );
+  return new Table({
+    rows,
+    width: { size: colWidths.reduce((a, b) => a + b, 0) || 5000, type: WidthType.DXA },
+  });
+}
+
 function mergeContent(
   paras: TextParagraph[],
   images: ExtractedImage[],
+  tables: DetectedTable[],
   bodyFS: number,
   pd: PageDimensions,
-): Paragraph[] {
+): (Paragraph | Table)[] {
   const items: {
     y: number;
-    type: "t" | "i";
+    type: "t" | "i" | "tb";
     tp?: TextParagraph;
     img?: ExtractedImage;
+    tbl?: DetectedTable;
   }[] = [];
   for (const p of paras)
     items.push({ y: p.lines.length > 0 ? p.lines[0].y : 0, type: "t", tp: p });
   for (const img of images)
     items.push({ y: img.y + img.displayHeight, type: "i", img });
+  for (const tbl of tables) items.push({ y: tbl.y1, type: "tb", tbl });
   items.sort((a, b) => b.y - a.y);
-  const result: Paragraph[] = [],
+  const result: (Paragraph | Table)[] = [],
     maxW = pd.contentWidth || 500;
   for (const item of items) {
     if (item.type === "t" && item.tp) {
@@ -657,6 +708,10 @@ function mergeContent(
       result.push(new Paragraph(opts));
     } else if (item.type === "i" && item.img)
       result.push(createImgParagraph(item.img, maxW));
+    else if (item.type === "tb" && item.tbl) {
+      result.push(buildDocxTable(item.tbl));
+      result.push(new Paragraph({ children: [], spacing: { after: 120 } }));
+    }
   }
   return result;
 }
@@ -681,15 +736,20 @@ async function convertOnePdfToWord(
     try {
       const page = await doc.getPage(i);
       const vp = page.getViewport({ scale: 1.0 });
+      const ol = await page.getOperatorList();
       const ti = await extractTextItems(page);
-      const lines = groupIntoLines(ti);
+      const { tables, usedItemIndexes } = detectTables(ol, ti);
+      const flowItems = usedItemIndexes.size
+        ? ti.filter((_, idx) => !usedItemIndexes.has(idx))
+        : ti;
+      const lines = groupIntoLines(flowItems);
       const pd = detectPageDims(lines, { width: vp.width, height: vp.height });
       const paras = groupIntoParagraphs(lines, pd);
       for (const p of paras) for (const l of p.lines) allFS.push(l.fontSize);
       let images: ExtractedImage[] = [];
       if (imgMode === "extract") {
         try {
-          images = await extractImagesFromPage(page);
+          images = await extractImagesFromPage(page, ol);
           totalImgs += images.length;
         } catch {}
       } else if (imgMode === "render") {
@@ -699,12 +759,13 @@ async function convertOnePdfToWord(
           totalImgs++;
         }
       }
-      pagesData.push({ paragraphs: paras, images, pageDims: pd });
+      pagesData.push({ paragraphs: paras, images, tables, pageDims: pd });
     } catch (e) {
       console.warn(`Ошибка на странице ${i}:`, e);
       pagesData.push({
         paragraphs: [],
         images: [],
+        tables: [],
         pageDims: {
           width: 612,
           height: 792,
@@ -720,11 +781,11 @@ async function convertOnePdfToWord(
   const bodyFS = allFS.length > 0 ? modeNum(allFS) : 12;
   onProgress(total, total, "Сборка Word...");
 
-  const allP: Paragraph[] = [];
+  const allP: (Paragraph | Table)[] = [];
   let totalP = 0;
   for (let i = 0; i < pagesData.length; i++) {
-    const { paragraphs, images, pageDims } = pagesData[i];
-    const dp = mergeContent(paragraphs, images, bodyFS, pageDims);
+    const { paragraphs, images, tables, pageDims } = pagesData[i];
+    const dp = mergeContent(paragraphs, images, tables, bodyFS, pageDims);
     allP.push(...dp);
     totalP += dp.length;
     if (i < pagesData.length - 1 && dp.length > 0)
@@ -1043,22 +1104,34 @@ const PdfToWord: React.FC = () => {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
-  const [imageMode, setImageMode] = useState<ImageMode>("extract");
   const [error, setError] = useState("");
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const acceptExt = mode === "pdf-to-word" ? ".pdf" : ".docx";
+  const acceptExt = files.length > 0 ? (mode === "pdf-to-word" ? ".pdf" : ".docx") : ".pdf,.docx";
   const acceptLabel = mode === "pdf-to-word" ? "PDF" : "Word (.docx)";
 
   // ========== Файлы ==========
+  // Режим определяется автоматически по расширению первого загруженного
+  // файла — ручной переключатель PDF↔Word только путал пользователей.
 
   const addFiles = useCallback(
     (newFiles: FileList | File[]) => {
-      const ext = mode === "pdf-to-word" ? "pdf" : "docx";
+      const arr = Array.from(newFiles);
+      let curMode = mode;
+      if (files.length === 0) {
+        const first = arr.find((f) => /\.(pdf|docx)$/i.test(f.name));
+        if (first) {
+          curMode = first.name.toLowerCase().endsWith(".pdf")
+            ? "pdf-to-word"
+            : "word-to-pdf";
+          if (curMode !== mode) setMode(curMode);
+        }
+      }
+      const ext = curMode === "pdf-to-word" ? "pdf" : "docx";
       const valid: FileItem[] = [];
-      Array.from(newFiles).forEach((f) => {
+      arr.forEach((f) => {
         if (!f.name.toLowerCase().endsWith(`.${ext}`)) return;
         if (
           files.some((ef) => ef.file.name === f.name && ef.file.size === f.size)
@@ -1078,7 +1151,10 @@ const PdfToWord: React.FC = () => {
         });
       });
       if (valid.length) setFiles((prev) => [...prev, ...valid]);
-      else if (newFiles.length > 0) setError(`Выберите ${acceptLabel} файлы`);
+      else if (arr.length > 0)
+        setError(
+          `Выберите ${curMode === "pdf-to-word" ? "PDF" : "Word (.docx)"} файлы`,
+        );
     },
     [files, mode],
   );
@@ -1098,10 +1174,7 @@ const PdfToWord: React.FC = () => {
 
   const removeFile = (id: string) =>
     setFiles((prev) => prev.filter((f) => f.id !== id));
-  const clearAll = () => setFiles([]);
-
-  const switchMode = (newMode: ConvertMode) => {
-    setMode(newMode);
+  const clearAll = () => {
     setFiles([]);
     setError("");
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -1126,7 +1199,7 @@ const PdfToWord: React.FC = () => {
       if (mode === "pdf-to-word") {
         const result = await convertOnePdfToWord(
           item.file,
-          imageMode,
+          "extract",
           (cur, total, stage) => {
             updateFile(item.id, { progress: (cur / total) * 100, stage });
           },
@@ -1232,22 +1305,6 @@ const PdfToWord: React.FC = () => {
       onShowInstructions={() => setIsInstructionsOpen(true)}
     >
 
-        {/* Табы */}
-        <div className="ds-tabs ds-tabs--fill">
-          <button
-            className={`ds-tab ${mode === "pdf-to-word" ? "ds-tab--active" : ""}`}
-            onClick={() => switchMode("pdf-to-word")}
-          >
-            <span className="tab-label">PDF → Word</span>
-          </button>
-          <button
-            className={`ds-tab ${mode === "word-to-pdf" ? "ds-tab--active" : ""}`}
-            onClick={() => switchMode("word-to-pdf")}
-          >
-            <span className="tab-label">Word → PDF</span>
-          </button>
-        </div>
-
         <div className="converter-content">
           <div className="input-column">
             {/* Зона загрузки */}
@@ -1258,7 +1315,7 @@ const PdfToWord: React.FC = () => {
                 <div className="upload-icon">
                   <div className="icon-wrapper">
                     <span className="icon">
-                      {mode === "pdf-to-word" ? "📄" : "📘"}
+                      {total === 0 ? "📄" : mode === "pdf-to-word" ? "📄" : "📘"}
                     </span>
                     {total > 0 && <span className="status-icon">{total}</span>}
                   </div>
@@ -1266,7 +1323,7 @@ const PdfToWord: React.FC = () => {
                 <div className="upload-info">
                   <h3>
                     {total === 0
-                      ? `Загрузите ${acceptLabel} файлы`
+                      ? "Загрузите PDF или Word файлы"
                       : `${total} ${pluralFiles(total)}`}
                   </h3>
                   {total > 0 && (
@@ -1292,10 +1349,12 @@ const PdfToWord: React.FC = () => {
                 <div className="upload-placeholder">
                   <span className="placeholder-icon">📂</span>
                   <p className="placeholder-text">
-                    Перетащите {acceptExt} файлы или
+                    {total === 0
+                      ? "Перетащите PDF или Word файлы или"
+                      : `Перетащите ещё ${acceptLabel} файлы или`}
                   </p>
                   <p className="placeholder-subtext">
-                    Можно загрузить несколько файлов
+                    PDF → Word, Word → PDF — определяется автоматически
                   </p>
                 </div>
                 <input
@@ -1312,47 +1371,6 @@ const PdfToWord: React.FC = () => {
                 </label>
               </div>
             </div>
-
-            {/* Настройки (PDF → Word) */}
-            {mode === "pdf-to-word" && (
-              <div className="glass-card settings-card">
-                <div className="settings-header">
-                  <h3>🖼️ Изображения</h3>
-                </div>
-                <div className="mode-selector">
-                  <button
-                    className={`mode-option ${imageMode === "extract" ? "active" : ""}`}
-                    onClick={() => setImageMode("extract")}
-                  >
-                    <span className="option-icon">🔍</span>
-                    <div className="option-content">
-                      <strong>Извлечь</strong>
-                      <small>Отдельные картинки</small>
-                    </div>
-                  </button>
-                  <button
-                    className={`mode-option ${imageMode === "render" ? "active" : ""}`}
-                    onClick={() => setImageMode("render")}
-                  >
-                    <span className="option-icon">📸</span>
-                    <div className="option-content">
-                      <strong>Снимок</strong>
-                      <small>Страница целиком</small>
-                    </div>
-                  </button>
-                  <button
-                    className={`mode-option ${imageMode === "none" ? "active" : ""}`}
-                    onClick={() => setImageMode("none")}
-                  >
-                    <span className="option-icon">📝</span>
-                    <div className="option-content">
-                      <strong>Без картинок</strong>
-                      <small>Только текст</small>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Список файлов */}
             {files.length > 0 && (
@@ -1529,8 +1547,8 @@ const PdfToWord: React.FC = () => {
                     <div className="info-item">
                       <span className="info-icon">🖼️</span>
                       <div className="info-text">
-                        <strong>Изображения</strong>
-                        <p>3 режима: извлечь, снимок, без картинок</p>
+                        <strong>Изображения и таблицы</strong>
+                        <p>Картинки и таблицы с рамками распознаются автоматически</p>
                       </div>
                     </div>
                     <div className="info-item">
@@ -1589,8 +1607,9 @@ const PdfToWord: React.FC = () => {
                 <div className="warning-text">
                   {mode === "pdf-to-word" ? (
                     <>
-                      <strong>Ограничения:</strong> Таблицы, колонки, формы не
-                      переносятся. Отсканированные PDF требуют OCR.
+                      <strong>Ограничения:</strong> Таблицы без видимых рамок,
+                      многоколоночная вёрстка и формы переносятся приближённо.
+                      Отсканированные PDF требуют OCR.
                     </>
                   ) : (
                     <>
