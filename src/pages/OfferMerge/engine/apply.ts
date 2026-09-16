@@ -46,8 +46,21 @@ import {
   buildFootnoteElement,
   appendFootnoteElement,
 } from "./footnote-add";
-import { renderInsertRuns, renderDeleteRuns, resetInsCounter } from "./render";
+import {
+  renderInsertRuns,
+  renderDeleteRuns,
+  renderOldPrefix,
+  renderOldInline,
+  resetInsCounter,
+} from "./render";
 import type { ApplyResult, BuildOptions, Operation } from "./types";
+
+/** Как в сообщении описать судьбу прежнего текста при замене. */
+function oldTextNote(opts: BuildOptions): string {
+  return opts.showOld === false && (opts.highlightMode ?? "color") === "color"
+    ? "прежняя редакция скрыта"
+    : "прежняя редакция показана зачёркнутой";
+}
 
 /** Заменить содержимое сноски (все раны) на новый текст, сохранив маркер. */
 function replaceFootnoteBody(inner: string, text: string, opts: BuildOptions): string {
@@ -61,7 +74,7 @@ function replaceFootnoteBody(inner: string, text: string, opts: BuildOptions): s
   // Старый текст сноски показываем зачёркнутым перед новым — тот же принцип
   // «видно, как было», что и для обычных пунктов.
   const oldPlain = currentText(inner);
-  const oldRuns = oldPlain ? renderDeleteRuns(oldPlain, opts) + renderInsertRuns(" ", opts) : "";
+  const oldRuns = renderOldPrefix(oldPlain, opts);
   return `${open}${pPr ? pPr[0] : ""}${ref ? ref[0] : ""}${oldRuns}${runs}</w:p>`;
 }
 
@@ -513,7 +526,7 @@ export function applyOneOp(
     // Прежний текст показываем зачёркнутым — читатель должен видеть, «как
     // было», а не только итоговую редакцию (иначе правку нельзя проверить
     // без второго открытого окна со старой Офертой).
-    const oldRuns = oldPlain ? renderDeleteRuns(oldPlain, opts) + renderInsertRuns(" ", opts) : "";
+    const oldRuns = renderOldPrefix(oldPlain, opts);
     // Многоабзацная редакция (преамбула — это перечень Ключевых Компаний, по
     // абзацу на компанию) раскладывается обратно по абзацам: одним абзацем
     // список превратился бы в сплошную простыню текста.
@@ -539,7 +552,7 @@ export function applyOneOp(
       operationId: op.id,
       ok: true,
       message:
-        "пункт изложен в новой редакции (прежняя редакция показана зачёркнутой)" +
+        `пункт изложен в новой редакции (${oldTextNote(opts)})` +
         (byPrefix
           ? " (пункт с указанным номером не найден — опознан по началу текста, сверьте место правки)"
           : "") +
@@ -667,7 +680,7 @@ export function applyOneOp(
       operationId: op.id,
       ok: true,
       message:
-        `сноска № ${number}: изложена в новой редакции (прежний текст показан зачёркнутым)` +
+        `сноска № ${number}: изложена в новой редакции (${oldTextNote(opts)})` +
         (op.target.kind === "footnote" && op.target.atPoint
           ? ` (найдена как первая сноска п. ${op.target.atPoint})`
           : ""),
@@ -839,7 +852,7 @@ export function applyOneOp(
       if (!span) return fail(`в п. ${point} нет абзаца № ${op.paragraphIndex}`);
       const keptRefs = footnoteRefRuns(span.inner);
       const old = paragraphText(span.inner).replace(/\s+/g, " ").trim();
-      const runs = renderDeleteRuns(old, opts) + renderInsertRuns(" " + body, opts) + keptRefs;
+      const runs = renderOldPrefix(old, opts) + renderInsertRuns(body, opts) + keptRefs;
       state.document = spliceSpan(state.document, span, replaceParagraphRuns(span.inner, runs));
       return {
         operationId: op.id,
@@ -869,7 +882,7 @@ export function applyOneOp(
         orderKey: span.start,
       };
     }
-    const runs = renderDeleteRuns(oldSentence, opts) + renderInsertRuns(" " + body, opts);
+    const runs = renderOldPrefix(oldSentence, opts) + renderInsertRuns(body, opts);
     const res = replacePhraseRuns(span.inner, oldSentence, runs);
     if (!res.ok)
       return fail(`п. ${point}: ${ordinalWord(wanted)} предложение не удалось выделить — ${res.message}`);
@@ -1002,7 +1015,7 @@ export function applyOneOp(
     if (!span && hits > 1)
       return fail(`слова «${op.find}» встречаются ${hits} раз, а пункт не указан — правка неоднозначна`);
 
-    const del = renderDeleteRuns(op.find, opts);
+    const del = renderOldInline(op.find, opts);
     const runs =
       op.type === "delete_words"
         ? del
@@ -1067,7 +1080,7 @@ export function applyOneOp(
       }
       return fail(`«${op.find}» в тексте не найдено`);
     }
-    const runs = renderDeleteRuns(op.find, opts) + renderInsertRuns(replacement, opts);
+    const runs = renderOldInline(op.find, opts) + renderInsertRuns(replacement, opts);
     let done = 0;
     let skipped = 0;
     // Идём с конца: каждая замена меняет длину строки, и позиции более ранних

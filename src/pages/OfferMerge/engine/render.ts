@@ -52,6 +52,36 @@ export function renderDeleteRuns(text: string, opts: BuildOptions): string {
   );
 }
 
+/**
+ * Прячется ли прежний текст.
+ *
+ * Только в режиме цвета: в «tracked»/«both» удаление — это запись правки Word,
+ * и без неё «Отклонить все исправления» не вернёт исходный текст, поэтому там
+ * прежний текст сохраняется всегда, что бы ни выбрал пользователь.
+ */
+function hidesOld(opts: BuildOptions): boolean {
+  return opts.showOld === false && (opts.highlightMode ?? "color") === "color";
+}
+
+/**
+ * Прежний текст ПЕРЕД новой редакцией: зачёркнутый фрагмент и разделяющий
+ * пробел. При скрытии возвращает пустую строку — остаётся только новая
+ * редакция, без разделяющего пробела.
+ */
+export function renderOldPrefix(text: string, opts: BuildOptions): string {
+  if (!text || hidesOld(opts)) return "";
+  return renderDeleteRuns(text, opts) + renderInsertRuns(" ", opts);
+}
+
+/**
+ * Прежний текст на месте ВНУТРИ фрагмента (замена слов): либо зачёркнутый
+ * исходный, либо ничего — тогда на его месте останется только новый текст.
+ */
+export function renderOldInline(text: string, opts: BuildOptions): string {
+  if (!text || hidesOld(opts)) return "";
+  return renderDeleteRuns(text, opts);
+}
+
 /** Свойства выделения для ячеек новых строк таблицы. */
 export function cellRunProps(opts: BuildOptions): string {
   const mode = opts.highlightMode ?? "color";

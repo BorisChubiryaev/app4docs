@@ -273,6 +273,17 @@
 .om-hl .ds-select {
   width: auto;
 }
+.om-hl--check {
+  cursor: pointer;
+}
+.om-hl--check input {
+  width: 16px;
+  height: 16px;
+}
+.om-hl--check:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
 
 /* ── Экран проверки: навигатор + карточки ── */
 .om-review {

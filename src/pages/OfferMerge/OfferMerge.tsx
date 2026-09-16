@@ -129,6 +129,7 @@ export default function OfferMerge() {
   const [operations, setOperations] = useState<Operation[]>([]);
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
   const [highlightMode, setHighlightMode] = useState<HighlightMode>("color");
+  const [showOld, setShowOld] = useState(true);
   const [results, setResults] = useState<ApplyResult[]>([]);
   const [outOffer, setOutOffer] = useState<Uint8Array | null>(null);
   const [outCombined, setOutCombined] = useState<Uint8Array | null>(null);
@@ -222,6 +223,7 @@ export default function OfferMerge() {
     try {
       const result = await buildOutputs(offerBytes, includedOps, {
         highlightMode,
+        showOld,
         author: "genOferta",
       });
       setResults(result.results);
@@ -405,6 +407,22 @@ export default function OfferMerge() {
                     <option value="tracked">рецензирование (исправления)</option>
                     <option value="both">цветом + рецензирование</option>
                   </select>
+                </label>
+                <label
+                  className="om-hl om-hl--check"
+                  title={
+                    highlightMode === "color"
+                      ? "Показывать прежний текст зачёркнутым рядом с новой редакцией"
+                      : "В режиме рецензирования прежний текст сохраняется как исправление Word"
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    checked={highlightMode === "color" ? showOld : true}
+                    disabled={highlightMode !== "color"}
+                    onChange={(e) => setShowOld(e.target.checked)}
+                  />
+                  показывать прежний текст (зачёркнутым)
                 </label>
                 <button
                   className="om-btn"
