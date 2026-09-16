@@ -10,6 +10,7 @@ import {
   phraseOccurrenceAfter,
   countPhrase,
   paragraphText,
+  escapeXml,
 } from "./ooxml";
 import {
   locateReplaceParagraph,
@@ -17,6 +18,7 @@ import {
   locatePointSpan,
   locatePointBlock,
   locateByTextPrefix,
+  locatePreamble,
   appendixOffset,
 } from "./locate";
 import type { ParaSpan } from "./locate";
@@ -1138,10 +1140,71 @@ export function applyOneOp(
 
   // ── Требует ручной обработки ───────────────────────────────────────
   if (op.type === "manual") {
-    return fail(`требует ручной обработки: ${op.note ?? op.rawText.slice(0, 80)}`);
+    const marked = insertManualMarker(op, state);
+    return {
+      operationId: op.id,
+      ok: false,
+      message:
+        `требует ручной обработки: ${op.note ?? op.rawText.slice(0, 80)}` +
+        (marked ? " (место отмечено в документе)" : ""),
+      orderKey: marked ?? Number.MAX_SAFE_INTEGER,
+    };
   }
 
   return fail(`тип операции не поддержан: ${op.type}`);
+}
+
+/**
+ * Заметная метка «здесь нужна ручная правка» прямо в тексте Оферты.
+ *
+ * Оператор работает с документом, а не со списком на экране, и правку, которую
+ * движок не может внести сам, легко пропустить. Настоящий комментарий Word тут
+ * не годится: часть редакций Оферты приходит вообще без word/comments.xml, и
+ * добавление этой части — лишний риск испортить файл. Жёлтая заливка с красным
+ * текстом видна сразу и работает одинаково во всех редакциях.
+ */
+function manualMarkerParagraph(op: Operation): string {
+  const what = op.note ?? op.rawText.slice(0, 300);
+  const rows = (op.rows ?? [])
+    .map((r) => r.map((c) => c.replace(/\s+/g, " ").trim()).filter(Boolean).join(" | "))
+    .filter(Boolean);
+  const lines = [`ТРЕБУЕТСЯ РУЧНАЯ ПРАВКА: ${what}`, ...rows.map((r) => `→ ${r}`)];
+  const runs = lines
+    .map(
+      (line, i) =>
+        (i > 0 ? `<w:r><w:rPr><w:b/><w:color w:val="C00000"/><w:highlight w:val="yellow"/></w:rPr><w:br/></w:r>` : "") +
+        `<w:r><w:rPr><w:b/><w:color w:val="C00000"/><w:highlight w:val="yellow"/></w:rPr>` +
+        `<w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r>`,
+    )
+    .join("");
+  return `<w:p><w:pPr><w:spacing w:before="120" w:after="120"/></w:pPr>${runs}</w:p>`;
+}
+
+/**
+ * Поставить метку у цели ручной правки. Возвращает позицию вставки либо null,
+ * если цель в Оферте не найдена (например, правка относится к другому
+ * документу Альбома форм — тогда метке в Оферте не место).
+ */
+function insertManualMarker(op: Operation, state: ApplyState): number | null {
+  let at: number | null = null;
+  if (op.target.kind === "appendix_table") {
+    const table = findAppendixTable(state.document, op.target.appendix);
+    if (table) at = table.start;
+  } else if (op.target.kind === "preamble") {
+    const span = locatePreamble(state.document, state.numbering, state.styles);
+    if (span) at = span.end;
+  } else {
+    const point = opPoint(op);
+    // «—» ставится, когда пункт неизвестен: цели в Оферте нет.
+    if (point && point !== "—") {
+      const span = locatePointSpan(state.document, state.numbering, point, state.styles);
+      if (span) at = span.end;
+    }
+  }
+  if (at === null) return null;
+  const marker = manualMarkerParagraph(op);
+  state.document = state.document.slice(0, at) + marker + state.document.slice(at);
+  return at;
 }
 
 /**

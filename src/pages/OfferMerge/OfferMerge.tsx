@@ -7,16 +7,10 @@ import PageShell from "../../components/PageShell";
 import { parseAllChangeDocs, buildOutputs } from "./engine/pipeline";
 import { loadDocx } from "./engine/docx";
 import { previewOperations, type PreviewSnippet } from "./engine/preview";
-import type { Operation, HighlightMode } from "./engine/types";
+import type { Operation, HighlightMode, ApplyResult } from "./engine/types";
 import "./OfferMerge.css";
 
 type Stage = "upload" | "review" | "done";
-
-interface ApplyResult {
-  operationId: string;
-  ok: boolean;
-  message: string;
-}
 
 const OP_TYPE_LABEL: Record<Operation["type"], string> = {
   insert_after: "вставка после слов",
@@ -456,13 +450,7 @@ export default function OfferMerge() {
                 <span className="om-dl__arrow">↓</span>
               </button>
             </div>
-            <div className="ds-panel om-results">
-              {results.map((r) => (
-                <div key={r.operationId} className={r.ok ? "ok" : "fail"}>
-                  {r.ok ? "✅" : "❌"} {r.message}
-                </div>
-              ))}
-            </div>
+            <ResultsChecklist results={results} operations={operations} />
             <div className="om-actions">
               <button className="om-link" onClick={() => goStage("review")}>
                 ← к проверке
@@ -643,8 +631,142 @@ function OpCard({
           )}
         </>
       )}
-      {op.rows && <p className="om-card__rows">Строк таблицы к добавлению: {op.rows.length}</p>}
+      {op.rows && op.rows.length > 0 && <RowsBlock rows={op.rows} manual={op.type === "manual"} />}
     </div>
+  );
+}
+
+/**
+ * Содержимое таблицы из документа «Изменения».
+ *
+ * Для ручной правки это единственный способ узнать, ЧТО вносить: раньше
+ * показывалось только «строк к добавлению: N», и оператору приходилось искать
+ * новую редакцию в исходном файле. Поэтому у ручных правок блок раскрыт сразу.
+ */
+function RowsBlock({ rows, manual }: { rows: string[][]; manual: boolean }) {
+  return (
+    <details className="om-rows" open={manual}>
+      <summary>
+        {manual ? "Что нужно внести вручную" : "Строки таблицы"} — {rows.length}
+      </summary>
+      <div className="om-rows__scroll">
+        <table className="om-rows__table">
+          <tbody>
+            {rows.map((cells, i) => (
+              <tr key={i}>
+                {cells.map((c, j) => (
+                  <td key={j}>{c}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
+/**
+ * Итог сборки: что сделано автоматически и что осталось оператору.
+ *
+ * Плоский список сообщений не годился как рабочий инструмент: правки, которые
+ * нужно внести руками, тонули среди успешных, а посмотреть «как было / как
+ * стало» было негде. Поэтому ручные идут первыми, с чекбоксом («поправил») и
+ * свёрнутыми подробностями, а применённые автоматически убраны в свёрнутый
+ * блок — их проверяют в самом документе.
+ */
+function ResultsChecklist({
+  results,
+  operations,
+}: {
+  results: ApplyResult[];
+  operations: Operation[];
+}) {
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const byId = useMemo(() => new Map(operations.map((o) => [o.id, o])), [operations]);
+  const todo = results.filter((r) => !r.ok || byId.get(r.operationId)?.type === "manual");
+  const auto = results.filter((r) => !todo.includes(r));
+  const doneCount = todo.filter((r) => checked[r.operationId]).length;
+
+  return (
+    <div className="om-results2">
+      {todo.length > 0 && (
+        <section className="om-todo">
+          <h3 className="om-todo__head">
+            ✋ Внести вручную: {doneCount} из {todo.length}
+            <small>отметьте то, что уже поправили в документе</small>
+          </h3>
+          {todo.map((r) => {
+            const op = byId.get(r.operationId);
+            const on = !!checked[r.operationId];
+            return (
+              <div key={r.operationId} className={`om-todo__item ${on ? "is-done" : ""}`}>
+                <label className="om-todo__check">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={(e) =>
+                      setChecked((p) => ({ ...p, [r.operationId]: e.target.checked }))
+                    }
+                  />
+                  <span>
+                    <b>{op ? targetShort(op) : "правка"}</b>
+                    {op && <span className="om-todo__src"> · {op.sourceDoc}</span>}
+                    <span className="om-todo__msg">{op?.note ?? r.message}</span>
+                  </span>
+                </label>
+                {op && <ResultDetails op={op} result={r} />}
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {auto.length > 0 && (
+        <details className="om-auto">
+          <summary>✅ Применено автоматически: {auto.length}</summary>
+          {auto.map((r) => {
+            const op = byId.get(r.operationId);
+            return (
+              <div key={r.operationId} className="om-auto__item">
+                <div className="om-auto__head">
+                  <b>{op ? targetShort(op) : "правка"}</b>
+                  <span className="om-auto__msg">{r.message}</span>
+                </div>
+                {op && <ResultDetails op={op} result={r} />}
+              </div>
+            );
+          })}
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** Свёрнутые подробности правки: исходная формулировка и «было / стало». */
+function ResultDetails({ op, result }: { op: Operation; result: ApplyResult }) {
+  const hasDiff = !!(result.oldText || result.newText);
+  if (!hasDiff && !op.rawText && !op.rows?.length) return null;
+  return (
+    <details className="om-det">
+      <summary>подробности</summary>
+      {op.rawText && (
+        <p className="om-det__raw">
+          <span>Формулировка в документе:</span> {op.rawText}
+        </p>
+      )}
+      {result.oldText && (
+        <p className="om-det__old">
+          <span>Было:</span> {result.oldText}
+        </p>
+      )}
+      {result.newText && (
+        <p className="om-det__new">
+          <span>Стало:</span> {result.newText}
+        </p>
+      )}
+      {op.rows && op.rows.length > 0 && <RowsBlock rows={op.rows} manual={op.type === "manual"} />}
+    </details>
   );
 }
 

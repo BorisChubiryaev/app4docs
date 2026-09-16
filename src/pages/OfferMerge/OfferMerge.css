@@ -451,6 +451,30 @@
   color: var(--muted);
   margin: 0;
 }
+
+/* Содержимое таблицы из документа «Изменения» */
+.om-rows > summary {
+  font-size: 0.8rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.om-rows__scroll {
+  overflow-x: auto;
+  margin-top: 6px;
+}
+.om-rows__table {
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  width: 100%;
+}
+.om-rows__table td {
+  border: 1px solid var(--line, rgba(128, 128, 128, 0.35));
+  padding: 4px 7px;
+  vertical-align: top;
+  white-space: pre-wrap;
+  color: var(--ink);
+  max-width: 260px;
+}
 .om-field {
   display: block;
   font-size: 0.8rem;
@@ -516,6 +540,119 @@
 }
 .om-results .fail {
   color: #e0564b;
+}
+
+/* ── Итог сборки: что осталось сделать руками ── */
+.om-results2 {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.om-todo {
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.09);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.om-todo__head {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.om-todo__head small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.om-todo__item {
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  padding: 10px 0 4px;
+}
+.om-todo__item.is-done {
+  opacity: 0.55;
+}
+.om-todo__item.is-done b {
+  text-decoration: line-through;
+}
+.om-todo__check {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+.om-todo__check input {
+  margin-top: 3px;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+.om-todo__src {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.om-todo__msg {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+
+.om-auto > summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: var(--ink);
+  padding: 8px 0;
+}
+.om-auto__item {
+  border-top: 1px solid rgba(128, 128, 128, 0.22);
+  padding: 8px 0 4px;
+  font-size: 0.83rem;
+}
+.om-auto__head b {
+  color: var(--ink);
+}
+.om-auto__msg {
+  display: block;
+  color: var(--muted);
+  font-size: 0.79rem;
+  margin-top: 2px;
+}
+
+.om-det {
+  margin: 6px 0 0 25px;
+}
+.om-det > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.om-det p {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.om-det p span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  display: block;
+}
+.om-det__old {
+  border-left: 3px solid #e0564b;
+  padding-left: 8px;
+}
+.om-det__new {
+  border-left: 3px solid #17a673;
+  padding-left: 8px;
+}
+.om-det__raw {
+  border-left: 3px solid rgba(128, 128, 128, 0.5);
+  padding-left: 8px;
 }
 
 /* ── Адаптив: узкий экран ── */

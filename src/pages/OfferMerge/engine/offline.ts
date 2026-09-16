@@ -54,6 +54,7 @@ interface Para {
 interface Unit {
   text: string;
   tablesAfter: string[][][];
+  tablesBefore: string[][][];
 }
 
 /** Баланс «ёлочек» в строке: >0 — кавычка осталась незакрытой. */
@@ -75,6 +76,7 @@ function quoteDepth(s: string): number {
 function mergeUnits(paras: Para[]): Unit[] {
   const out: Unit[] = [];
   for (let i = 0; i < paras.length; i++) {
+    const first = i;
     let cur = paras[i].text;
     let last = i;
     let taken = 0;
@@ -94,7 +96,14 @@ function mergeUnits(paras: Para[]): Unit[] {
       last = i;
       taken++;
     }
-    out.push({ text: cur, tablesAfter: paras[last].tablesAfter });
+    out.push({
+      text: cur,
+      tablesAfter: paras[last].tablesAfter,
+      // Таблицы, стоящие ПЕРЕД инструкцией, — запасной вариант: в исходниках
+      // встречается перепутанная вёрстка, когда содержимое правки набрано выше
+      // своей директивы (так в Изменениях № 76 с «Дополнить таблицу в п.4»).
+      tablesBefore: first > 0 ? paras[first - 1].tablesAfter : [],
+    });
   }
   return out;
 }
@@ -134,11 +143,14 @@ function startsNewDirective(text: string): boolean {
  */
 function asContextLine(text: string, ctx: Ctx): boolean {
   if (/(изложить|дополнить|исключить|заменить|добавить|удалить)/i.test(text)) return false;
+  // Заголовки идут нумерованным списком («2. В подпункте 7.4 …:»), поэтому
+  // номер списка снимаем — шаблоны ниже привязаны к началу строки.
+  const body = text.replace(/^\s*\d+[.)]\s*/, "");
   // «В подпункте 7.4 раздела 7 «ПЕРСОНАЛЬНЫЕ ДАННЫЕ» (…):» — адрес для идущих
   // следом строк-тире. Без этого номер пункта назывался только здесь и
   // терялся, а каждое тире становилось правкой без адреса — «формулировка не
   // распознана».
-  const sub = text.match(
+  const sub = body.match(
     /^В\s+(?:под)?пункт[а-яё]*\s*№?\s*(\d+(?:\.\d+)*)\.?(?:\s+раздел[а-яё]*\s*№?\s*(\d+))?[^»]*(?:«([^»]*)»)?[^:]*:$/i,
   );
   if (sub) {
@@ -147,7 +159,7 @@ function asContextLine(text: string, ctx: Ctx): boolean {
     if (sub[3]) ctx.sectionTitle = sub[3];
     return true;
   }
-  const sec = text.match(/^В\s+раздел[а-я]*\s+(\d+)\s*(?:«([^»]*)»)?/i);
+  const sec = body.match(/^В\s+раздел[а-я]*\s+(\d+)\s*(?:«([^»]*)»)?/i);
   if (sec) {
     ctx.section = sec[1];
     ctx.sectionTitle = sec[2] ?? undefined;
@@ -155,7 +167,7 @@ function asContextLine(text: string, ctx: Ctx): boolean {
     ctx.subPoint = undefined;
     return true;
   }
-  const app = text.match(/^В\s+приложени[а-я]*\s*№?\s*(\d+)/i);
+  const app = body.match(/^В\s+приложени[а-я]*\s*№?\s*(\d+)/i);
   if (app) {
     // «В Приложении 7» — это сама Оферта, а не приложение внутри неё: контекст
     // вложенного приложения тут сбрасывается, иначе все последующие пункты
@@ -217,16 +229,28 @@ function appendixIn(text: string): string | null {
   return m ? m[1] : null;
 }
 
-/** Приложение N: пункты 17, 24, … изложить в следующей редакции + таблица. */
+/**
+ * Изложить в новой редакции СТРОКИ таблицы приложения: «Изложить пункты 1 и 2
+ * таблицы в п.3 Приложения № 2 … в следующей редакции:» + таблица с новыми
+ * строками.
+ *
+ * Здесь «пункты 1 и 2» — это НОМЕРА СТРОК таблицы, а «п.3» — пункт, в котором
+ * та таблица лежит. Без такого разбора правка попадала в общую ветку «одна
+ * редакция на несколько пунктов» и уходила оператору целиком, хотя новые
+ * строки прямо под инструкцией.
+ */
 const ruleAppendixRows: TableRule = (text, ctx, tables) => {
-  if (!/приложени/i.test(text) || !/изложить в следующей редакции/i.test(text)) return null;
-  if (!/пункт[ыа]?\s+\d+\s*,/i.test(text)) return null;
+  if (!/приложени/i.test(text)) return null;
+  if (!/следующ(?:ей\s+редакции|его\s+содержания)/i.test(text)) return null;
+  // Номера строк называют перед словом «таблиц»: «пункты 1 и 2 таблицы…»,
+  // «пункты 17, 24 таблицы…», «строки 3, 4 таблицы…».
+  const listed = text.match(/(?:пункт|строк)[а-яё]*\s+((?:\d+\s*(?:,|и)\s*)*\d+)\s*таблиц/i);
+  if (!listed) return null;
+  const rowNumbers = (listed[1].match(/\d+/g) ?? []).map((n) => parseInt(n, 10));
+  if (!rowNumbers.length) return null;
   const appendix = appendixIn(text) ?? ctx.appendix ?? "?";
-  const tp = text.match(/таблиц[ыи]?\s*п\.?\s*(\d+)/i);
-  const iP = text.search(/пункт[ыа]?/i);
-  const iI = text.search(/изложить/i);
-  const seg = text.slice(iP, iI).replace(/таблиц[ыи]?\s*п\.?\s*\d+/gi, "");
-  const rowNumbers = (seg.match(/\d+/g) ?? []).map((n) => parseInt(n, 10));
+  // Пункт, В КОТОРОМ лежит таблица: «таблицы в п.3», «таблицы п. 3».
+  const tp = text.match(/таблиц[а-яё]*\s*(?:в\s+)?п\.?\s*(\d+)/i);
   const want = new Set(rowNumbers);
   let rows: string[][] = [];
   for (const tbl of tables) {
@@ -332,18 +356,60 @@ const ruleAppendixAddRows: TableRule = (text, ctx, tables) => {
  * текста испортила бы таблицу. Поэтому правку отдаём оператору — но с точным
  * указанием, что именно и где менять, вместо «формулировка не распознана».
  */
-const ruleAppendixColumnTitles: TableRule = (text, ctx) => {
+const ruleAppendixColumnTitles: TableRule = (text, ctx, tables) => {
   if (!/наименовани[яй]\s+столбц/i.test(text)) return null;
   const appendix = appendixIn(text) ?? ctx.appendix ?? "?";
+  // Новая редакция заголовков лежит в таблице под инструкцией. Раньше движок
+  // сообщал «поправьте вручную», но НЕ показывал, что именно вносить, и
+  // оператору приходилось открывать исходный документ и искать это там.
+  const rows = firstRows(tables);
   return [
     {
       type: "manual",
       target: { kind: "appendix_table", appendix },
+      rows,
       note:
-        `новая редакция заголовков столбцов таблицы Приложения № ${appendix}: ` +
-        "шапку таблицы нужно поправить вручную — у неё объединённые ячейки",
+        `заголовки столбцов таблицы Приложения № ${appendix} нужно заменить вручную — ` +
+        "у шапки объединённые ячейки" +
+        (rows.length ? ". Новая редакция заголовков показана ниже" : ""),
       confidence: 0.5,
       warnings: ["заголовки столбцов таблицы не заменяются автоматически"],
+    },
+  ];
+};
+
+/** Первая непустая таблица под инструкцией — её содержимое и есть правка. */
+function firstRows(tables: string[][][]): string[][] {
+  for (const tbl of tables) {
+    const rows = tbl.map((r) => r.map((c) => c.trim())).filter((r) => r.some((c) => c));
+    if (rows.length) return rows;
+  }
+  return [];
+}
+
+/**
+ * Дополнить ТАБЛИЦУ в п. K Приложения N строкой (строками) следующего
+ * содержания.
+ *
+ * Без этого правила «Дополнить таблицу в п.4 Приложения № 2 … строкой
+ * следующего содержания:» разбиралась как добавление обычного ТЕКСТОВОГО
+ * пункта с номером 4 — в Оферту молча добавлялся несуществующий пункт.
+ */
+const ruleAppendixTableNewRows: TableRule = (text, ctx, tables) => {
+  if (!/(?:дополнить|добавить)\s+таблиц/i.test(text)) return null;
+  if (!/строк[а-яё]*\s+следующего\s+содержания/i.test(text)) return null;
+  const appendix = appendixIn(text) ?? ctx.appendix ?? "?";
+  const tp = text.match(/таблиц[а-яё]*\s*(?:в\s+)?п\.?\s*(\d+)/i);
+  const rows = firstRows(tables);
+  return [
+    {
+      type: "append_table_rows",
+      target: { kind: "appendix_table", appendix, point: tp ? tp[1] : undefined },
+      rows,
+      confidence: rows.length ? 0.8 : 0.4,
+      warnings: rows.length
+        ? undefined
+        : ["новые строки таблицы не найдены под инструкцией — внесите их вручную"],
     },
   ];
 };
@@ -382,6 +448,7 @@ const ruleAppendRowsRange: TableRule = (text, _ctx, tables) => {
 const TABLE_RULES: TableRule[] = [
   ruleAppendixColumnTitles,
   ruleAppendixRows,
+  ruleAppendixTableNewRows,
   ruleSortAlpha,
   ruleAppendixNewRow,
   ruleAppendixAddRows,
@@ -481,7 +548,7 @@ export function parseInstructionsOffline(
   const units = mergeUnits(paras.slice(start + 1));
 
   const ops: Operation[] = [];
-  for (const { text, tablesAfter } of units) {
+  for (const { text, tablesAfter, tablesBefore } of units) {
     if (asContextLine(text, ctx)) continue;
     if (!looksLikeInstruction(text)) continue;
 
@@ -510,9 +577,14 @@ export function parseInstructionsOffline(
     }
 
     // Сначала таблицы приложений: их содержимое лежит вне текста инструкции.
-    // Своя таблица (та, что идёт сразу под инструкцией) имеет приоритет — по
-    // всему документу ищем только если под инструкцией таблицы нет.
-    const scoped = tablesAfter.length ? tablesAfter : docTables;
+    // Своя таблица (та, что идёт сразу под инструкцией) имеет приоритет. Если
+    // под инструкцией таблицы нет, берём последнюю, стоящую перед ней (бывает
+    // перепутанная вёрстка), и лишь затем — любую таблицу документа.
+    const scoped = tablesAfter.length
+      ? tablesAfter
+      : tablesBefore.length
+        ? [tablesBefore[tablesBefore.length - 1]]
+        : docTables;
     let drafts: Draft[] | null = null;
     for (const rule of TABLE_RULES) {
       const res = rule(text, ctx, scoped);
