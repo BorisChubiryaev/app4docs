@@ -430,6 +430,67 @@ function redactionPayload(text: string, quotes: Quote[]): Quote | null {
   return quotes.find((q) => q.start > m.index!) ?? null;
 }
 
+/**
+ * Разложить общую новую редакцию по пунктам, которых она касается.
+ *
+ * «Пункты 1.1, 1.2, 1.3 … изложить в следующей редакции: «1.1 … 1.2 … 1.3 …»» —
+ * одна кавычка на три пункта. Сам текст редакции при этом пронумерован, и
+ * границы кусков заданы в нём явно: ищем каждый номер в начале строки или
+ * предложения и режем по найденным позициям.
+ *
+ * Возвращает null, если хотя бы один номер не найден или они идут не по
+ * порядку: тогда границы кусков неизвестны, и разносить правку наугад нельзя —
+ * лучше честно отдать её оператору целиком.
+ */
+function splitByPointNumbers(payload: string, points: string[]): string[] | null {
+  if (points.length < 2 || !payload) return null;
+  const starts: number[] = [];
+  let from = 0;
+  for (const p of points) {
+    const re = new RegExp(`(?:^|[\\n.;)]\\s*|\\s)(${p.replace(/\./g, "\\.")})\\.?(?=[\\s)]|$)`, "g");
+    re.lastIndex = from;
+    const m = re.exec(payload);
+    if (!m) return null;
+    const at = m.index + m[0].indexOf(m[1]);
+    if (starts.length && at <= starts[starts.length - 1]) return null;
+    starts.push(at);
+    from = at + m[1].length;
+  }
+  return starts.map((at, i) =>
+    payload.slice(at, i + 1 < starts.length ? starts[i + 1] : payload.length).trim(),
+  );
+}
+
+/**
+ * Номера пунктов, которыми размечен сам текст новой редакции («1.1 … 1.2 …»).
+ * Нужны, чтобы раскрыть диапазон «7.6-7.7»: инструкция границы не называет, а
+ * текст редакции — называет. Считаем разметкой только номера того же уровня,
+ * что и начало диапазона, идущие строго по возрастанию.
+ */
+function pointsNamedIn(payload: string, first: string): string[] | null {
+  const depth = first.split(".").length;
+  const re = /(?:^|[\n.;)]\s*|\s)(\d+(?:\.\d+)*)\.?(?=[\s)]|$)/g;
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(payload)) !== null) {
+    const num = m[1];
+    if (num.split(".").length !== depth) continue;
+    if (out.length === 0 ? num !== first : compareNums(num, out[out.length - 1]) <= 0) continue;
+    out.push(num);
+  }
+  return out.length >= 2 ? out : null;
+}
+
+function compareNums(a: string, b: string): number {
+  const x = a.split(".").map(Number);
+  const y = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
 const OP_BY_ADD_OBJECT: Partial<Record<ObjectKind, OpType>> = {
   point: "insert_point",
   sentence: "append_sentence",
@@ -763,9 +824,29 @@ export function parseInstruction(text: string, ctx: Ctx): Draft[] | null {
       ];
     }
     if (!firstPoint) return null;
-    // Несколько пунктов и одна редакция: какую часть текста к какому пункту
-    // относить — из инструкции не следует.
-    if (pointNums.length > 1 && s.object === "point") {
+    // Несколько пунктов и одна редакция. Если текст редакции сам пронумерован,
+    // границы кусков в нём заданы явно — разносим по пунктам. Если нет, какую
+    // часть текста к какому пункту относить, из инструкции не следует.
+    //
+    // Проверять здесь s.object === "point" нельзя: во фразе «п.п. 1.1, 1.2, 1.3
+    // Приложения № 2 …» главным объектом оказывается «приложение» (сокращение
+    // «п.п.» словарь объектов не видит), правка проваливалась в общую ветку
+    // ниже и применялась ТОЛЬКО к первому номеру — остальные пункты молча
+    // терялись. Исключаем лишь предложение и абзац: там номер пункта — адрес,
+    // а не перечень целей.
+    if (pointNums.length > 1 && s.object !== "sentence" && s.object !== "paragraph") {
+      const parts = splitByPointNumbers(payload, pointNums);
+      if (parts) {
+        return pointNums.map((point, i) => ({
+          type: "replace" as OpType,
+          target: targetForPoint(point, ctx, text, parts[i]),
+          payload: parts[i],
+          confidence: 0.7,
+          warnings: [
+            `общая редакция для пунктов ${pointNums.join(", ")} разнесена по номерам из её текста — сверьте границы`,
+          ],
+        }));
+      }
       return [
         {
           type: "manual",
@@ -780,6 +861,21 @@ export function parseInstruction(text: string, ctx: Ctx): Draft[] | null {
     // раскрывает: без этой проверки правка тихо применилась бы только к
     // первому номеру диапазона, а остальные терялись бы бесследно.
     if (s.object === "point" && hasUnexpandedRange(text, s.points)) {
+      // Какие именно номера входят в диапазон, по инструкции неизвестно — зато
+      // их называет сам текст редакции, если он пронумерован.
+      const spanned = pointsNamedIn(payload, firstPoint);
+      const parts = spanned && splitByPointNumbers(payload, spanned);
+      if (spanned && parts) {
+        return spanned.map((point, i) => ({
+          type: "replace" as OpType,
+          target: targetForPoint(point, ctx, text, parts[i]),
+          payload: parts[i],
+          confidence: 0.7,
+          warnings: [
+            `диапазон раскрыт по номерам из текста редакции (${spanned.join(", ")}) — сверьте границы`,
+          ],
+        }));
+      }
       return [
         {
           type: "manual",
