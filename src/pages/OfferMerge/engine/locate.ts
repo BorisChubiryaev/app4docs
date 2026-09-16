@@ -29,13 +29,29 @@ function span(p: NumberedPara): ParaSpan {
 /** Начало раздела/приложения (для сужения поиска по номеру). */
 function regionStart(index: NumberedPara[], op: Operation): number {
   if (op.target.kind !== "appendix_point") return 0;
+  // Заголовок приложения — самый надёжный ориентир: нумерация внутри каждого
+  // приложения начинается заново, и «п. 1.2» Приложения № 2 обязан искаться
+  // строго ниже его заголовка.
+  const head = appendixHeading(index, op.target.appendix);
+  if (head !== null) return head;
+  // Запасной вариант — название приложения, названное в самой инструкции.
+  // Он ненадёжен: в «…Приложения № 2 к Приложению 7 «Публичная Оферта…»»
+  // в кавычках стоит имя САМОЙ Оферты, поиск приводил к её началу, и пункт
+  // 1.2 приложения подменялся пунктом 1.2 основного текста.
   const m = op.rawText.match(/Приложени[а-я]*\s*№?\s*\d+[^«]*«([^»]{6,}?)»/i);
-  if (m) {
+  if (m && !/оферт/i.test(m[1])) {
     const want = normText(m[1]).slice(0, 40);
     const hit = index.find((p) => normText(p.text).includes(want));
     if (hit) return hit.start;
   }
   return 0;
+}
+
+/** Позиция заголовка «Приложение № N» в теле Оферты. */
+function appendixHeading(index: NumberedPara[], appendix: string): number | null {
+  const re = new RegExp(`^приложение\\s*№?\\s*${appendix}(?!\\d)`, "i");
+  const hit = index.find((p) => re.test(p.text.trim()));
+  return hit ? hit.start : null;
 }
 
 /** Литеральный номер в начале абзаца («2.2.», «1.4.») в пределах региона. */
@@ -185,9 +201,17 @@ export function locateByTextPrefix(
 }
 
 /**
- * Преамбула — вводный абзац до раздела 1. Опознаём по устойчивой формуле
+ * Преамбула — вводная часть до раздела 1. Опознаём по устойчивой формуле
  * «публикует/публикуют настоящее предложение заключить договор»: номера у
  * неё нет, а первые слова меняются от редакции к редакции.
+ *
+ * Преамбула — НЕ один абзац: между именем Банка и словами «публикуют настоящее
+ * предложение» перечислены Ключевые Компании информационного партнерства, по
+ * абзацу на компанию. Взяв только замыкающий абзац, замена оставила бы старый
+ * список компаний на месте и дописала к нему новый — в Оферте оказались бы два
+ * списка сразу. Поэтому идём от замыкающего абзаца вверх и захватываем всю
+ * вводную часть, останавливаясь на заголовке: нумерованном абзаце или
+ * прописной строке-титуле («ПУБЛИЧНАЯ ОФЕРТА»).
  */
 export function locatePreamble(
   documentXml: string,
@@ -195,10 +219,29 @@ export function locatePreamble(
   stylesXml: string | null = null,
 ): ParaSpan | null {
   const index = indexNumberedParagraphs(documentXml, numberingXml, stylesXml);
-  const hit = index.find((p) =>
+  const lastAt = index.findIndex((p) =>
     /публику[ею]т\s+настоящее\s+предложение\s+заключить\s+договор/i.test(p.text),
   );
-  return hit ? span(hit) : null;
+  if (lastAt < 0) return null;
+  let firstAt = lastAt;
+  while (firstAt > 0 && !isPreambleBoundary(index[firstAt - 1])) firstAt--;
+  return {
+    start: index[firstAt].start,
+    end: index[lastAt].end,
+    inner: index[firstAt].inner,
+  };
+}
+
+/** Заголовок, выше которого преамбула уже не продолжается. */
+function isPreambleBoundary(p: NumberedPara): boolean {
+  if (p.number) return true;
+  const t = p.text.trim();
+  if (!t) return false;
+  // Титульные строки набраны прописными («ПРИЛОЖЕНИЕ 7», «ПУБЛИЧНАЯ ОФЕРТА»), а
+  // сама преамбула — обычным предложением, поэтому регистр здесь надёжнее
+  // любого перечня возможных заголовков.
+  const letters = t.replace(/[^А-Яа-яЁёA-Za-z]/g, "");
+  return letters.length > 0 && letters === letters.toUpperCase();
 }
 
 /**

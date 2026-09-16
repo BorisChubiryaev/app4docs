@@ -21,6 +21,7 @@ import {
   OBJECTS,
   ORDINALS,
   POSITIONS,
+  REDACTION_MARKERS,
   RENUMBER_FOOTNOTES,
   RENUMBER_POINTS,
   containsAny,
@@ -37,8 +38,20 @@ export interface Ctx {
   section?: string;
   sectionTitle?: string;
   appendix?: string;
+  /**
+   * Пункт из строки-заголовка для подпунктов-тире, идущих следом:
+   * «В подпункте 7.4 раздела 7 «ПЕРСОНАЛЬНЫЕ ДАННЫЕ»: — после текста «А»
+   * дополнить …; — после текста «Б» дополнить …». Номер пункта назван один раз
+   * в заголовке, и без него каждое тире — правка без адреса.
+   */
+  subPoint?: string;
   scope: "offer" | "other";
   scopeNote?: string;
+}
+
+/** Строка-подпункт перечня («— после текста «…» дополнить …»). */
+export function isSubItem(text: string): boolean {
+  return /^\s*[-–—•]\s*/.test(text);
 }
 
 export interface Draft {
@@ -63,8 +76,18 @@ interface Quote {
   end: number;
 }
 
+/**
+ * \u041F\u0435\u0440\u0435\u0432\u043E\u0434\u044B \u0441\u0442\u0440\u043E\u043A\u0438 \u0432\u043D\u0443\u0442\u0440\u0438 \u043A\u0430\u0432\u044B\u0447\u0435\u043A \u0421\u041E\u0425\u0420\u0410\u041D\u042F\u042E\u0422\u0421\u042F: \u043E\u043D\u0438 \u043E\u0442\u043C\u0435\u0447\u0430\u044E\u0442 \u0433\u0440\u0430\u043D\u0438\u0446\u044B \u0430\u0431\u0437\u0430\u0446\u0435\u0432
+ * \u043C\u043D\u043E\u0433\u043E\u0430\u0431\u0437\u0430\u0446\u043D\u043E\u0439 \u0440\u0435\u0434\u0430\u043A\u0446\u0438\u0438 (\u0441\u043F\u0438\u0441\u043E\u043A \u043A\u043E\u043C\u043F\u0430\u043D\u0438\u0439 \u0432 \u043F\u0440\u0435\u0430\u043C\u0431\u0443\u043B\u0435). \u0421\u0445\u043B\u043E\u043F\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E
+ * \u0433\u043E\u0440\u0438\u0437\u043E\u043D\u0442\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u0431\u0435\u043B.
+ */
 function tidy(s: string): string {
-  return s.replace(/\u00A0/g, " ").trim().replace(/\s+/g, " ");
+  return s
+    .replace(/\u00A0/g, " ")
+    .split("\n")
+    .map((line) => line.replace(/[^\S\n]+/g, " ").trim())
+    .join("\n")
+    .trim();
 }
 
 /**
@@ -74,7 +97,8 @@ function tidy(s: string): string {
  * внешняя кавычка не закрыта, и сбалансированный разбор проглатывает весь
  * остаток инструкции вместе с новой редакцией.
  */
-const SWALLOWED_DIRECTIVE = /(дополнить|добавить|изложить|заменить|исключить|удалить)\s+[^«»]{0,40}«/i;
+const SWALLOWED_DIRECTIVE =
+  /(дополн(?:ить|ив)|добав(?:ить|ив)|излож(?:ить|ив)|замен(?:ить|ив)|исключ(?:ить|ив)|удал(?:ить|ив))\s+[^«»]{0,40}«/i;
 
 /**
  * Кавычки «…» с позициями. Сначала пробуем сбалансированный разбор (он нужен
@@ -91,7 +115,11 @@ function allQuotes(text: string): Quote[] {
     if (!g) break;
     let end = g.endIndex;
     let content = g.content;
-    if (SWALLOWED_DIRECTIVE.test(content)) {
+    // Кавычка не закрыта вовсе (в исходниках это обычное дело — «…Приложения 7
+    // "Публичная Оферта … "Удобный доступ" Альбома форм…»): сбалансированный
+    // разбор дотягивает её до конца строки и проглатывает вместе с ней новую
+    // редакцию. Ограничиваемся первой закрывающей кавычкой.
+    if (!g.balanced || SWALLOWED_DIRECTIVE.test(content)) {
       const firstClose = text.indexOf("»", open + 1);
       if (firstClose > open) {
         end = firstClose;
@@ -137,9 +165,26 @@ function findPoints(text: string): PointRef[] {
   return out;
 }
 
+/**
+ * Номер Оферты в Альбоме форм: Оферта — это САМО Приложение 7, а не приложение
+ * внутри неё. Поэтому «п. 9.6 Приложения 7 «Публичная Оферта…»» адресует
+ * обычный пункт Оферты, а не вложенное приложение; искать в Оферте приложение
+ * с номером 7 бессмысленно — пункт не находился вовсе.
+ */
+const OFFER_APPENDIX = "7";
+
+/**
+ * Номер приложения ВНУТРИ Оферты. Ссылки на саму Оферту («Приложения 7»)
+ * пропускаются, поэтому «п.1.2 Приложения № 2 к Приложению 7» даёт 2 — то
+ * вложенное приложение, о котором и говорит правка.
+ */
 function appendixIn(text: string): string | null {
-  const m = text.match(/приложени[а-я]*\s*№?\s*(\d+)/i);
-  return m ? m[1] : null;
+  const re = /приложени[а-я]*\s*№?\s*(\d+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m[1] !== OFFER_APPENDIX) return m[1];
+  }
+  return null;
 }
 
 /**
@@ -368,6 +413,23 @@ function insertionPairs(
   return pairs;
 }
 
+/**
+ * Кавычка с НОВОЙ РЕДАКЦИЕЙ — первая после оборота «изложить в следующей
+ * редакции:» / «следующего содержания:».
+ *
+ * Брать просто последнюю кавычку нельзя: в заголовке правки нередко стоит
+ * название документа («…Приложения 7 «Публичная Оферта…» Альбома форм…»), и при
+ * непарных кавычках в исходнике именно оно оказывалось последним — в пункт
+ * вместо новой редакции уезжало название Оферты.
+ */
+function redactionPayload(text: string, quotes: Quote[]): Quote | null {
+  const m = text.match(
+    /(?:следующей|новой|указанной)\s+редакции|следующего\s+содержания|следующим\s+образом/i,
+  );
+  if (!m || m.index === undefined) return null;
+  return quotes.find((q) => q.start > m.index!) ?? null;
+}
+
 const OP_BY_ADD_OBJECT: Partial<Record<ObjectKind, OpType>> = {
   point: "insert_point",
   sentence: "append_sentence",
@@ -393,12 +455,20 @@ export function parseInstruction(text: string, ctx: Ctx): Draft[] | null {
 
   const lastQuote = s.quotes.length ? s.quotes[s.quotes.length - 1] : null;
   const pointNums = s.points.map((p) => p.num);
-  const firstPoint = pointNums[0] ?? null;
+  // Свой номер важнее унаследованного; номер из заголовка подхватывают только
+  // строки-тире, чтобы контекст не «протёк» в следующую самостоятельную правку.
+  const firstPoint = pointNums[0] ?? (isSubItem(text) ? (ctx.subPoint ?? null) : null);
 
   // ── сноски ────────────────────────────────────────────────────────────────
   // «дополнить сноской» — про сноску, даже если главным объектом выбрано слово
   // из оборота «после слов».
-  const footnoteAdd = s.allObjects.some((o) => o.value === "footnote" && isInstrumental(o.word));
+  // «дополнить сноской» (творительный) и «добавив сноску к п. 9.3.1 «…»»
+  // (винительный) — одно и то же действие. Без второй формы правка уезжала в
+  // ветку «дополнить пункт» и вместо сноски создавала ФИКТИВНЫЙ пункт 9.3.1 с
+  // текстом сноски внутри.
+  const footnoteAdd = s.allObjects.some(
+    (o) => o.value === "footnote" && (isInstrumental(o.word) || o.index > s.actionAt),
+  );
   if (s.object === "footnote" || footnoteAdd) {
     const num = footnoteNumberIn(text);
     if (s.action === "add" && (s.objectInstrumental || footnoteAdd)) {
@@ -471,16 +541,25 @@ export function parseInstruction(text: string, ctx: Ctx): Draft[] | null {
   }
 
   // ── преамбула ─────────────────────────────────────────────────────────────
-  if (s.object === "preamble" && s.action === "replace") {
-    return [
-      {
-        type: "replace",
-        target: { kind: "preamble" },
-        payload: lastQuote?.text ?? "",
-        confidence: lastQuote ? 0.85 : 0.4,
-        warnings: lastQuote ? undefined : ["не найден текст новой редакции преамбулы"],
-      },
-    ];
+  // Преамбулу правят и глаголом «изложить», и оборотом «дополнить … и указать в
+  // следующей редакции»: во втором случае действие разбирается как «дополнить»,
+  // но в кавычках всё равно лежит ПОЛНЫЙ новый текст преамбулы — списком новых
+  // компаний его не дополняют, его переписывают целиком. Отличаем по обороту «в
+  // такой-то редакции»: без него «дополнить преамбулу словами» остаётся
+  // обычным дополнением.
+  if (s.object === "preamble" && (s.action === "replace" || s.action === "add")) {
+    const quote = redactionPayload(text, s.quotes) ?? lastQuote;
+    if (s.action === "replace" || (quote && containsAny(text, REDACTION_MARKERS))) {
+      return [
+        {
+          type: "replace",
+          target: { kind: "preamble" },
+          payload: quote?.text ?? "",
+          confidence: quote ? 0.85 : 0.4,
+          warnings: quote ? undefined : ["не найден текст новой редакции преамбулы"],
+        },
+      ];
+    }
   }
 
   // ── вставка относительно якоря (может быть несколько в одной инструкции) ──
@@ -619,7 +698,7 @@ export function parseInstruction(text: string, ctx: Ctx): Draft[] | null {
 
   // ── дополнение ────────────────────────────────────────────────────────────
   if (s.action === "add") {
-    const payload = lastQuote?.text ?? "";
+    const payload = (redactionPayload(text, s.quotes) ?? lastQuote)?.text ?? "";
     // Творительный падеж указывает, ЧЕМ дополняем.
     if (s.objectInstrumental && s.object) {
       const type = OP_BY_ADD_OBJECT[s.object];
@@ -667,7 +746,7 @@ export function parseInstruction(text: string, ctx: Ctx): Draft[] | null {
 
   // ── изложение в новой редакции ────────────────────────────────────────────
   if (s.action === "replace" || s.action === "substitute") {
-    const payload = lastQuote?.text ?? "";
+    const payload = (redactionPayload(text, s.quotes) ?? lastQuote)?.text ?? "";
     // Заголовок раздела — обычный абзац документа, пронумерованный на верхнем
     // уровне: «раздел 5» находится по номеру «5».
     if (s.object === "heading") {

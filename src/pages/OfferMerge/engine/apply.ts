@@ -489,7 +489,26 @@ export function applyOneOp(
     // было», а не только итоговую редакцию (иначе правку нельзя проверить
     // без второго открытого окна со старой Офертой).
     const oldRuns = oldPlain ? renderDeleteRuns(oldPlain, opts) + renderInsertRuns(" ", opts) : "";
-    const rebuilt = replaceParagraphRuns(para.inner, oldRuns + newRuns + keptRefs);
+    // Многоабзацная редакция (преамбула — это перечень Ключевых Компаний, по
+    // абзацу на компанию) раскладывается обратно по абзацам: одним абзацем
+    // список превратился бы в сплошную простыню текста.
+    const extra = body.includes("\n")
+      ? body
+          .split("\n")
+          .slice(1)
+          .filter((line) => line.trim())
+          .map(
+            (line) =>
+              `<w:p>${extractPPr(para!.inner)}${buildParagraphRuns(line.trim(), false, opts)}</w:p>`,
+          )
+          .join("")
+      : "";
+    const firstLine = body.includes("\n") ? body.slice(0, body.indexOf("\n")).trim() : body;
+    const headRuns = body.includes("\n")
+      ? buildParagraphRuns(firstLine, op.target.kind === "term", opts)
+      : newRuns;
+    const rebuilt =
+      replaceParagraphRuns(para.inner, oldRuns + headRuns + keptRefs) + extra;
     state.document = spliceSpan(state.document, para, rebuilt);
     return {
       operationId: op.id,

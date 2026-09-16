@@ -5,7 +5,7 @@ import { loadDocx } from "./docx";
 import { applyOperations, applyOneOp } from "./apply";
 import { buildCombinedDocx } from "./combined";
 import { parseInstructionsOffline, resetIds } from "./offline";
-import { paragraphsOutsideTables, tables } from "./text";
+import { documentBlocks, tables } from "./text";
 import type { BuildOptions, BuildResult, Operation } from "./types";
 
 export interface ChangeDocInput {
@@ -21,9 +21,9 @@ export async function parseAllChangeDocs(
   const all: Operation[] = [];
   for (const cd of changeDocs) {
     const parts = await loadDocx(cd.data);
-    const paras = paragraphsOutsideTables(parts.document);
+    const blocks = documentBlocks(parts.document);
     const docTables = tables(parts.document);
-    all.push(...parseInstructionsOffline(paras, docTables, cd.name));
+    all.push(...parseInstructionsOffline(blocks, docTables, cd.name));
   }
   return { operations: all };
 }

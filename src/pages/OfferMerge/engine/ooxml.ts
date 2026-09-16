@@ -13,14 +13,34 @@ export function escapeXml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
-/** Обратное преобразование XML-сущностей в текст. */
+/**
+ * Обратное преобразование XML-сущностей в текст.
+ *
+ * Числовые ссылки (&#34; и &#x22;) обязательны: Word записывает прямую кавычку
+ * именно так, и без их разбора весь текст в прямых кавычках («Публичная Оферта»
+ * в кавычках-лапках) для парсера инструкций просто не существует — правка
+ * выглядит как «не найден текст новой редакции».
+ *
+ * &amp; раскрывается последним, иначе «&amp;#34;» превратился бы в кавычку.
+ */
 export function decodeXml(s: string): string {
   return s
+    .replace(/&#(\d+);/g, (_, d: string) => safeCodePoint(parseInt(d, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h: string) => safeCodePoint(parseInt(h, 16)))
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&amp;/g, "&");
+}
+
+function safeCodePoint(code: number): string {
+  if (!Number.isFinite(code) || code < 0 || code > 0x10ffff) return "";
+  try {
+    return String.fromCodePoint(code);
+  } catch {
+    return "";
+  }
 }
 
 /** rPr для «выделения цветом» — красный шрифт EE0000, как в образце Оферты. */

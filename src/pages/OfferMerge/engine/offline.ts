@@ -9,6 +9,7 @@
 // увидеть каждую строку исходного документа.
 import { ACTION_VERBS, OBJECTS } from "./lexicon";
 import { parseInstruction, type Ctx, type Draft } from "./parse-instruction";
+import { normalizeQuotes, type DocBlock } from "./text";
 import type { Operation } from "./types";
 
 let idc = 0;
@@ -20,8 +21,17 @@ export function resetIds() {
   idc = 0;
 }
 
-/** Больше стольких абзацев одна инструкция не занимает даже в худшем случае. */
-const MAX_MERGE = 12;
+/**
+ * Предел склейки абзацев в одну инструкцию.
+ *
+ * Новая редакция преамбулы — это весь список Ключевых Компаний информационного
+ * партнерства, по абзацу на компанию, и правки как раз добавляют туда новые
+ * компании: любой «с запасом» подобранный предел рано или поздно обрежет текст
+ * на середине списка, а обрезанная редакция молча заменит преамбулу огрызком.
+ * Поэтому предел держим высоким — склейку и без него останавливают незакрытая
+ * кавычка и начало следующей директивы.
+ */
+const MAX_MERGE = 60;
 
 function tidy(s: string): string {
   return s.replace(/\u00A0/g, " ").trim().replace(/\s+/g, " ");
@@ -32,6 +42,18 @@ function fixTypos(s: string): string {
   return s
     .replace(/(\d)\.\.(\d)/g, "$1.$2") // «п.6..10»
     .replace(/следующе\s+редакции/gi, "следующей редакции");
+}
+
+/** Абзац вместе с таблицами, которые идут сразу за ним. */
+interface Para {
+  text: string;
+  tablesAfter: string[][][];
+}
+
+/** Инструкция (возможно, из нескольких абзацев) и её «своя» таблица. */
+interface Unit {
+  text: string;
+  tablesAfter: string[][][];
 }
 
 /** Баланс «ёлочек» в строке: >0 — кавычка осталась незакрытой. */
@@ -50,24 +72,29 @@ function quoteDepth(s: string): number {
  * незакрытая «ёлочка» (перечень ККИП в преамбуле тянется на пять абзацев) либо
  * двоеточие в конце и «ёлочка» в начале следующего абзаца.
  */
-function mergeUnits(paras: string[]): string[] {
-  const out: string[] = [];
+function mergeUnits(paras: Para[]): Unit[] {
+  const out: Unit[] = [];
   for (let i = 0; i < paras.length; i++) {
-    let cur = paras[i];
+    let cur = paras[i].text;
+    let last = i;
     let taken = 0;
     while (i + 1 < paras.length && taken < MAX_MERGE) {
-      const next = paras[i + 1];
+      const next = paras[i + 1].text;
       const unclosed = quoteDepth(cur) > 0;
       const colonThenQuote = /:$/.test(cur) && /^«/.test(next);
       if (!unclosed && !colonThenQuote) break;
       // Незакрытая кавычка в одном абзаце (в документах это бывает) не должна
       // засасывать весь остаток документа: следующая директива важнее.
       if (unclosed && !colonThenQuote && startsNewDirective(next)) break;
-      cur = cur + " " + next;
+      // Границу абзацев сохраняем переводом строки: новая редакция преамбулы —
+      // это список компаний по абзацу на компанию, и склеив их пробелом мы
+      // получили бы вместо списка один нечитаемый абзац на две тысячи знаков.
+      cur = cur + "\n" + next;
       i++;
+      last = i;
       taken++;
     }
-    out.push(cur);
+    out.push({ text: cur, tablesAfter: paras[last].tablesAfter });
   }
   return out;
 }
@@ -84,8 +111,13 @@ function mergeUnits(paras: string[]): string[] {
  * отдельного перечня, чтобы расширялся вместе с ним.
  */
 function startsNewDirective(text: string): boolean {
-  if (/^(?:в\s+раздел|в\s+приложени|внести)/i.test(text)) return true;
-  const firstWord = text.match(/^[А-Яа-яЁёA-Za-z]+/);
+  // Правки часто идут нумерованным списком («3. Внести изменение в …»). Без
+  // снятия номера абзац не опознавался как новая директива: незакрытая кавычка
+  // предыдущей правки проглатывала весь остаток документа, и правки 3, 4, …
+  // пропадали из результата целиком.
+  const body = text.replace(/^\s*\d+[.)]\s+/, "");
+  if (/^(?:в\s+раздел|в\s+приложени|внести)/i.test(body)) return true;
+  const firstWord = body.match(/^[А-Яа-яЁёA-Za-z]+/);
   if (!firstWord) return false;
   const w = firstWord[0].toLowerCase();
   return (
@@ -102,16 +134,33 @@ function startsNewDirective(text: string): boolean {
  */
 function asContextLine(text: string, ctx: Ctx): boolean {
   if (/(изложить|дополнить|исключить|заменить|добавить|удалить)/i.test(text)) return false;
+  // «В подпункте 7.4 раздела 7 «ПЕРСОНАЛЬНЫЕ ДАННЫЕ» (…):» — адрес для идущих
+  // следом строк-тире. Без этого номер пункта назывался только здесь и
+  // терялся, а каждое тире становилось правкой без адреса — «формулировка не
+  // распознана».
+  const sub = text.match(
+    /^В\s+(?:под)?пункт[а-яё]*\s*№?\s*(\d+(?:\.\d+)*)\.?(?:\s+раздел[а-яё]*\s*№?\s*(\d+))?[^»]*(?:«([^»]*)»)?[^:]*:$/i,
+  );
+  if (sub) {
+    ctx.subPoint = sub[1];
+    if (sub[2]) ctx.section = sub[2];
+    if (sub[3]) ctx.sectionTitle = sub[3];
+    return true;
+  }
   const sec = text.match(/^В\s+раздел[а-я]*\s+(\d+)\s*(?:«([^»]*)»)?/i);
   if (sec) {
     ctx.section = sec[1];
     ctx.sectionTitle = sec[2] ?? undefined;
     ctx.appendix = undefined;
+    ctx.subPoint = undefined;
     return true;
   }
   const app = text.match(/^В\s+приложени[а-я]*\s*№?\s*(\d+)/i);
   if (app) {
-    ctx.appendix = app[1];
+    // «В Приложении 7» — это сама Оферта, а не приложение внутри неё: контекст
+    // вложенного приложения тут сбрасывается, иначе все последующие пункты
+    // начали бы искаться в несуществующем «приложении 7» Оферты.
+    ctx.appendix = app[1] === "7" ? undefined : app[1];
     ctx.section = undefined;
     return true;
   }
@@ -120,15 +169,27 @@ function asContextLine(text: string, ctx: Ctx): boolean {
 
 // ── сборка операций ─────────────────────────────────────────────────────────
 
+/**
+ * Переводы строки нужны ровно одной цели — преамбуле, где новая редакция
+ * состоит из нескольких абзацев. Во всех остальных правках текст ложится в
+ * ОДИН абзац, и оставшийся в нём перевод строки был бы мусором внутри
+ * предложения; якорь и искомая фраза ищутся по тексту абзаца, поэтому в них
+ * переводов строки быть не может тем более.
+ */
+function flatten(s: string | undefined): string | undefined {
+  return s === undefined ? undefined : s.replace(/\s+/g, " ").trim();
+}
+
 function toOperation(d: Draft, text: string, sourceDoc: string): Operation {
+  const keepParagraphs = d.target.kind === "preamble";
   return {
     id: nid(sourceDoc),
     sourceDoc,
     type: d.type,
     target: d.target,
-    anchor: d.anchor,
-    find: d.find,
-    payload: d.payload,
+    anchor: flatten(d.anchor),
+    find: flatten(d.find),
+    payload: keepParagraphs ? d.payload : flatten(d.payload),
     sentenceIndex: d.sentenceIndex,
     paragraphIndex: d.paragraphIndex,
     rows: d.rows,
@@ -137,7 +198,7 @@ function toOperation(d: Draft, text: string, sourceDoc: string): Operation {
     note: d.note,
     renumberFootnotes: /перенумерац\w*\s+сносок|и\s+сносок/i.test(text),
     renumberPoints: /перенумерац\w*\s+пункт|изменением\s+нумерации/i.test(text),
-    rawText: text,
+    rawText: flatten(text)!,
     confidence: d.confidence,
     warnings: d.warnings,
   };
@@ -196,16 +257,17 @@ const ruleSortAlpha: TableRule = (text) => {
   ];
 };
 
-/** Дополнить Приложение N пунктом следующего содержания (строка таблицы). */
+/**
+ * Дополнить Приложение N пунктом/пунктами следующего содержания (строки
+ * таблицы). Число дополняемых пунктов заранее неизвестно — «пунктом»,
+ * «пунктами», «пункты»: перечислять формы бессмысленно, важно лишь, что речь о
+ * содержании, которое лежит в таблице под инструкцией.
+ */
 const ruleAppendixNewRow: TableRule = (text, _ctx, tables) => {
   if (!/Дополнить\s+Приложени/i.test(text)) return null;
-  if (!/пункт(?:ом)?\s+следующего содержания/i.test(text)) return null;
+  if (!/пункт[а-яё]*\s+следующего\s+содержания/i.test(text)) return null;
   const appendix = appendixIn(text) ?? "1";
-  let rows: string[][] = [];
-  for (const tbl of tables) {
-    const cand = tbl.filter((r) => r.some((c) => c.trim())).map((r) => r.map((c) => c.trim()));
-    if (cand.length <= 3 && cand.some((r) => r.some((c) => /(ООО|АО|АНО|ПАО)/.test(c)))) rows = cand;
-  }
+  const rows = companyRows(tables);
   return [
     {
       type: /алфавитн/i.test(text) ? "insert_table_row_alpha" : "append_table_rows",
@@ -213,6 +275,75 @@ const ruleAppendixNewRow: TableRule = (text, _ctx, tables) => {
       rows,
       confidence: rows.length ? 0.75 : 0.4,
       warnings: rows.length ? undefined : ["данные новой строки не найдены в документе"],
+    },
+  ];
+};
+
+/**
+ * Строки-данные из таблиц документа «Изменения».
+ *
+ * Берём таблицу, в которой большинство строк похожи на записи реестра —
+ * наименование организации либо номер по порядку. Так отсекаются служебные
+ * таблицы шапки ВНД («Реквизиты ВНД», «История ВНД»), которые есть в каждом
+ * документе и раньше могли подмениться содержимым правки.
+ */
+function companyRows(tables: string[][][]): string[][] {
+  let best: string[][] = [];
+  for (const tbl of tables) {
+    const rows = tbl
+      .map((r) => r.map((c) => c.trim()))
+      .filter((r) => r.some((c) => c) && r.length >= 2);
+    if (rows.length < 1) continue;
+    const dataLike = rows.filter(
+      (r) => r.some((c) => /(ООО|ОАО|АО|АНО|ПАО|НПФ)\b|«/.test(c)) || /^\d+$/.test(r[0]),
+    );
+    if (dataLike.length >= Math.ceil(rows.length / 2) && dataLike.length > best.length) {
+      best = rows;
+    }
+  }
+  return best;
+}
+
+/**
+ * Внести изменения в таблицу Приложения N … добавить следующие строки (+
+ * таблица с новыми строками сразу под инструкцией).
+ */
+const ruleAppendixAddRows: TableRule = (text, ctx, tables) => {
+  if (!/приложени/i.test(text) || !/таблиц/i.test(text)) return null;
+  // Падеж не перечисляем: «следующие строки», «следующими строками».
+  if (!/(?:добавить|дополнить)\s+(?:ниже)?следующ[а-яё]*\s+строк/i.test(text)) return null;
+  const rows = companyRows(tables);
+  return [
+    {
+      type: "append_table_rows",
+      target: { kind: "appendix_table", appendix: appendixIn(text) ?? ctx.appendix ?? "2" },
+      rows,
+      confidence: rows.length ? 0.8 : 0.4,
+      warnings: rows.length ? undefined : ["новые строки таблицы не найдены в документе"],
+    },
+  ];
+};
+
+/**
+ * Правка ЗАГОЛОВКОВ столбцов таблицы приложения.
+ *
+ * Движок умеет добавлять и заменять строки данных, но не перестраивать шапку
+ * таблицы: у неё объединённые ячейки и своё оформление, и подмена её строкой
+ * текста испортила бы таблицу. Поэтому правку отдаём оператору — но с точным
+ * указанием, что именно и где менять, вместо «формулировка не распознана».
+ */
+const ruleAppendixColumnTitles: TableRule = (text, ctx) => {
+  if (!/наименовани[яй]\s+столбц/i.test(text)) return null;
+  const appendix = appendixIn(text) ?? ctx.appendix ?? "?";
+  return [
+    {
+      type: "manual",
+      target: { kind: "appendix_table", appendix },
+      note:
+        `новая редакция заголовков столбцов таблицы Приложения № ${appendix}: ` +
+        "шапку таблицы нужно поправить вручную — у неё объединённые ячейки",
+      confidence: 0.5,
+      warnings: ["заголовки столбцов таблицы не заменяются автоматически"],
     },
   ];
 };
@@ -249,11 +380,25 @@ const ruleAppendRowsRange: TableRule = (text, _ctx, tables) => {
 };
 
 const TABLE_RULES: TableRule[] = [
+  ruleAppendixColumnTitles,
   ruleAppendixRows,
   ruleSortAlpha,
   ruleAppendixNewRow,
+  ruleAppendixAddRows,
   ruleAppendRowsRange,
 ];
+
+/**
+ * Правка адресована не Оферте, а другому разделу Альбома форм.
+ *
+ * «П.1.1 и п. 1.2 раздела «Общие положения» Альбома форм дополнить…» — это
+ * правка самого Альбома, а в Оферте пункт 1.1 тоже есть, и разбор молча
+ * создавал там пункт с чужим текстом. Признак — упоминание Альбома форм БЕЗ
+ * упоминания Оферты или приложения к ней.
+ */
+function aimedOutsideOffer(text: string): boolean {
+  return /альбом[а-яё]*\s+форм/i.test(text) && !/оферт|приложени/i.test(text);
+}
 
 /** Похоже ли, что абзац вообще содержит правку (а не шапку документа). */
 function looksLikeInstruction(text: string): boolean {
@@ -270,9 +415,20 @@ function looksLikeInstruction(text: string): boolean {
  * изменения:» и «В Приложение 7 … внести следующие изменения:». Привязка к
  * началу абзаца отсекала второй вариант целиком, поэтому ищем сочетание слов
  * где угодно в абзаце.
+ *
+ * Обязательна ОБЪЯВЛЯЮЩАЯ формула («следующие изменения», «изменения
+ * следующего содержания»). Без неё под шаблон «внести» + «изменени» попадала и
+ * сама первая правка — «Внести изменения в п.1.2 Приложения № 2 …», — а она
+ * вместе с заголовком отбрасывалась: правка молча исчезала из результата, и
+ * оператор даже не видел, что её потеряли.
  */
 function instructionsStart(paras: string[]): number {
-  return paras.findIndex((p) => /внести/i.test(p) && /изменени/i.test(p));
+  return paras.findIndex(
+    (p) =>
+      /внести/i.test(p) &&
+      /изменени/i.test(p) &&
+      /следующи[ех]\s+изменени|изменени[яй]\s+следующего/i.test(p),
+  );
 }
 
 /**
@@ -295,31 +451,56 @@ function detectScope(header: string | null): { scope: Ctx["scope"]; note?: strin
 }
 
 export function parseInstructionsOffline(
-  rawParas: string[],
+  blocks: DocBlock[],
   docTables: string[][][],
   sourceDoc: string,
 ): Operation[] {
-  const paras = rawParas.map((p) => fixTypos(tidy(p))).filter(Boolean);
-  const start = instructionsStart(paras);
-  const { scope, note } = detectScope(start >= 0 ? paras[start] : null);
+  // Абзацы и «свои» таблицы: таблица приписывается тому абзацу, после которого
+  // она идёт в документе, — так правка вида «…добавить следующие строки:» знает,
+  // какая именно таблица её, даже если таблиц в документе несколько.
+  const raw: Para[] = [];
+  for (const b of blocks) {
+    if (b.kind === "p") raw.push({ text: b.text, tablesAfter: [] });
+    else if (raw.length) raw[raw.length - 1].tablesAfter.push(b.rows);
+  }
+  // Кавычки приводим к «ёлочкам» по ВСЕМУ документу сразу, а не по абзацам:
+  // новая редакция сплошь и рядом занимает несколько абзацев, и открывающая
+  // лапка стоит в одном абзаце, а закрывающая — в другом. Поабзацный разбор
+  // такую пару найти не может, и текст правки оставался невидимым — правка
+  // выглядела как «не найден текст новой редакции». Длину строк normalizeQuotes
+  // не меняет, поэтому склейка через \n и обратное разрезание безопасны.
+  const texts = normalizeQuotes(raw.map((p) => tidy(p.text)).join("\n"))
+    .split("\n")
+    .map((p) => fixTypos(p));
+  const paras: Para[] = raw
+    .map((p, i) => ({ text: texts[i], tablesAfter: p.tablesAfter }))
+    .filter((p) => p.text);
+  const start = instructionsStart(paras.map((p) => p.text));
+  const { scope, note } = detectScope(start >= 0 ? paras[start].text : null);
   const ctx: Ctx = { scope, scopeNote: note };
   const units = mergeUnits(paras.slice(start + 1));
 
   const ops: Operation[] = [];
-  for (const text of units) {
+  for (const { text, tablesAfter } of units) {
     if (asContextLine(text, ctx)) continue;
     if (!looksLikeInstruction(text)) continue;
 
-    // Документ адресован не Оферте — правки не применяем, но и не теряем.
-    if (ctx.scope === "other") {
+    // Документ (или отдельная правка в нём) адресован не Оферте — не применяем,
+    // но и не теряем: оператор увидит строку и внесёт её в нужный документ.
+    if (ctx.scope === "other" || aimedOutsideOffer(text)) {
+      const note =
+        ctx.scope === "other"
+          ? ctx.scopeNote
+          : "правка относится к другому разделу Альбома форм, а не к Оферте — " +
+            "внесите её вручную в соответствующий документ";
       ops.push(
         toOperation(
           {
             type: "manual",
             target: { kind: "point", point: "—" },
-            note: ctx.scopeNote,
+            note,
             confidence: 0.6,
-            warnings: [ctx.scopeNote ?? ""],
+            warnings: [note ?? ""],
           },
           text,
           sourceDoc,
@@ -329,9 +510,12 @@ export function parseInstructionsOffline(
     }
 
     // Сначала таблицы приложений: их содержимое лежит вне текста инструкции.
+    // Своя таблица (та, что идёт сразу под инструкцией) имеет приоритет — по
+    // всему документу ищем только если под инструкцией таблицы нет.
+    const scoped = tablesAfter.length ? tablesAfter : docTables;
     let drafts: Draft[] | null = null;
     for (const rule of TABLE_RULES) {
-      const res = rule(text, ctx, docTables);
+      const res = rule(text, ctx, scoped);
       if (res && res.length) {
         drafts = res;
         break;
