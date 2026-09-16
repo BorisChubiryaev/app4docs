@@ -33,7 +33,11 @@ function tableXml(rows: string[][]): string {
           .join("")}</w:tr>`,
     )
     .join("");
-  return `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr>${trs}</w:tbl>`;
+  // Ссылки на стиль TableGrid здесь быть не должно: в этом пакете нет
+  // word/styles.xml, и ссылка на стиль оказывается висячей — читатели .docx
+  // падают, не найдя её определения. Рамки заданы явно ниже, так что стиль
+  // ничего не добавлял.
+  return `<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr>${trs}</w:tbl>`;
 }
 
 export interface CombinedMeta {
