@@ -25,6 +25,7 @@ import { findAppendixTable, replaceRows, buildRow } from "./tables";
 import {
   sortTableAlphabetically,
   alphabeticalPosition,
+  isAlphabeticallyOrdered,
   setRowNumber,
   parseRows,
   findExistingRow,
@@ -604,7 +605,11 @@ export function applyOneOp(
     }
     if (!inserted) {
       const res = insertAfterAnchor(state.document, op.anchor, refRun);
-      if (!res.ok) return fail(`якорь «${op.anchor}» для сноски не найден`);
+      if (!res.ok)
+        return fail(
+          `якорь «${op.anchor}» для сноски не найден — возможно, ` +
+            "правка рассчитана на другую редакцию Оферты",
+        );
       state.document = res.xml;
     }
     state.footnotes = appendFootnoteElement(state.footnotes, buildFootnoteElement(id, op.payload, opts));
@@ -743,20 +748,24 @@ export function applyOneOp(
     const inserted: string[] = [];
     const skipped: string[] = [];
     let out = [...rowsXml];
+    // Шапку уже отрезали сами, поэтому говорим об этом явно: иначе строку без
+    // номера (а у только что вставленной его ещё нет) примут за шапку.
+    const unordered = !isAlphabeticallyOrdered(
+      out.slice(headerCount).join(""),
+      nameCol,
+      false,
+    );
     for (const cells of op.rows) {
       const name = cells[nameCol] ?? "";
       if (!name.trim()) continue;
+      const body = out.slice(headerCount).join("");
       // Защита от дубликатов: если компания уже в таблице — не добавляем.
-      const dup = findExistingRow(out.slice(headerCount).join(""), name, nameCol);
+      const dup = findExistingRow(body, name, nameCol, false);
       if (dup) {
         skipped.push(`${name} (уже есть, строка ${dup.number})`);
         continue;
       }
-      const pos = alphabeticalPosition(
-        out.slice(headerCount).join(""),
-        name,
-        nameCol,
-      );
+      const pos = alphabeticalPosition(body, name, nameCol, false);
       out.splice(headerCount + pos - 1, 0, buildRow(cells, opts));
       inserted.push(`${name} → позиция ${pos}`);
     }
@@ -783,7 +792,10 @@ export function applyOneOp(
       ok: true,
       message:
         `Приложение №${appendix}: добавлено по алфавиту (${inserted.join("; ")}), нумерация обновлена` +
-        (skipped.length ? `; пропущено: ${skipped.join("; ")}` : ""),
+        (skipped.length ? `; пропущено: ${skipped.join("; ")}` : "") +
+        (unordered
+          ? " — ВНИМАНИЕ: сама таблица упорядочена не по алфавиту, проверьте место вставки"
+          : ""),
       orderKey: table.start,
     };
   }

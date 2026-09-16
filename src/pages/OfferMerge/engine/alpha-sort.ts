@@ -140,15 +140,30 @@ export function sortTableAlphabetically(
   };
 }
 
+/**
+ * Шапка ли первая строка.
+ *
+ * `known` задаёт ответ явно и нужен вызывающему, который шапку уже отрезал.
+ * Автоопределение «первая ячейка — не число» на таком куске ошибается: у ТОЛЬКО
+ * ЧТО вставленной строки номер ещё не проставлен (его присваивают в конце, при
+ * сквозной перенумерации), и она принималась за шапку — то есть выпадала из
+ * сравнения. Из-за этого вторая вставляемая компания не видела первую и
+ * вставала ПЕРЕД ней: «Лента.Ру» оказывалась выше «Газета.Ру».
+ */
+function headerRows(rows: TableRow[], known?: boolean): number {
+  const has = known ?? !/^\d+$/.test(rows[0]?.cells[0] ?? "");
+  return has ? 1 : 0;
+}
+
 /** Есть ли уже строка с таким наименованием (по ключу сортировки)? */
 export function findExistingRow(
   tableInner: string,
   name: string,
   nameCol = 1,
+  hasHeader?: boolean,
 ): { number: string; name: string } | null {
   const rows = parseRows(tableInner);
-  const hasHeader = !/^\d+$/.test(rows[0]?.cells[0] ?? "");
-  const body = hasHeader ? rows.slice(1) : rows;
+  const body = rows.slice(headerRows(rows, hasHeader));
   const key = sortKey(name);
   if (!key) return null;
   const hit = body.find((r) => sortKey(r.cells[nameCol] ?? "") === key);
@@ -156,10 +171,14 @@ export function findExistingRow(
 }
 
 /** Найти позицию (1-based) для вставки нового наименования по алфавиту. */
-export function alphabeticalPosition(tableInner: string, name: string, nameCol = 1): number {
+export function alphabeticalPosition(
+  tableInner: string,
+  name: string,
+  nameCol = 1,
+  hasHeader?: boolean,
+): number {
   const rows = parseRows(tableInner);
-  const hasHeader = !/^\d+$/.test(rows[0]?.cells[0] ?? "");
-  const body = hasHeader ? rows.slice(1) : rows;
+  const body = rows.slice(headerRows(rows, hasHeader));
   const key = sortKey(name);
   let pos = body.length + 1;
   for (let i = 0; i < body.length; i++) {
@@ -169,4 +188,23 @@ export function alphabeticalPosition(tableInner: string, name: string, nameCol =
     }
   }
   return pos;
+}
+
+/**
+ * Упорядочена ли таблица по алфавиту.
+ *
+ * Вставка «по алфавиту» в неупорядоченную таблицу даёт формально верное, но
+ * бессмысленное место: строка встаёт перед первым наименованием, которое больше
+ * неё, а дальше порядок всё равно произвольный. Оператор должен об этом знать.
+ */
+export function isAlphabeticallyOrdered(
+  tableInner: string,
+  nameCol = 1,
+  hasHeader?: boolean,
+): boolean {
+  const rows = parseRows(tableInner);
+  const body = rows.slice(headerRows(rows, hasHeader));
+  const keys = body.map((r) => sortKey(r.cells[nameCol] ?? "")).filter(Boolean);
+  for (let i = 1; i < keys.length; i++) if (keys[i] < keys[i - 1]) return false;
+  return true;
 }
