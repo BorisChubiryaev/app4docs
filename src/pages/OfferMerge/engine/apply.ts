@@ -2,6 +2,13 @@
 // Текст берётся ТОЛЬКО из операций (payload/rows) — движок не «сочиняет».
 import type { DocxParts } from "./docx";
 import { saveDocx } from "./docx";
+import {
+  prepareComments,
+  addComment,
+  commentRangeStart,
+  commentRangeEnd,
+  type CommentsState,
+} from "./comments";
 import { indexFootnotes, findFootnoteById, allFootnotes } from "./offer-index";
 import {
   insertAfterAnchor,
@@ -292,6 +299,12 @@ export interface ApplyState {
   footnotes: string | null;
   numbering: string | null;
   styles: string | null;
+  /**
+   * Комментарии Word для правок, которые движок не вносит сам. Отсутствуют при
+   * предпросмотре: он гоняет операции по копии состояния только ради текста и
+   * порядка, а части пакета не собирает.
+   */
+  comments?: CommentsState;
 }
 
 export function applyOneOp(
@@ -1163,13 +1176,24 @@ export function applyOneOp(
  * добавление этой части — лишний риск испортить файл. Жёлтая заливка с красным
  * текстом видна сразу и работает одинаково во всех редакциях.
  */
-function manualMarkerParagraph(op: Operation): string {
+function manualMarkerText(op: Operation): string[] {
   const what = op.note ?? op.rawText.slice(0, 300);
   const rows = (op.rows ?? [])
     .map((r) => r.map((c) => c.replace(/\s+/g, " ").trim()).filter(Boolean).join(" | "))
     .filter(Boolean);
-  const lines = [`ТРЕБУЕТСЯ РУЧНАЯ ПРАВКА: ${what}`, ...rows.map((r) => `→ ${r}`)];
-  const runs = lines
+  return [`ТРЕБУЕТСЯ РУЧНАЯ ПРАВКА: ${what}`, ...rows.map((r) => `→ ${r}`)];
+}
+
+/**
+ * Абзац-метка, к которому привязывается комментарий.
+ *
+ * Комментарий Word виден только при открытой области рецензирования, поэтому
+ * цветная метка остаётся: она заметна в любом случае и служит якорем, к
+ * которому комментарий привязан. `commentId` — номер комментария, если он был
+ * заведён.
+ */
+function manualMarkerParagraph(op: Operation, commentId: number | null): string {
+  const runs = manualMarkerText(op)
     .map(
       (line, i) =>
         (i > 0 ? `<w:r><w:rPr><w:b/><w:color w:val="C00000"/><w:highlight w:val="yellow"/></w:rPr><w:br/></w:r>` : "") +
@@ -1177,7 +1201,11 @@ function manualMarkerParagraph(op: Operation): string {
         `<w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r>`,
     )
     .join("");
-  return `<w:p><w:pPr><w:spacing w:before="120" w:after="120"/></w:pPr>${runs}</w:p>`;
+  const body =
+    commentId === null
+      ? runs
+      : commentRangeStart(commentId) + runs + commentRangeEnd(commentId);
+  return `<w:p><w:pPr><w:spacing w:before="120" w:after="120"/></w:pPr>${body}</w:p>`;
 }
 
 /**
@@ -1202,7 +1230,10 @@ function insertManualMarker(op: Operation, state: ApplyState): number | null {
     }
   }
   if (at === null) return null;
-  const marker = manualMarkerParagraph(op);
+  const commentId = state.comments
+    ? addComment(state.comments, manualMarkerText(op).join("\n"))
+    : null;
+  const marker = manualMarkerParagraph(op, commentId);
   state.document = state.document.slice(0, at) + marker + state.document.slice(at);
   return at;
 }
@@ -1237,6 +1268,7 @@ export async function applyOperations(
     footnotes: offer.footnotes,
     numbering: offer.numbering,
     styles: offer.styles,
+    comments: prepareComments(offer.comments, offer.rels, offer.contentTypes),
   };
   const results: ApplyResult[] = [];
   // Порядок применения:
@@ -1256,9 +1288,15 @@ export async function applyOperations(
     slots[i] = applyOneOp(operations[i], state, opts);
   }
   for (const r of slots) if (r) results.push(r);
+  // Часть комментариев (и связь с типом) пишем только если комментарии реально
+  // появились: пустая часть в пакете Word не нужна.
+  const c = state.comments;
   const offerDocx = await saveDocx(offer, {
     document: state.document,
     footnotes: state.footnotes ?? undefined,
+    comments: c?.touched ? c.xml : undefined,
+    rels: c?.touched ? c.rels : undefined,
+    contentTypes: c?.touched ? c.contentTypes : undefined,
   });
   return { offerDocx, results };
 }
