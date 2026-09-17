@@ -30,7 +30,7 @@ import {
 } from "./locate";
 import type { ParaSpan } from "./locate";
 import { indexNumberedParagraphs } from "./numbering";
-import { findAppendixTable, replaceRows, buildRow } from "./tables";
+import { findAppendixTable, appendixHeadingOffset, replaceRows, buildRow } from "./tables";
 import {
   sortTableAlphabetically,
   alphabeticalPosition,
@@ -54,6 +54,27 @@ import {
   resetInsCounter,
 } from "./render";
 import type { ApplyResult, BuildOptions, Operation } from "./types";
+
+/**
+ * Таблица, к которой относится операция.
+ *
+ * Если правка называет пункт («дополнить таблицу в п.4 Приложения № 2»), ищем
+ * таблицу НИЖЕ этого пункта: в приложении таблиц несколько, и без такого
+ * уточнения строка уходила в первую попавшуюся — например, строка перечня
+ * Посредников (4 колонки) приписывалась в конец таблицы п.3 (6 колонок).
+ * Номера пунктов внутри приложения проставлены автонумерацией, поэтому пункт
+ * ищем тем же движком нумерации, что и обычные пункты Оферты.
+ */
+function tableForOp(op: Operation, state: ApplyState) {
+  const appendix = op.target.kind === "appendix_table" ? op.target.appendix : "2";
+  const point = op.target.kind === "appendix_table" ? op.target.point : undefined;
+  if (point) {
+    const head = appendixHeadingOffset(state.document, appendix);
+    const span = locatePointSpan(state.document, state.numbering, point, state.styles, head);
+    if (span) return findAppendixTable(state.document, appendix, span.end);
+  }
+  return findAppendixTable(state.document, appendix);
+}
 
 /** Как в сообщении описать судьбу прежнего текста при замене. */
 function oldTextNote(opts: BuildOptions): string {
@@ -694,19 +715,47 @@ export function applyOneOp(
   if (op.type === "append_table_rows") {
     if (!op.rows || op.rows.length === 0) return fail("нет строк для добавления");
     const appendix = op.target.kind === "appendix_table" ? op.target.appendix : "2";
-    const table = findAppendixTable(state.document, appendix);
+    const table = tableForOp(op, state);
     if (!table) return fail(`таблица Приложения №${appendix} не найдена`);
+    const nameCol = op.nameColumn ?? 1;
+    // Строку, которая в таблице уже есть, добавлять нельзя: правку легко
+    // применить к редакции Оферты, где она уже учтена, и тогда в приложении
+    // появлялся второй такой же партнёр. Сравниваем по наименованию — как и
+    // при алфавитной вставке.
+    const add: string[][] = [];
+    const skipped: string[] = [];
+    for (const cells of op.rows) {
+      const name = cells[nameCol] ?? "";
+      const dup = name.trim() ? findExistingRow(table.inner, name, nameCol) : null;
+      if (dup) skipped.push(`${name.replace(/\s+/g, " ").slice(0, 40)} (уже есть, строка ${dup.number})`);
+      else add.push(cells);
+    }
+    if (!add.length) {
+      return {
+        operationId: op.id,
+        ok: true,
+        message: `Приложение №${appendix}: строки уже присутствуют, добавлять нечего — ${skipped.join("; ")}`,
+        orderKey: table.start,
+      };
+    }
     const tblEnd = table.end - "</w:tbl>".length;
-    const rowsXml = op.rows.map((r) => buildRow(r, opts)).join("");
+    const rowsXml = add.map((r) => buildRow(r, opts)).join("");
     state.document = state.document.slice(0, tblEnd) + rowsXml + state.document.slice(tblEnd);
-    return { operationId: op.id, ok: true, message: `добавлено строк: ${op.rows.length}`, orderKey: table.start };
+    return {
+      operationId: op.id,
+      ok: true,
+      message:
+        `добавлено строк: ${add.length}` +
+        (skipped.length ? `; пропущено как уже имеющиеся: ${skipped.join("; ")}` : ""),
+      orderKey: table.start,
+    };
   }
 
   // ── Замена существующих строк таблицы ──────────────────────────────
   if (op.type === "replace_table_rows") {
     if (!op.rows || op.rows.length === 0) return fail("нет данных строк для замены");
     const appendix = op.target.kind === "appendix_table" ? op.target.appendix : "2";
-    const table = findAppendixTable(state.document, appendix);
+    const table = tableForOp(op, state);
     if (!table) return fail(`таблица Приложения №${appendix} не найдена`);
     const nameCol = op.nameColumn ?? 1;
     const reps = op.rows.map((cells, i) => ({

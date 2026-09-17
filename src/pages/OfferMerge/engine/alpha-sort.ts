@@ -7,7 +7,7 @@
 //   • убираем кавычки («» и "), регистр не важен, ё → е;
 //   • пунктуацию (дефис) СОХРАНЯЕМ: «С-МАРКЕТИНГ» идёт перед «СалютДевайсы».
 // Префиксы вроде НКО/ПКО/СК частью названия и остаются в ключе.
-import { decodeXml, escapeXml } from "./ooxml";
+import { escapeXml, tableCellText } from "./ooxml";
 
 const WT_RE = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g;
 
@@ -35,13 +35,7 @@ export interface TableRow {
   cells: string[]; // видимый текст ячеек
 }
 
-function cellText(tcXml: string): string {
-  const parts: string[] = [];
-  let m: RegExpExecArray | null;
-  WT_RE.lastIndex = 0;
-  while ((m = WT_RE.exec(tcXml)) !== null) parts.push(decodeXml(m[1]));
-  return parts.join("").replace(/\s+/g, " ").trim();
-}
+const cellText = tableCellText;
 
 /** Разобрать таблицу на строки с текстом ячеек. */
 export function parseRows(tableInner: string): TableRow[] {

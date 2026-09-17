@@ -59,7 +59,7 @@ export function renderDeleteRuns(text: string, opts: BuildOptions): string {
  * и без неё «Отклонить все исправления» не вернёт исходный текст, поэтому там
  * прежний текст сохраняется всегда, что бы ни выбрал пользователь.
  */
-function hidesOld(opts: BuildOptions): boolean {
+export function hidesOldText(opts: BuildOptions): boolean {
   return opts.showOld === false && (opts.highlightMode ?? "color") === "color";
 }
 
@@ -69,7 +69,7 @@ function hidesOld(opts: BuildOptions): boolean {
  * редакция, без разделяющего пробела.
  */
 export function renderOldPrefix(text: string, opts: BuildOptions): string {
-  if (!text || hidesOld(opts)) return "";
+  if (!text || hidesOldText(opts)) return "";
   return renderDeleteRuns(text, opts) + renderInsertRuns(" ", opts);
 }
 
@@ -78,7 +78,7 @@ export function renderOldPrefix(text: string, opts: BuildOptions): string {
  * исходный, либо ничего — тогда на его месте останется только новый текст.
  */
 export function renderOldInline(text: string, opts: BuildOptions): string {
-  if (!text || hidesOld(opts)) return "";
+  if (!text || hidesOldText(opts)) return "";
   return renderDeleteRuns(text, opts);
 }
 

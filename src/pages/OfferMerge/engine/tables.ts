@@ -1,11 +1,10 @@
 // Операции над таблицами Приложений Оферты: поиск нужной таблицы, добавление
 // строк и ЗАМЕНА существующих строк по их номеру (первая ячейка).
-import { escapeXml, decodeXml } from "./ooxml";
-import { renderInsertRuns, renderDeleteRuns } from "./render";
+import { escapeXml, tableCellText, paragraphText } from "./ooxml";
+import { renderInsertRuns, renderDeleteRuns, hidesOldText } from "./render";
 import { sortKey } from "./alpha-sort";
 import type { BuildOptions } from "./types";
 
-const WT_RE = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g;
 
 export interface TableSpan {
   start: number;
@@ -14,7 +13,7 @@ export interface TableSpan {
 }
 
 /** Смещение заголовка приложения в документе. */
-function appendixHeadingOffset(documentXml: string, appendix: string): number {
+export function appendixHeadingOffset(documentXml: string, appendix: string): number {
   const anchors =
     appendix === "2"
       ? ["Способы и особенности реализации Бесшовного", "Приложение № 2", "Приложение №2"]
@@ -26,10 +25,21 @@ function appendixHeadingOffset(documentXml: string, appendix: string): number {
   return 0;
 }
 
-/** Найти таблицу приложения (первая <w:tbl> после его заголовка). */
-export function findAppendixTable(documentXml: string, appendix: string): TableSpan | null {
-  const from = appendixHeadingOffset(documentXml, appendix);
-  const start = documentXml.indexOf("<w:tbl>", from);
+/**
+ * Найти таблицу приложения — первую <w:tbl> после заголовка приложения либо,
+ * если задан `from`, после этой позиции.
+ *
+ * `from` нужен потому, что в одном приложении таблиц несколько: в Приложении
+ * № 2 таблица п.3 (перечень Информационных ресурсов) и таблица п.4 (перечень
+ * Посредников) идут подряд. Без указания пункта строка для п.4 приписывалась в
+ * конец таблицы п.3 — в таблицу с другим числом колонок.
+ */
+export function findAppendixTable(
+  documentXml: string,
+  appendix: string,
+  from?: number,
+): TableSpan | null {
+  const start = documentXml.indexOf("<w:tbl>", from ?? appendixHeadingOffset(documentXml, appendix));
   if (start < 0) return null;
   const endTag = documentXml.indexOf("</w:tbl>", start);
   if (endTag < 0) return null;
@@ -37,15 +47,7 @@ export function findAppendixTable(documentXml: string, appendix: string): TableS
   return { start, end, inner: documentXml.slice(start, end) };
 }
 
-function cellText(tcXml: string): string {
-  // Раны <w:t> внутри ячейки — непрерывный текст, склеиваем без пробелов
-  // (иначе число «28», разбитое на раны «2» и «8», превратится в «2 8»).
-  const parts: string[] = [];
-  let m: RegExpExecArray | null;
-  WT_RE.lastIndex = 0;
-  while ((m = WT_RE.exec(tcXml)) !== null) parts.push(decodeXml(m[1]));
-  return parts.join("").replace(/\s+/g, " ").trim();
-}
+const cellText = tableCellText;
 
 function tcPr(tcXml: string): string {
   const m = tcXml.match(/<w:tcPr>[\s\S]*?<\/w:tcPr>/);
@@ -67,14 +69,27 @@ function cellParagraphs(text: string, opts: BuildOptions): string {
  * и старое значение задваивалось бы на каждом следующем раунде.
  */
 function currentCellText(tcXml: string): string {
-  let out = "";
-  const re = /<w:r(?:\s[^>]*)?>[\s\S]*?<\/w:r>/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(tcXml)) !== null) {
-    if (/<w:strike\s*\/>/.test(m[0])) continue;
-    out += m[0];
-  }
-  return cellText(out);
+  // Отбираем раны ПОАБЗАЦНО. Если собрать их в общую кучу, границы абзацев
+  // теряются и текст ячейки склеивается в «ООО «Окко»https://okko.tvМобильное
+  // приложение» — такое значение никогда не совпадёт с правкой, где эти части
+  // разнесены по абзацам. Ячейку переписывали вхолостую: старое значение
+  // уходило в зачёркнутое, а новое дублировало то, что уже было.
+  const paras = tcXml.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g) ?? [tcXml];
+  return paras
+    .map((p) => {
+      let kept = "";
+      const re = /<w:r(?:\s[^>]*)?>[\s\S]*?<\/w:r>/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(p)) !== null) {
+        if (/<w:strike\s*\/>/.test(m[0])) continue;
+        kept += m[0];
+      }
+      return paragraphText(kept);
+    })
+    .filter((t) => t.trim() !== "")
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Пересобрать <w:tc> с новым текстом (выделенным), сохранив старый зачёркнутым. */
@@ -85,7 +100,11 @@ function setCell(tcXml: string, text: string, opts: BuildOptions): string {
   if (oldText.replace(/\s+/g, " ").trim() === text.replace(/\s+/g, " ").trim()) {
     return tcXml;
   }
-  const oldPara = oldText ? `<w:p>${renderDeleteRuns(oldText, opts)}</w:p>` : "";
+  // Настройка «показывать прежний текст» действует и в таблицах: иначе при
+  // снятом флажке ячейки оставались с зачёркнутым старым значением, хотя весь
+  // остальной документ показывал только итоговую редакцию.
+  const oldPara =
+    oldText && !hidesOldText(opts) ? `<w:p>${renderDeleteRuns(oldText, opts)}</w:p>` : "";
   return `<w:tc>${tcPr(tcXml)}${oldPara}${cellParagraphs(text, opts)}</w:tc>`;
 }
 

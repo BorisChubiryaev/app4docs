@@ -393,3 +393,24 @@ export function paragraphText(pXml: string): string {
   while ((wt = WT_RE.exec(pXml)) !== null) texts.push(decodeXml(wt[2]));
   return texts.join("");
 }
+
+/**
+ * Видимый текст ячейки таблицы.
+ *
+ * Раны ВНУТРИ абзаца склеиваются без разделителя: число «28», разбитое Word на
+ * раны «2» и «8», иначе превратилось бы в «2 8». А границы АБЗАЦЕВ дают
+ * пробел: в ячейке приложения на отдельных абзацах стоят название, сайт и
+ * приложение партнёра, и без разделителя получалось «ПАО Сбербанкhttps://…».
+ * Именно из-за этого расхождения строка из документа «Изменения» не
+ * опознавалась как уже присутствующая в таблице и добавлялась второй раз.
+ */
+export function tableCellText(tcXml: string): string {
+  const paras = tcXml.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g);
+  const src = paras && paras.length ? paras : [tcXml];
+  return src
+    .map((p) => paragraphText(p))
+    .filter((t) => t.trim() !== "")
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
