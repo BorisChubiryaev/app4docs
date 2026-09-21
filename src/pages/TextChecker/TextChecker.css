@@ -1,0 +1,709 @@
+/* ============================================================
+   Корректор текста — страница /TextChecker
+   Редактор с подсветкой построен на паре «textarea + подложка»:
+   подложка рисует цветные подчёркивания, а ввод остаётся нативным.
+   Поэтому метрики шрифта, отступы и рамка у .tc-input и .tc-backdrop
+   обязаны совпадать до пикселя — иначе подсветка «поедет».
+   ============================================================ */
+
+.tc-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 18px;
+  align-items: start;
+}
+
+/* ─────────── Редактор ─────────── */
+
+.tc-editor-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+  min-width: 0;
+}
+
+.tc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tc-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.tc-tool:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.tc-tool:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tc-tool--danger:hover:not(:disabled) {
+  color: #d92d20;
+  border-color: rgba(217, 45, 32, 0.4);
+}
+
+.tc-file-input {
+  display: none;
+}
+
+.tc-editor {
+  position: relative;
+  height: clamp(420px, calc(100vh - 340px), 900px);
+}
+
+/* Селекторы со «своим» .tc-editor — иначе общее правило
+   `.ds-page textarea` из PageShell.css перебивает фон и рамку. */
+.tc-editor .tc-backdrop,
+.tc-editor .tc-input {
+  /* Метрики должны совпадать — см. комментарий вверху файла. */
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.75;
+  letter-spacing: 0;
+  padding: 18px 20px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  tab-size: 4;
+}
+
+.tc-editor .tc-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--surface-2);
+}
+
+.tc-highlights {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  color: transparent;
+}
+
+.tc-editor .tc-input {
+  position: relative;
+  display: block;
+  resize: none;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--ink);
+  caret-color: var(--brand-1);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  overflow-y: auto;
+}
+
+.tc-editor .tc-input:focus {
+  outline: none;
+  border-color: var(--brand-1);
+  box-shadow: 0 0 0 3px rgba(0, 135, 205, 0.15);
+}
+
+.tc-editor .tc-input::placeholder {
+  color: var(--muted);
+}
+
+/* ─────────── Подсветка найденных мест ─────────── */
+
+.tc-mark {
+  background: transparent;
+  color: transparent;
+  border-radius: 3px;
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.tc-mark--spelling {
+  text-decoration-style: wavy;
+  text-decoration-color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.tc-mark--punctuation {
+  text-decoration-style: wavy;
+  text-decoration-color: #0087cd;
+  background: rgba(0, 135, 205, 0.12);
+}
+
+.tc-mark--grammar {
+  text-decoration-style: wavy;
+  text-decoration-color: #a855f7;
+  background: rgba(168, 85, 247, 0.12);
+}
+
+.tc-mark--typography {
+  text-decoration-style: solid;
+  text-decoration-color: #14b8a6;
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.tc-mark--style {
+  text-decoration-style: dotted;
+  text-decoration-color: #94a3b8;
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.tc-mark--hint {
+  text-decoration-style: dotted;
+}
+
+.tc-mark--active {
+  background: rgba(255, 193, 7, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.6);
+}
+
+/* ─────────── Карточка подсказки над текстом ─────────── */
+
+.tc-popover {
+  position: absolute;
+  z-index: 6;
+  width: 340px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  animation: tc-pop 0.14s ease-out;
+}
+
+@keyframes tc-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tc-popover__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tc-popover__close {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.tc-popover__close:hover {
+  color: var(--ink);
+}
+
+.tc-popover__title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.tc-popover__message {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.tc-popover__pending {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.tc-popover__fixes,
+.tc-issue__fixes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tc-fix {
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0b6b3a;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.tc-fix:hover {
+  background: rgba(16, 185, 129, 0.22);
+  transform: translateY(-1px);
+}
+
+.tc-popover__actions {
+  display: flex;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.tc-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-1);
+  cursor: pointer;
+}
+
+.tc-link:hover {
+  text-decoration: underline;
+}
+
+/* ─────────── Счётчики под редактором ─────────── */
+
+.tc-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding-top: 2px;
+}
+
+.tc-stats b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ─────────── Панель замечаний ─────────── */
+
+.tc-panel {
+  position: sticky;
+  top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+  max-height: calc(100vh - 120px);
+  min-width: 0;
+}
+
+.tc-panel__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tc-score {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tc-score__value {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.tc-score__label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.tc-score__breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.tc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.tc-badge--error {
+  color: #b42318;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.tc-badge--warning {
+  color: #b54708;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.tc-badge--hint {
+  color: #475467;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.tc-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tc-chip b {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.tc-chip--active {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--brand-1);
+  box-shadow: 0 0 0 2px rgba(0, 135, 205, 0.12);
+}
+
+.tc-panel__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tc-fixall {
+  width: 100%;
+  justify-content: center;
+}
+
+.tc-spell-status {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.tc-spell-status--loading {
+  color: #b54708;
+}
+
+.tc-spell-status--error {
+  color: #b42318;
+}
+
+.tc-spell-status--ready {
+  color: #0b6b3a;
+}
+
+.tc-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-right: -4px;
+}
+
+.tc-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+}
+
+.tc-issue {
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.tc-issue:hover {
+  transform: translateX(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.tc-issue--error {
+  border-left-color: #ef4444;
+}
+
+.tc-issue--warning {
+  border-left-color: #f59e0b;
+}
+
+.tc-issue--hint {
+  border-left-color: #94a3b8;
+}
+
+.tc-issue--active {
+  background: var(--surface);
+  box-shadow: 0 0 0 2px rgba(0, 135, 205, 0.18);
+}
+
+.tc-issue__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.tc-issue__category {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.tc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.tc-dot--error {
+  background: #ef4444;
+}
+
+.tc-dot--warning {
+  background: #f59e0b;
+}
+
+.tc-dot--hint {
+  background: #94a3b8;
+}
+
+.tc-issue__title {
+  margin: 0 0 3px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.tc-issue__fragment {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.tc-issue__message {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.tc-personal {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.tc-personal summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.tc-personal__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tc-personal__word {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.tc-personal__word:hover {
+  color: #b42318;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* ─────────── Уведомление ─────────── */
+
+.tc-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 60;
+  padding: 10px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(17, 24, 39, 0.92);
+  border-radius: 999px;
+  box-shadow: var(--shadow-md);
+  animation: tc-pop 0.16s ease-out;
+}
+
+/* ─────────── Тёмная тема ─────────── */
+
+:root[data-theme="dark"] .tc-mark--spelling {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+:root[data-theme="dark"] .tc-mark--punctuation {
+  background: rgba(56, 189, 248, 0.2);
+  text-decoration-color: #38bdf8;
+}
+
+:root[data-theme="dark"] .tc-mark--grammar {
+  background: rgba(192, 132, 252, 0.2);
+  text-decoration-color: #c084fc;
+}
+
+:root[data-theme="dark"] .tc-mark--typography {
+  background: rgba(45, 212, 191, 0.18);
+  text-decoration-color: #2dd4bf;
+}
+
+:root[data-theme="dark"] .tc-mark--style {
+  background: rgba(148, 163, 184, 0.22);
+}
+
+:root[data-theme="dark"] .tc-mark--active {
+  background: rgba(250, 204, 21, 0.28);
+}
+
+:root[data-theme="dark"] .tc-fix {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+:root[data-theme="dark"] .tc-badge--error {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.18);
+}
+
+:root[data-theme="dark"] .tc-badge--warning {
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.18);
+}
+
+:root[data-theme="dark"] .tc-badge--hint {
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+:root[data-theme="dark"] .tc-spell-status--ready {
+  color: #6ee7b7;
+}
+
+:root[data-theme="dark"] .tc-spell-status--loading {
+  color: #fcd34d;
+}
+
+:root[data-theme="dark"] .tc-toast {
+  background: rgba(248, 250, 252, 0.94);
+  color: #0f172a;
+}
+
+/* ─────────── Адаптив ─────────── */
+
+@media (max-width: 1180px) {
+  .tc-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tc-panel {
+    position: static;
+    max-height: none;
+  }
+
+  .tc-editor {
+    height: clamp(360px, 60vh, 640px);
+  }
+
+  .tc-issues {
+    max-height: 520px;
+  }
+}
+
+@media (max-width: 640px) {
+  .tc-popover {
+    width: min(340px, calc(100vw - 48px));
+  }
+
+  .tc-stats {
+    gap: 10px;
+    font-size: 12px;
+  }
+}

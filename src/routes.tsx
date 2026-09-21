@@ -10,6 +10,7 @@ import ExcelTableBuilder from "./pages/ExcelTableBuilder/ExcelTableBuilder";
 import PdfToWord from "./pages/PdfToWord/PdfToWord";
 import DocMatchGame from "./pages/DocMatch/DocMatchGame";
 import OfferMerge from "./pages/OfferMerge/OfferMerge";
+import TextChecker from "./pages/TextChecker/TextChecker";
 
 const RootRoutes = () => {
   return (
@@ -27,6 +28,7 @@ const RootRoutes = () => {
       <Route path="/DocMatchGame" element={<DocMatchGame />} />
       <Route path="/JpgToPdfPage" element={<ImageConverter />} />
       <Route path="/OfferMerge" element={<OfferMerge />} />
+      <Route path="/TextChecker" element={<TextChecker />} />
     </Routes>
   );
 };
