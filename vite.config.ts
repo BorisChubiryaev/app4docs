@@ -23,16 +23,9 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: [
-      { find: '@', replacement: path.resolve(__dirname, './src') },
-      // Словарь Hunspell для проверки орфографии лежит в пакете dictionary-ru
-      // и подключается как статический ассет (`?url`), поэтому путь к файлам
-      // словаря разворачиваем вручную — пакет не публикует их в exports.
-      {
-        find: /^dictionary-ru\/(index\.(?:aff|dic))(\?.*)?$/,
-        replacement: path.resolve(__dirname, 'node_modules/dictionary-ru') + '/$1$2',
-      },
-    ],
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
   },
   // Добавляем только это:
   optimizeDeps: {

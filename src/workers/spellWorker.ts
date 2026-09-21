@@ -1,11 +1,12 @@
 // Веб-воркер проверки орфографии.
-// Словарь Hunspell (ru_RU, ~3,5 МБ) грузится один раз и живёт в воркере,
-// чтобы разбор словаря и поиск подсказок не блокировали интерфейс.
+// Словарь Hunspell (ru_RU, ~3,5 МБ) лежит в репозитории — src/assets/dictionary-ru,
+// см. README рядом с ним. Грузится один раз и живёт в воркере, чтобы разбор
+// словаря и поиск подсказок не блокировали интерфейс.
 // Ничего не отправляется наружу: словарь — статический файл сборки.
 
 import nspell from "nspell";
-import affUrl from "dictionary-ru/index.aff?url";
-import dicUrl from "dictionary-ru/index.dic?url";
+import affUrl from "../assets/dictionary-ru/ru.aff?url";
+import dicUrl from "../assets/dictionary-ru/ru.dic?url";
 import { tokenize } from "../pages/TextChecker/engine/tokenize";
 
 type Spell = ReturnType<typeof nspell>;
