@@ -379,7 +379,7 @@ const HtmlToExcelConverter: React.FC = () => {
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
-      const safeFilename = sanitizeFileName("json_данные_из_EX-El.xlsx");
+      const safeFilename = sanitizeFileName("json_данные_из_Convertix.xlsx");
       downloadExcelFile(buffer, safeFilename);
       setSuccess(true);
     } catch (err) {
@@ -435,7 +435,7 @@ const HtmlToExcelConverter: React.FC = () => {
         ) {
           tableToDownload = createCustomTable(previewTable);
         }
-        const defaultFilename = "таблица_из_EX-El.xlsx";
+        const defaultFilename = "таблица_из_Convertix.xlsx";
         await downloadSingleTable(tableToDownload, defaultFilename);
       } else {
         if (selectedTables.length === 0) {
@@ -565,7 +565,7 @@ const HtmlToExcelConverter: React.FC = () => {
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
-      const safeFilename = sanitizeFileName(`${baseName}_custom_из_EX-El.xlsx`);
+      const safeFilename = sanitizeFileName(`${baseName}_custom_из_Convertix.xlsx`);
       downloadExcelFile(buffer, safeFilename);
     }
   };
@@ -617,7 +617,7 @@ const HtmlToExcelConverter: React.FC = () => {
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
-      const safeFilename = sanitizeFileName(`${baseName}_из_EX-El.xlsx`);
+      const safeFilename = sanitizeFileName(`${baseName}_из_Convertix.xlsx`);
       downloadExcelFile(buffer, safeFilename);
     }
   };
