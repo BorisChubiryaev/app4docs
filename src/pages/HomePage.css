@@ -197,6 +197,108 @@ body {
   display: block;
 }
 
+/* ── Анимированный логотип: конвертация имени EX-EL → Convertix ── */
+.cvx-brand {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+  user-select: none;
+}
+
+/* Распорка держит ширину по финальному имени, чтобы соседний
+   подзаголовок не прыгал, пока буквы перебираются. */
+.cvx-brand__sizer,
+.cvx-brand__text {
+  font-size: clamp(1.7rem, 1.4rem + 1vw, 2.15rem);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  white-space: pre;
+}
+
+.cvx-brand__sizer {
+  visibility: hidden;
+}
+
+.cvx-brand__text {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Прежнее имя — сплошной «чернильный» цвет, как старый логотип. */
+.cvx-brand--old .cvx-brand__text {
+  color: var(--lg-text-primary);
+}
+
+/* Во время конвертации — моноширинный «декодер» с фирменным градиентом. */
+.cvx-brand--converting .cvx-brand__text {
+  font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace,
+    "Cascadia Code", Consolas, monospace;
+  font-weight: 700;
+  background: linear-gradient(
+    135deg,
+    var(--brand-1) 0%,
+    var(--brand-2) 25%,
+    var(--brand-3) 65%,
+    var(--brand-4) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Финальное имя — фирменный градиент + мягкий блик-свип один раз. */
+.cvx-brand--done .cvx-brand__text {
+  background: linear-gradient(
+    135deg,
+    var(--brand-1) 0%,
+    var(--brand-2) 25%,
+    var(--brand-3) 65%,
+    var(--brand-4) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: cvx-brand-pop 0.5s ease-out;
+}
+
+.cvx-brand--done::after {
+  content: "";
+  position: absolute;
+  inset: -2px -6px;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  animation: cvx-brand-shine 0.9s ease-out 0.05s 1;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+
+@keyframes cvx-brand-pop {
+  0% {
+    transform: translateY(-50%) scale(0.94);
+    opacity: 0.4;
+  }
+  60% {
+    transform: translateY(-50%) scale(1.03);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+@keyframes cvx-brand-shine {
+  to {
+    transform: translateX(120%);
+  }
+}
+
 .lg-header__sub {
   font-size: 0.85rem;
   line-height: 1.3;
@@ -2073,7 +2175,7 @@ body {
 [data-theme="dark"] .hp-list__ico {
   background: rgba(255, 255, 255, 0.08);
 }
-/* логотипы Ex-EL и Unit Data Team (чёрная заливка → светлая) */
+/* логотипы Convertix и Unit Data Team (чёрная заливка → светлая) */
 [data-theme="dark"] [fill="#1d1d1f"] {
   fill: #f5f5f7;
 }
@@ -2090,6 +2192,46 @@ body {
   gap: 12px;
   margin: 12px 0 8px;
   text-align: left;
+}
+
+/* Строка анонса нового имени: EX-EL → Convertix */
+.lg-modal__rebrand-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 18px 0 6px;
+  font-weight: 800;
+  font-size: clamp(1.6rem, 1.2rem + 2vw, 2.4rem);
+  line-height: 1;
+}
+
+.lg-modal__rebrand-old {
+  color: var(--lg-text-tertiary);
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+  opacity: 0.75;
+}
+
+.lg-modal__rebrand-arrow {
+  color: var(--lg-text-secondary);
+  font-weight: 400;
+  animation: cvx-arrow-nudge 1.4s ease-in-out infinite;
+}
+
+.lg-modal__rebrand-new {
+  animation: cvx-name-pop 0.6s ease-out both;
+}
+
+@keyframes cvx-name-pop {
+  0% { transform: scale(0.9); opacity: 0; }
+  60% { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+@keyframes cvx-arrow-nudge {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(5px); }
 }
 
 .lg-modal__step {

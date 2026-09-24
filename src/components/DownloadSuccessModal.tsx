@@ -160,7 +160,7 @@ const DownloadSuccessModal: React.FC<DownloadSuccessModalProps> = ({
 
             <p className="ds-modal__text">
               Благодарим за использование{" "}
-              <span className="lg-gradient-text">EX-EL</span>!
+              <span className="lg-gradient-text">Convertix</span>!
             </p>
 
             {/* Рекламный блок */}
@@ -169,7 +169,7 @@ const DownloadSuccessModal: React.FC<DownloadSuccessModalProps> = ({
                 <span className="ds-promo__rocket">🚀</span>
                 <div>
                   <h3 className="ds-promo__title">
-                    EX-EL — ваш помощник в работе с документами
+                    Convertix — ваш помощник в работе с документами
                   </h3>
                   <p className="ds-promo__subtitle">
                     Устали от рутины с Excel, PDF и таблицами? Попробуйте другие

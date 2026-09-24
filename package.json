@@ -1,9 +1,9 @@
 {
-  "name": "ex-el",
+  "name": "convertix",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "EX-EL — набор инструментов для работы с документами",
+  "description": "Convertix — набор инструментов для работы с документами",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

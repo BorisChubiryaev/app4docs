@@ -1,5 +1,5 @@
 // HomePage.jsx
-import { useEffect, useState, useCallback, useMemo, memo } from "react";
+import { useEffect, useState, useCallback, useMemo, memo, useRef } from "react";
 import {
   handleUrlExcelDownload,
   hasUrlDownloadData,
@@ -27,6 +27,103 @@ const AnimatedBackground = memo(() => (
     <div className="lg-noise" />
   </div>
 ));
+
+// ─── Анимированный логотип: «конвертация» старого имени в новое ───
+// Convertix — конвертер, поэтому и само имя конвертируется на глазах:
+// шапка показывает прежнее «EX-EL», затем каждая буква перебирает случайные
+// символы (эффект «дешифровки») и фиксируется в «Convertix» слева направо.
+// Пишем прямо в DOM через ref, чтобы кадры анимации (~60/с) не гоняли
+// перерисовку React. Проигрывается один раз за сессию — при возврате на
+// главную сразу показываем финальное имя.
+const BRAND_OLD = "EX-EL";
+const BRAND_NEW = "Convertix";
+const SCRAMBLE_GLYPHS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#%&@$◊∆<>/\\".split("");
+
+const BrandWordmark = memo(() => {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const el = textRef.current;
+    if (!root || !el) return;
+
+    const settle = () => {
+      el.textContent = BRAND_NEW;
+      root.classList.remove("cvx-brand--old", "cvx-brand--converting");
+      root.classList.add("cvx-brand--done");
+    };
+
+    // Уже видели анимацию в этой сессии — показываем финал без проигрывания.
+    if (sessionStorage.getItem("convertixIntroPlayed")) {
+      settle();
+      return;
+    }
+
+    root.classList.add("cvx-brand--old");
+    el.textContent = BRAND_OLD;
+
+    const HOLD = 950; // держим прежнее имя, мс
+    const STEP = 85; // задержка старта каждой следующей буквы, мс
+    const LOCK = 360; // сколько буква «крутится» до фиксации, мс
+    const target = BRAND_NEW.split("");
+    const convertDuration = target.length * STEP + LOCK;
+    const start = performance.now();
+    let raf = 0;
+
+    const tick = (now: number) => {
+      const t = now - start;
+
+      if (t < HOLD) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
+      if (root.classList.contains("cvx-brand--old")) {
+        root.classList.replace("cvx-brand--old", "cvx-brand--converting");
+      }
+
+      const ct = t - HOLD;
+      let out = "";
+      for (let i = 0; i < target.length; i += 1) {
+        const startAt = i * STEP;
+        if (ct >= startAt + LOCK) {
+          out += target[i];
+        } else if (ct >= startAt) {
+          out += SCRAMBLE_GLYPHS[(Math.random() * SCRAMBLE_GLYPHS.length) | 0];
+        } else {
+          // Буква ещё не начала проявляться — держим пустое место.
+          out += " ";
+        }
+      }
+      el.textContent = out;
+
+      if (ct >= convertDuration) {
+        settle();
+        sessionStorage.setItem("convertixIntroPlayed", "1");
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <div ref={rootRef} className="cvx-brand" role="img" aria-label={BRAND_NEW}>
+      {/* Невидимый «распорка» задаёт ширину по финальному имени, чтобы
+          подзаголовок не дёргался, пока буквы перебираются. */}
+      <span className="cvx-brand__sizer" aria-hidden="true">
+        {BRAND_NEW}
+      </span>
+      <span ref={textRef} className="cvx-brand__text" aria-hidden="true">
+        {BRAND_OLD}
+      </span>
+    </div>
+  );
+});
 
 // ─── Карточка инструмента (компактная плитка) ───
 const ToolCard = memo(({ tool, index }) => (
@@ -162,7 +259,7 @@ const CsiModal = memo(({ isOpen, onClose }) => {
           <p className="lg-modal__text">
             Помогите нам стать лучше — пройдите короткий опрос
             удовлетворённости проектом{" "}
-            <span className="lg-gradient-text">EX-EL</span>. Это займёт пару
+            <span className="lg-gradient-text">Convertix</span>. Это займёт пару
             минут и очень поможет команде.
           </p>
 
@@ -208,48 +305,37 @@ const RebrandingModal = memo(({ isOpen, onClose, onVote }) => {
             </svg>
           </button>
 
-          <h2 className="lg-modal__title">Помогите нам выбрать новое имя!</h2>
+          <h2 className="lg-modal__title">У нас новое имя!</h2>
 
-          <p className="lg-modal__text">
-            <span className="lg-gradient-text">EX-EL</span> вырос из просто
-            «эксель-помощника» — теперь мы работаем с документами, изображениями,
-            таблицами и графиками. Пора менять имя!
+          <p className="lg-modal__rebrand-line" aria-label="EX-EL теперь Convertix">
+            <span className="lg-modal__rebrand-old">EX-EL</span>
+            <span className="lg-modal__rebrand-arrow">→</span>
+            <span className="lg-gradient-text lg-modal__rebrand-new">Convertix</span>
           </p>
 
-          <div className="lg-modal__rebranding-steps">
-            <div className="lg-modal__step">
-              <span className="lg-modal__step-num">1</span>
-              <span className="lg-modal__step-text">
-                <strong>Предложите имя</strong> — напишите свой вариант в
-                комментариях к посту в СберЧате
-              </span>
-            </div>
-            <div className="lg-modal__step">
-              <span className="lg-modal__step-num">2</span>
-              <span className="lg-modal__step-text">
-                <strong>Голосуйте</strong> — мы выберем лучшие идеи и запустим
-                второй тур, где победителя выберет сообщество
-              </span>
-            </div>
-          </div>
-
-          <p className="lg-modal__text" style={{ marginTop: 12, fontSize: 14 }}>
-            🎁 Автор победившего названия получит <strong>приз</strong>!
+          <p className="lg-modal__text">
+            Мы выросли из простого «эксель-помощника» — теперь это набор
+            инструментов для документов, изображений, таблиц и графиков. Встречайте{" "}
+            <span className="lg-gradient-text">Convertix</span>: то же приложение,
+            новое имя. Все инструменты и ссылки работают как прежде.
           </p>
 
           <div className="lg-modal__actions">
-            <a
+            <button
               className="lg-btn lg-btn--primary lg-footer__btn"
+              onClick={onVote}
+            >
+              Отлично, продолжить
+            </button>
+            <a
+              className="lg-btn lg-btn--ghost"
               href={SBERCHAT_URL}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={onVote}
+              onClick={onClose}
             >
-              🗳️ Проголосовать
+              Читать анонс в СберЧате
             </a>
-            <button className="lg-btn lg-btn--ghost" onClick={onClose}>
-              Закрыть
-            </button>
           </div>
         </div>
       </div>
@@ -1071,13 +1157,16 @@ const HomePage = () => {
   // Обработчики для модалок
   const closeModal = useCallback(() => setIsModalOpen(false), []);
   const closeCsi = useCallback(() => setIsCsiOpen(false), []);
-  const closeRebranding = useCallback(() => setIsRebrandingOpen(false), []);
+  const closeRebranding = useCallback(() => {
+    // Любое закрытие анонса запоминаем — показываем его только один раз.
+    localStorage.setItem("convertixAnnounced", "true");
+    setIsRebrandingOpen(false);
+  }, []);
 
   const handleRebrandingVote = useCallback(() => {
-    localStorage.setItem("rebrandingVoted", "true");
+    // Анонс нового имени показываем один раз — дальше запоминаем, что видели.
+    localStorage.setItem("convertixAnnounced", "true");
     setIsRebrandingOpen(false);
-    // Открываем СберЧат в новой вкладке
-    window.open(SBERCHAT_URL, "_blank");
   }, []);
 
   // Добавьте эффект для обработки URL при загрузке главной страницы:
@@ -1106,7 +1195,7 @@ const HomePage = () => {
 
   // Показ модальных окон с приоритетами:
   // 1. CSI (опрос удовлетворённости) — показывается один раз
-  // 2. Ребрендинг — показывается один раз, если не проголосовали
+  // 2. Анонс нового имени Convertix — показывается один раз
   // 3. Обратная связь — показывается один раз
   useEffect(() => {
     // Проверяем CSI
@@ -1118,8 +1207,8 @@ const HomePage = () => {
       return () => clearTimeout(timer);
     }
 
-    // Проверяем ребрендинг
-    if (!localStorage.getItem("rebrandingVoted")) {
+    // Проверяем анонс нового имени
+    if (!localStorage.getItem("convertixAnnounced")) {
       const timer = setTimeout(() => {
         setIsRebrandingOpen(true);
       }, 800);
@@ -1153,34 +1242,7 @@ const HomePage = () => {
         <div className="lg-header__glass" />
         <div className="lg-header__content">
           <div className="lg-header__left">
-            <div className="lg-logo">
-              <svg width="98" height="48" viewBox="0 0 157 77" fill="none">
-                <path
-                  d="M34.85 27.87Q34.93 27.71 34.93 27.51L34.93 19.96Q34.93 19.77 34.85 19.61Q34.8 19.5 34.71 19.42Q34.63 19.33 34.52 19.28Q34.36 19.2 34.17 19.2L3.9 19.2Q3.7 19.2 3.55 19.28Q3.44 19.33 3.35 19.42Q3.27 19.5 3.21 19.61Q3.14 19.77 3.14 19.96L3.14 63.23Q3.14 63.37 3.18 63.5Q3.23 63.65 3.35 63.78Q3.44 63.86 3.55 63.92Q3.7 64 3.9 64L34.17 64Q34.36 64 34.52 63.92Q34.63 63.86 34.71 63.78Q34.83 63.65 34.89 63.5Q34.93 63.37 34.93 63.23L34.93 55.68Q34.93 55.49 34.85 55.33Q34.8 55.22 34.71 55.14Q34.61 55.03 34.49 54.97Q34.34 54.9 34.17 54.9L14.07 54.9Q13.92 54.9 13.84 54.82Q13.76 54.75 13.76 54.59L13.76 46.14Q13.76 45.98 13.84 45.9Q13.92 45.82 14.07 45.82L26.93 45.82Q27.13 45.82 27.29 45.74Q27.39 45.69 27.48 45.6Q27.62 45.46 27.68 45.3Q27.71 45.18 27.71 45.06L27.71 37.56Q27.71 37.41 27.66 37.29Q27.61 37.14 27.48 37.03Q27.38 36.92 27.25 36.86Q27.11 36.79 26.93 36.79L14.07 36.79Q13.92 36.79 13.84 36.71Q13.76 36.64 13.76 36.48L13.76 28.6Q13.76 28.43 13.85 28.35Q13.92 28.28 14.07 28.28L34.17 28.28Q34.36 28.28 34.52 28.2Q34.63 28.15 34.71 28.06Q34.8 27.97 34.85 27.87Z"
-                  fill="#1d1d1f"
-                />
-                <path
-                  d="M35.28 63.82Q35.43 64 35.79 64L46.21 64Q46.47 64 46.67 63.9Q46.94 63.77 47.12 63.48L51.98 55.87Q52.1 55.68 52.23 55.68Q52.27 55.68 52.3 55.7Q52.39 55.73 52.43 55.87L57.29 63.48Q57.46 63.76 57.71 63.89Q57.92 64 58.18 64L67.98 64Q68.3 64 68.44 63.84Q68.56 63.71 68.56 63.48Q68.56 63.28 68.48 63.12Q68.46 63.08 68.43 63.04L58.18 47.6Q58.15 47.51 58.15 47.42Q58.15 47.32 58.18 47.23L68.43 31.87Q68.66 31.52 68.58 31.26Q68.57 31.23 68.56 31.2Q68.53 31.13 68.48 31.07Q68.32 30.9 67.98 30.9L57.54 30.9Q57.28 30.9 57.07 31.01Q56.82 31.14 56.65 31.42L51.79 39.04Q51.75 39.18 51.66 39.22Q51.63 39.23 51.59 39.23Q51.46 39.23 51.34 39.04L46.48 31.42Q46.3 31.13 46.03 31Q45.83 30.9 45.57 30.9L35.79 30.9Q35.47 30.9 35.33 31.06Q35.21 31.19 35.21 31.42Q35.21 31.67 35.33 31.85Q35.33 31.86 35.34 31.87L45.57 47.23Q45.64 47.32 45.64 47.42Q45.64 47.51 45.57 47.6L35.34 63.04Q35.13 63.36 35.18 63.62Q35.19 63.67 35.21 63.71Q35.24 63.77 35.28 63.82Z"
-                  fill="#1d1d1f"
-                />
-                <line
-                  x1="56"
-                  y1="48"
-                  x2="101"
-                  y2="48"
-                  stroke="#1d1d1f"
-                  strokeWidth="10"
-                />
-                <path
-                  d="M131.85 27.87Q131.93 27.71 131.93 27.51L131.93 19.96Q131.93 19.77 131.85 19.61Q131.8 19.5 131.71 19.42Q131.63 19.33 131.52 19.28Q131.36 19.2 131.17 19.2L100.9 19.2Q100.7 19.2 100.55 19.28Q100.44 19.33 100.35 19.42Q100.27 19.5 100.21 19.61Q100.14 19.77 100.14 19.96L100.14 63.23Q100.14 63.37 100.18 63.5Q100.24 63.65 100.35 63.78Q100.44 63.86 100.55 63.92Q100.7 64 100.9 64L131.17 64Q131.36 64 131.52 63.92Q131.63 63.86 131.71 63.78Q131.83 63.65 131.89 63.5Q131.93 63.37 131.93 63.23L131.93 55.68Q131.93 55.49 131.85 55.33Q131.8 55.22 131.71 55.14Q131.61 55.03 131.49 54.97Q131.34 54.9 131.17 54.9L111.07 54.9Q110.92 54.9 110.84 54.82Q110.76 54.75 110.76 54.59L110.76 46.14Q110.76 45.98 110.84 45.9Q110.92 45.82 111.07 45.82L123.93 45.82Q124.13 45.82 124.29 45.74Q124.39 45.69 124.48 45.6Q124.62 45.46 124.68 45.3Q124.71 45.18 124.71 45.06L124.71 37.56Q124.71 37.41 124.66 37.29Q124.61 37.14 124.48 37.03Q124.38 36.92 124.25 36.86Q124.11 36.79 123.93 36.79L111.07 36.79Q110.92 36.79 110.84 36.71Q110.76 36.64 110.76 36.48L110.76 28.6Q110.76 28.43 110.85 28.35Q110.92 28.28 111.07 28.28L131.17 28.28Q131.36 28.28 131.52 28.2Q131.63 28.15 131.71 28.06Q131.8 27.97 131.85 27.87Z"
-                  fill="#1d1d1f"
-                />
-                <path
-                  d="M132.6 63.94Q132.72 64 132.86 64L155.33 64Q155.45 64 155.55 63.95Q155.64 63.91 155.72 63.83Q155.82 63.73 155.87 63.61Q155.89 63.52 155.89 63.43L155.89 57.89Q155.89 57.76 155.84 57.66Q155.8 57.56 155.72 57.49Q155.63 57.4 155.53 57.35Q155.44 57.32 155.33 57.32L140.33 57.32Q140.22 57.32 140.16 57.26Q140.1 57.2 140.1 57.09L140.1 31.66Q140.1 31.53 140.06 31.42Q140.01 31.33 139.93 31.26Q139.87 31.19 139.79 31.16Q139.67 31.1 139.53 31.1L132.86 31.1Q132.72 31.1 132.6 31.16Q132.53 31.19 132.46 31.26Q132.4 31.32 132.36 31.4Q132.3 31.52 132.3 31.66L132.3 63.43Q132.3 63.54 132.33 63.63Q132.37 63.74 132.46 63.83Q132.53 63.9 132.6 63.94Z"
-                  fill="#1d1d1f"
-                />
-              </svg>
-            </div>
+            <BrandWordmark />
             <p className="lg-header__sub">
               Инструменты для работы с документами и данными
             </p>
@@ -1300,7 +1362,7 @@ const HomePage = () => {
                   "Вопрос по инструменту сравнения Excel-файлов",
                 );
                 const body = encodeURIComponent(
-                  "Здравствуйте!\n\nУ меня вопрос по работе инструмента:\n\n[Опишите здесь]\n\n--\nОтправлено из ExEL",
+                  "Здравствуйте!\n\nУ меня вопрос по работе инструмента:\n\n[Опишите здесь]\n\n--\nОтправлено из Convertix",
                 );
                 window.open(
                   `mailto:LGBotsoeva@sberbank.ru,BSChubiryaev@sberbank.ru?subject=${subject}&body=${body}`,
