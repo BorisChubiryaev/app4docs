@@ -47,8 +47,7 @@
 
 body {
   background: #f0f2f5;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display',
-    'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: var(--lg-text-primary);

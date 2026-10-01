@@ -3,7 +3,7 @@
   min-height: 100vh;
   background: linear-gradient(135deg, #b1bfff 0%, #fff494 50%, #f9c0ff 100%);
   padding: 16px;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-sans);
   display: flex;
   flex-direction: column;
 }

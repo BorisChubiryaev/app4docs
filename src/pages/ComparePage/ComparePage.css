@@ -2,7 +2,7 @@
   min-height: 100vh;
   background: linear-gradient(135deg, #c6efd805 0%, #32d74b12 100%);
   padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-sans);
   
 }
 
