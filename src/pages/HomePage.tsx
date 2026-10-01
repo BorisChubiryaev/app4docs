@@ -276,7 +276,7 @@ const CsiModal = memo(({ isOpen, onClose }) => {
             <button className="lg-btn lg-btn--ghost" onClick={onClose}>
               Позже
             </button>
-          </div>7н
+          </div>
         </div>
       </div>
     </div>
@@ -327,15 +327,6 @@ const RebrandingModal = memo(({ isOpen, onClose, onVote }) => {
             >
               Отлично, продолжить
             </button>
-            <a
-              className="lg-btn lg-btn--ghost"
-              href={SBERCHAT_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={onClose}
-            >
-              Читать анонс в СберЧате
-            </a>
           </div>
         </div>
       </div>
