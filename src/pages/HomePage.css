@@ -274,6 +274,7 @@ body {
     transparent 70%
   );
   transform: translateX(-120%);
+  opacity: 0;
   animation: cvx-brand-shine 0.9s ease-out 0.05s 1;
   pointer-events: none;
   mix-blend-mode: overlay;
@@ -294,8 +295,19 @@ body {
 }
 
 @keyframes cvx-brand-shine {
-  to {
+  0% {
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
     transform: translateX(120%);
+    opacity: 0;
   }
 }
 
