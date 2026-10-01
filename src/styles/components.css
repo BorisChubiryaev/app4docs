@@ -7,6 +7,19 @@
    работают и как `btn btn-primary`, и как одиночный `btn-primary`.
    ============================================================ */
 
+/* Единый шрифт для всего приложения. Поля ввода и кнопки по умолчанию
+   не наследуют шрифт и на Windows рисуются системным Arial/Segoe UI. */
+body {
+  font-family: var(--font-sans);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 .btn-primary,
 .btn-secondary,
 .btn-danger {

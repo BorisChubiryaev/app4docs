@@ -1,7 +1,7 @@
 .html-excel-converter {
   min-height: 100vh;
   padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-sans);
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
 }
 

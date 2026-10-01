@@ -11,6 +11,12 @@ import {
   type InlineToken,
 } from "./wordCompare";
 
+import {
+  normalizeCellValue,
+  isLegacyOfficeFile,
+  LEGACY_XLS_MESSAGE,
+} from "../../utils/excelCell";
+
 import "./ComparePage.css";
 
 // Интерфейсы для Word документов
@@ -151,6 +157,11 @@ const ComparePage: React.FC = () => {
   // Функция для загрузки Word документа
   const loadWordDocument = async (file: File): Promise<WordDocumentData> => {
     const arrayBuffer = await file.arrayBuffer();
+    if (isLegacyOfficeFile(arrayBuffer)) {
+      throw new Error(
+        "файл в старом формате .doc (Word 97–2003). Откройте его в Word и сохраните как .docx.",
+      );
+    }
 
     // Структурный разбор .docx: абзацы и таблицы в порядке следования.
     const model = await parseDocx(arrayBuffer);
@@ -239,32 +250,13 @@ const ComparePage: React.FC = () => {
     return sheets;
   };
 
-  // Функция для извлечения значения из ячейки
+  // Функция для извлечения значения из ячейки: принимает как объект ячейки
+  // ExcelJS, так и уже извлечённое значение, и всегда возвращает примитив.
   const getCellValue = (cell: any): any => {
-    if (cell === null || cell === undefined || cell === "") {
-      return "";
-    }
-
-    // Если это объект ячейки ExcelJS
-    if (typeof cell === "object" && cell !== null) {
-      // Возвращаем результат формулы, если он есть
-      if (cell.result !== undefined && cell.result !== null) {
-        return cell.result;
-      }
-      // Иначе возвращаем обычное значение
-      if (cell.value !== undefined && cell.value !== null) {
-        return cell.value;
-      }
-      // Если есть текст, возвращаем его
-      if (cell.text !== undefined && cell.text !== null) {
-        return cell.text;
-      }
-      // Если ничего нет, возвращаем пустую строку
-      return "";
-    }
-
-    // Если это не объект, возвращаем как есть
-    return cell;
+    const isExcelJsCell =
+      cell !== null && typeof cell === "object" && "address" in cell;
+    const raw = isExcelJsCell ? cell.value : cell;
+    return normalizeCellValue(raw) ?? "";
   };
 
   // Функция для анализа формата числа
@@ -446,6 +438,9 @@ const ComparePage: React.FC = () => {
       }
     } else {
       const arrayBuffer = await file.arrayBuffer();
+      if (isLegacyOfficeFile(arrayBuffer)) {
+        throw new Error(LEGACY_XLS_MESSAGE);
+      }
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(arrayBuffer);
 
@@ -467,8 +462,11 @@ const ComparePage: React.FC = () => {
             if (colNumber > maxCol) maxCol = colNumber;
           });
 
-          data.push(rowData);
-          formats.push(rowFormats);
+          // eachRow пропускает пустые строки, поэтому кладём по номеру
+          // строки, а не push'ем — иначе строки съезжают и сравнение
+          // сопоставляет разные строки двух файлов.
+          data[rowNumber - 1] = rowData;
+          formats[rowNumber - 1] = rowFormats;
           if (rowNumber > maxRow) maxRow = rowNumber;
         });
 

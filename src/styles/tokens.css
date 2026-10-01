@@ -41,8 +41,11 @@
   --z-modal: 1000;
 
   /* Типографика */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  /* Inter подключается из бандла (src/index.tsx), поэтому шрифт одинаковый
+     на macOS, Windows и Linux. Системные шрифты — только запасной вариант,
+     пока Inter грузится. */
+  --font-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 
   /* Стеклянная поверхность (используется на нескольких страницах) */
   --glass-bg: rgba(255, 255, 255, 0.72);

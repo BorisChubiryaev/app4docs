@@ -3,6 +3,11 @@ import * as ExcelJS from "exceljs";
 import { Link } from "react-router-dom";
 import { WorkplaceInstructionsModal } from "./components/WorkplaceInstructionsModal";
 import ThemeToggle from "../../components/ThemeToggle";
+import {
+  normalizeCellValue,
+  isLegacyOfficeFile,
+  LEGACY_XLS_MESSAGE,
+} from "../../utils/excelCell";
 import "./WorkplaceCompare.css";
 
 export default function Page() {
@@ -149,11 +154,25 @@ export default function Page() {
   };
 
   const readExcel = async (file: File) => {
-    const workbook = new ExcelJS.Workbook();
     const arrayBuffer = await file.arrayBuffer();
-    await workbook.xlsx.load(arrayBuffer);
+    if (isLegacyOfficeFile(arrayBuffer)) {
+      throw new Error(`«${file.name}»: ${LEGACY_XLS_MESSAGE}`);
+    }
+    const workbook = new ExcelJS.Workbook();
+    try {
+      await workbook.xlsx.load(arrayBuffer);
+    } catch (err) {
+      throw new Error(
+        `«${file.name}»: не удалось прочитать файл как .xlsx (${(err as Error).message}).`,
+      );
+    }
 
     const worksheet = workbook.worksheets[2]; // Третий лист
+    if (!worksheet) {
+      throw new Error(
+        `«${file.name}»: в файле ${workbook.worksheets.length} лист(а), а данные по рабочим местам ожидаются на третьем листе.`,
+      );
+    }
     const jsonData: any[] = [];
 
     worksheet.eachRow((row, rowNumber) => {
@@ -163,7 +182,9 @@ export default function Page() {
       row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
         const colKey = `Column ${colNumber}`;
         if (requiredColumns.includes(colKey)) {
-          rowData[colKey] = cell.value;
+          // Формулы, даты, форматированный текст и ссылки приходят
+          // объектами — приводим к примитивам, иначе React падает при рендере.
+          rowData[colKey] = normalizeCellValue(cell.value);
         }
       });
 
@@ -219,9 +240,7 @@ export default function Page() {
       setDiffData(differences);
     } catch (error) {
       console.error("Ошибка при обработке файлов:", error);
-      alert(
-        "Ошибка при чтении файлов. Проверьте, что это корректные .xlsx-файлы.",
-      );
+      alert(`Ошибка при чтении файлов: ${(error as Error).message}`);
     } finally {
       setLoading(false);
     }

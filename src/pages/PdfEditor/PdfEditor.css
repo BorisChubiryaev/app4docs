@@ -3,7 +3,7 @@
 /* Основные стили контейнера */
 .pdf-editor-container {
   padding: 20px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-sans);
   margin: 0 auto;
   min-height: 100vh;
   background: linear-gradient(135deg, #8980a9 0%, #e4edf5 100%);

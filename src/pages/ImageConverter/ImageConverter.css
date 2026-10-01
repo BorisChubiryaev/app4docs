@@ -2,8 +2,7 @@
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea08 0%, #764ba212 100%);
   padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
-    "Helvetica Neue", sans-serif;
+  font-family: var(--font-sans);
 }
 
 .jpg-to-pdf-container {
