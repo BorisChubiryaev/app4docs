@@ -1,5 +1,4 @@
-import React, { useState, useCallback } from "react";
-import * as ExcelJS from "exceljs";
+import React, { useState, useCallback, useEffect } from "react";
 import InstructionsModalShell from "../../components/InstructionsModal";
 import PageShell from "../../components/PageShell";
 import {
@@ -11,11 +10,10 @@ import {
   type InlineToken,
 } from "./wordCompare";
 
-import {
-  normalizeCellValue,
-  isLegacyOfficeFile,
-  LEGACY_XLS_MESSAGE,
-} from "../../utils/excelCell";
+import { isLegacyOfficeFile, LEGACY_XLS_MESSAGE } from "../../utils/excelCell";
+import { parseExcelInWorker } from "../../utils/parseExcelInWorker";
+import type { ExcelSheet } from "../../types/sheet.types";
+import ExcelCompareView from "./excel/ExcelCompareView";
 
 import "./ComparePage.css";
 
@@ -51,33 +49,14 @@ interface WordDocumentData {
   model: WordDocModel;
 }
 
-// Базовые интерфейсы
-interface CellDifference {
-  cell: string;
-  row: number;
-  col: number;
-  file1Value: any;
-  file2Value: any;
-  type: "excel" | "word";
-  elementType?: "paragraph" | "table" | "text";
-  elementIndex?: number;
-}
-
-interface CellFormat {
-  numFmt?: string;
-  decimalPlaces?: number;
-  isPercentage?: boolean;
-  hasThousandsSeparator?: boolean;
-}
-
 interface SheetData {
   name: string;
   data: any[][];
   rowCount: number;
   colCount: number;
-  formats?: CellFormat[][];
   type: "excel" | "word";
   wordData?: WordDocumentData;
+  excel?: ExcelSheet;
 }
 
 const ComparePage: React.FC = () => {
@@ -87,16 +66,16 @@ const ComparePage: React.FC = () => {
   const [sheets2, setSheets2] = useState<SheetData[]>([]);
   const [selectedSheet1, setSelectedSheet1] = useState<number>(0);
   const [selectedSheet2, setSelectedSheet2] = useState<number>(0);
-  const [differences, setDifferences] = useState<CellDifference[]>([]);
+  const [excelPair, setExcelPair] = useState<{
+    a: ExcelSheet;
+    b: ExcelSheet;
+  } | null>(null);
   const [wordResult, setWordResult] = useState<WordCompareResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [comparisonPerformed, setComparisonPerformed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "sideBySide" | "wordView">(
     "sideBySide",
-  );
-  const [highlightedCells, setHighlightedCells] = useState<Set<string>>(
-    new Set(),
   );
   const [fullScreenMode, setFullScreenMode] = useState<boolean>(false);
   const [showInstructions, setShowInstructions] = useState<boolean>(false);
@@ -105,6 +84,12 @@ const ComparePage: React.FC = () => {
   const [activeWordTab, setActiveWordTab] = useState<
     "all" | "differences" | "identical"
   >("all");
+
+  // Результат сравнения Excel относится к конкретной паре листов —
+  // при смене файла или листа он устаревает.
+  useEffect(() => {
+    setExcelPair(null);
+  }, [sheets1, sheets2, selectedSheet1, selectedSheet2]);
 
   const [dragOverFirst, setDragOverFirst] = useState(false);
   const [dragOverSecond, setDragOverSecond] = useState(false);
@@ -250,180 +235,6 @@ const ComparePage: React.FC = () => {
     return sheets;
   };
 
-  // Функция для извлечения значения из ячейки: принимает как объект ячейки
-  // ExcelJS, так и уже извлечённое значение, и всегда возвращает примитив.
-  const getCellValue = (cell: any): any => {
-    const isExcelJsCell =
-      cell !== null && typeof cell === "object" && "address" in cell;
-    const raw = isExcelJsCell ? cell.value : cell;
-    return normalizeCellValue(raw) ?? "";
-  };
-
-  // Функция для анализа формата числа
-  const parseNumberFormat = (numFmt: string): CellFormat => {
-    const format: CellFormat = {
-      numFmt,
-      decimalPlaces: 0,
-      isPercentage: false,
-      hasThousandsSeparator: false,
-    };
-
-    if (!numFmt) return format;
-
-    // Проверяем процентный формат
-    format.isPercentage = numFmt.includes("%");
-
-    // Проверяем разделитель тысяч
-    format.hasThousandsSeparator =
-      numFmt.includes("#") || /0,0/.test(numFmt) || /#,##/.test(numFmt);
-
-    // Анализируем количество знаков после запятой
-    try {
-      // Форматы типа "0.00", "#,##0.000", "0.000"
-      const decimalMatch = numFmt.match(/[0#]\.([0#]+)/);
-      if (decimalMatch) {
-        format.decimalPlaces = decimalMatch[1].length;
-      }
-
-      // Форматы типа "General", "Standard" - используем исходное значение
-      else if (
-        numFmt === "General" ||
-        numFmt === "standard" ||
-        numFmt === "@"
-      ) {
-        format.decimalPlaces = -1;
-      }
-
-      // Процентные форматы с десятичными знаками
-      else if (format.isPercentage) {
-        const percentMatch = numFmt.match(/[0#]\.([0#]+)%/);
-        if (percentMatch) {
-          format.decimalPlaces = percentMatch[1].length;
-        }
-      }
-
-      // Денежные форматы и форматы с разделителями
-      else if (format.hasThousandsSeparator) {
-        const thousandsMatch = numFmt.match(/[0#]\.([0#]+)/);
-        if (thousandsMatch) {
-          format.decimalPlaces = thousandsMatch[1].length;
-        }
-      }
-    } catch (error) {
-      console.warn("Error parsing number format:", numFmt, error);
-    }
-
-    return format;
-  };
-
-  // Функция для получения формата ячейки
-  const getCellFormat = (cell: any): CellFormat => {
-    let numFmt: string | undefined;
-
-    if (cell && typeof cell === "object") {
-      // Получаем numFmt из различных мест ExcelJS
-      if (cell.numFmt) {
-        numFmt = cell.numFmt;
-      } else if (cell.style && cell.style.numFmt) {
-        numFmt = cell.style.numFmt;
-      }
-    }
-
-    return parseNumberFormat(numFmt || "");
-  };
-
-  // Функция для добавления разделителей тысяч
-  const addThousandsSeparator = (numberStr: string): string => {
-    const parts = numberStr.split(".");
-    let integerPart = parts[0];
-    const decimalPart = parts[1] ? `.${parts[1]}` : "";
-
-    // Добавляем пробелы как разделители тысяч
-    integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-
-    return integerPart + decimalPart;
-  };
-
-  // Функция форматирования числа
-  const formatNumber = (value: any, format: CellFormat): string => {
-    if (value === null || value === undefined || value === "") {
-      return "";
-    }
-
-    // Если значение не число, возвращаем как есть
-    if (typeof value !== "number") {
-      return String(value);
-    }
-
-    let formattedValue = value;
-
-    // Обрабатываем проценты
-    if (format.isPercentage) {
-      formattedValue = value * 100;
-    }
-
-    // Форматируем количество знаков после запятой
-    let result: string;
-
-    if (format.decimalPlaces === -1) {
-      result = String(formattedValue);
-    } else if (format.decimalPlaces > 0) {
-      result = formattedValue.toFixed(format.decimalPlaces);
-    } else {
-      result = Math.round(formattedValue).toString();
-    }
-
-    // Добавляем разделители тысяч
-    if (format.hasThousandsSeparator) {
-      result = addThousandsSeparator(result);
-    }
-
-    // Добавляем знак процента
-    if (format.isPercentage) {
-      result += "%";
-    }
-
-    return result;
-  };
-
-  // Функция для отображения значения ячейки
-  const renderCellValue = (value: any, format?: CellFormat): string => {
-    const cellValue = getCellValue(value);
-
-    if (cellValue === null || cellValue === undefined || cellValue === "") {
-      return "";
-    }
-
-    if (typeof cellValue === "number" && format) {
-      return formatNumber(cellValue, format);
-    }
-
-    if (typeof cellValue === "number") {
-      return addThousandsSeparator(cellValue.toString());
-    }
-
-    return String(cellValue);
-  };
-
-  // Функция для отображения значения в таблице различий
-  const renderDiffValue = (value: any, format?: CellFormat): string => {
-    const cellValue = getCellValue(value);
-
-    if (cellValue === null || cellValue === undefined || cellValue === "") {
-      return "(пусто)";
-    }
-
-    if (typeof cellValue === "number" && format) {
-      return formatNumber(cellValue, format);
-    }
-
-    if (typeof cellValue === "number") {
-      return addThousandsSeparator(cellValue.toString());
-    }
-
-    return String(cellValue);
-  };
-
   // Обновленная функция загрузки файлов
   const loadFileSheets = async (
     file: File,
@@ -441,46 +252,16 @@ const ComparePage: React.FC = () => {
       if (isLegacyOfficeFile(arrayBuffer)) {
         throw new Error(LEGACY_XLS_MESSAGE);
       }
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(arrayBuffer);
-
-      const result: SheetData[] = [];
-      workbook.eachSheet((worksheet) => {
-        const data: any[][] = [];
-        const formats: CellFormat[][] = [];
-        let maxRow = 0;
-        let maxCol = 0;
-
-        worksheet.eachRow((row, rowNumber) => {
-          const rowData: any[] = [];
-          const rowFormats: CellFormat[] = [];
-
-          row.eachCell((cell, colNumber) => {
-            rowData[colNumber - 1] = getCellValue(cell);
-            rowFormats[colNumber - 1] = getCellFormat(cell);
-
-            if (colNumber > maxCol) maxCol = colNumber;
-          });
-
-          // eachRow пропускает пустые строки, поэтому кладём по номеру
-          // строки, а не push'ем — иначе строки съезжают и сравнение
-          // сопоставляет разные строки двух файлов.
-          data[rowNumber - 1] = rowData;
-          formats[rowNumber - 1] = rowFormats;
-          if (rowNumber > maxRow) maxRow = rowNumber;
-        });
-
-        result.push({
-          name: worksheet.name,
-          data,
-          rowCount: maxRow,
-          colCount: maxCol,
-          formats,
-          type: "excel",
-        });
-      });
-
-      return result;
+      // Разбор в Web Worker: большие файлы больше не замораживают страницу.
+      const excelSheets = await parseExcelInWorker(arrayBuffer);
+      return excelSheets.map((sheet) => ({
+        name: sheet.name,
+        data: [],
+        rowCount: sheet.rowCount,
+        colCount: sheet.colCount,
+        type: "excel" as const,
+        excel: sheet,
+      }));
     }
   };
 
@@ -577,20 +358,6 @@ const ComparePage: React.FC = () => {
     }
   };
 
-  const numberToExcelColumn = (num: number): string => {
-    let result = "";
-    while (num > 0) {
-      num--;
-      result = String.fromCharCode((num % 26) + 65) + result;
-      num = Math.floor(num / 26);
-    }
-    return result;
-  };
-
-  const cellAddress = (row: number, col: number): string => {
-    return `${numberToExcelColumn(col)}${row}`;
-  };
-
   // Структурное сравнение Word через новый движок (wordCompare.ts).
   const compareWordDocuments = (
     wordData1: WordDocumentData,
@@ -633,43 +400,16 @@ const ComparePage: React.FC = () => {
         sheetData2.wordData,
       );
       setWordResult(result);
-      setDifferences([]);
+      setExcelPair(null);
       setViewMode("wordView");
       return;
     }
 
-    // Для Excel (старое сравнение)
-    const { data: d1, rowCount: rows1, colCount: cols1 } = sheetData1;
-    const { data: d2, rowCount: rows2, colCount: cols2 } = sheetData2;
-
-    const maxRows = Math.max(rows1, rows2);
-    const maxCols = Math.max(cols1, cols2);
-
-    const diffs: CellDifference[] = [];
-    const highlighted = new Set<string>();
-
-    for (let r = 0; r < maxRows; r++) {
-      for (let c = 0; c < maxCols; c++) {
-        const val1 = d1[r]?.[c] !== undefined ? getCellValue(d1[r][c]) : "";
-        const val2 = d2[r]?.[c] !== undefined ? getCellValue(d2[r][c]) : "";
-
-        if (String(val1) !== String(val2)) {
-          const cellAddr = cellAddress(r + 1, c + 1);
-          diffs.push({
-            cell: cellAddr,
-            row: r + 1,
-            col: c + 1,
-            file1Value: val1,
-            file2Value: val2,
-            type: sheetData1.type,
-          });
-          highlighted.add(cellAddr);
-        }
-      }
+    // Excel: само сравнение и фильтры — в ExcelCompareView.
+    if (sheetData1.excel && sheetData2.excel) {
+      setWordResult(null);
+      setExcelPair({ a: sheetData1.excel, b: sheetData2.excel });
     }
-
-    setDifferences(diffs);
-    setHighlightedCells(highlighted);
   };
 
   const clearAll = () => {
@@ -679,76 +419,15 @@ const ComparePage: React.FC = () => {
     setSheets2([]);
     setSelectedSheet1(0);
     setSelectedSheet2(0);
-    setDifferences([]);
+    setExcelPair(null);
     setWordResult(null);
     setError(null);
-    setHighlightedCells(new Set());
     setComparisonPerformed(false);
     setFullScreenMode(false);
     setFileType1(null);
     setFileType2(null);
     setViewMode("sideBySide");
     setActiveWordTab("all");
-  };
-
-  const isCellDifferent = (row: number, col: number): boolean => {
-    return highlightedCells.has(cellAddress(row, col));
-  };
-
-  // Отображение таблицы (для Excel)
-  const renderTable = (
-    sheetData: SheetData,
-    fileType: "file1" | "file2",
-    isFullScreen: boolean = false,
-  ) => {
-    if (!sheetData) return null;
-
-    const { data, rowCount, colCount, formats, type } = sheetData;
-    const maxRows = rowCount;
-    const maxCols = colCount;
-
-    return (
-      <div
-        className={`table-preview-content ${
-          isFullScreen ? "full-screen-content" : ""
-        }`}
-      >
-        <table
-          className={`excel-table ${isFullScreen ? "full-screen-table" : ""}`}
-        >
-          <thead>
-            <tr>
-              <th style={{ width: "40px" }}></th>
-              {Array.from({ length: maxCols }, (_, i) => (
-                <th key={i}>{numberToExcelColumn(i + 1)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: maxRows }, (_, rowIndex) => (
-              <tr key={rowIndex}>
-                <td style={{ background: "#f8fafc", fontWeight: "600" }}>
-                  {rowIndex + 1}
-                </td>
-                {Array.from({ length: maxCols }, (_, colIndex) => {
-                  const rawValue = data[rowIndex]?.[colIndex];
-                  const cellFormat = formats?.[rowIndex]?.[colIndex];
-                  const value = renderCellValue(rawValue, cellFormat);
-                  const isDiff = isCellDifferent(rowIndex + 1, colIndex + 1);
-                  const cellClass = isDiff ? `cell-diff ${fileType}` : "";
-
-                  return (
-                    <td key={colIndex} className={cellClass}>
-                      {value}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
   };
 
   // Отображение Word документа
@@ -1042,7 +721,9 @@ const ComparePage: React.FC = () => {
         </p>
         <ul>
           <li>.xlsx (Excel Workbook)</li>
-          <li>.xls (Excel 97-2003)</li>
+          <li>
+            .xls (Excel 97-2003) — пересохраните в .xlsx: Файл → Сохранить как
+          </li>
           <li>Сравнение по ячейкам с подсветкой</li>
         </ul>
 
@@ -1051,9 +732,35 @@ const ComparePage: React.FC = () => {
         </p>
         <ul>
           <li>.docx (Word Document)</li>
-          <li>.doc (Word 97-2003)</li>
+          <li>.doc (Word 97-2003) — пересохраните в .docx</li>
           <li>Сравнение параграфов и таблиц</li>
           <li>Детальный анализ различий</li>
+        </ul>
+      </div>
+
+      <div className="instructions-section">
+        <h3>🔎 Фильтры сравнения Excel</h3>
+        <ul>
+          <li>
+            <strong>Тип изменения:</strong> изменено, добавлено (ячейка была
+            пустой), удалено (ячейка стала пустой) — включайте и выключайте
+          </li>
+          <li>
+            <strong>Колонка и поиск:</strong> оставьте различия только в одной
+            колонке или найдите значение / адрес ячейки (например, B12)
+          </li>
+          <li>
+            <strong>Только строки с различиями:</strong> одинаковые строки
+            скрываются, можно скрыть и колонки без различий
+          </li>
+          <li>
+            <strong>Без учёта регистра / лишних пробелов:</strong> «Москва» и
+            « МОСКВА » считаются одинаковыми
+          </li>
+          <li>
+            <strong>Навигация:</strong> кнопки «Предыдущее / Следующее» или
+            клик по строке в списке различий прокручивают обе таблицы к ячейке
+          </li>
         </ul>
       </div>
 
@@ -1158,29 +865,7 @@ const ComparePage: React.FC = () => {
                   {renderWordDocument(sheetData2.wordData, "file2")}
                 </div>
               </div>
-            ) : (
-              <div className="side-by-side full-screen">
-                <div className="table-preview full-screen-preview">
-                  <div className="table-preview-header">
-                    <h3 style={{ color: "#3b82f6" }}>Файл 1</h3>
-                    <span className="file-title file1">
-                      📄 {file1?.name} - {sheets1[selectedSheet1]?.name}
-                    </span>
-                  </div>
-                  {renderTable(sheets1[selectedSheet1], "file1", true)}
-                </div>
-
-                <div className="table-preview full-screen-preview">
-                  <div className="table-preview-header">
-                    <h3 style={{ color: "#10b981" }}>Файл 2</h3>
-                    <span className="file-title file2">
-                      📄 {file2?.name} - {sheets2[selectedSheet2]?.name}
-                    </span>
-                  </div>
-                  {renderTable(sheets2[selectedSheet2], "file2", true)}
-                </div>
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -1400,137 +1085,14 @@ const ComparePage: React.FC = () => {
           )}
 
           {/* Excel сравнение */}
-          {fileType1 === "excel" &&
-            fileType2 === "excel" &&
-            differences.length > 0 && (
-              <>
-                <div className="view-mode-toggle">
-                  <button
-                    onClick={() => setViewMode("table")}
-                    className={`view-mode-btn ${
-                      viewMode === "table" ? "active" : ""
-                    }`}
-                  >
-                    📊 Таблица различий
-                  </button>
-                  <button
-                    onClick={() => setViewMode("sideBySide")}
-                    className={`view-mode-btn ${
-                      viewMode === "sideBySide" ? "active" : ""
-                    }`}
-                  >
-                    👁️ Раздельный просмотр
-                  </button>
-                  <button
-                    onClick={() => setFullScreenMode(true)}
-                    className="btn btn-fullscreen-small"
-                  >
-                    📺 Полноэкранный режим
-                  </button>
-                </div>
-
-                {viewMode === "sideBySide" && (
-                  <div className="side-by-side">
-                    <div className="table-preview">
-                      <div className="table-preview-header">
-                        <h3 style={{ color: "#3b82f6" }}>Файл 1</h3>
-                        <span className="results-badge">
-                          {sheets1[selectedSheet1]?.name}
-                        </span>
-                      </div>
-                      {renderTable(sheets1[selectedSheet1], "file1")}
-                    </div>
-
-                    <div className="table-preview">
-                      <div className="table-preview-header">
-                        <h3 style={{ color: "#10b981" }}>Файл 2</h3>
-                        <span className="results-badge">
-                          {sheets2[selectedSheet2]?.name}
-                        </span>
-                      </div>
-                      {renderTable(sheets2[selectedSheet2], "file2")}
-                    </div>
-                  </div>
-                )}
-
-                {viewMode === "table" && (
-                  <div className="results-section">
-                    <div className="results-header">
-                      <h2>Детальные различия</h2>
-                      <span className="results-badge">
-                        {differences.length} ячеек
-                      </span>
-                    </div>
-
-                    <div className="preview-content">
-                      <table className="diff-table">
-                        <thead>
-                          <tr>
-                            <th>Ячейка</th>
-                            <th>Строка</th>
-                            <th>Колонка</th>
-                            <th>Файл 1</th>
-                            <th>Файл 2</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {differences.map((diff, index) => (
-                            <tr key={index}>
-                              <td>
-                                <span className="cell-badge">{diff.cell}</span>
-                              </td>
-                              <td>{diff.row}</td>
-                              <td>{diff.col}</td>
-                              <td>
-                                <div className="value-cell file1">
-                                  {renderDiffValue(
-                                    diff.file1Value,
-                                    sheets1[selectedSheet1]?.formats?.[
-                                      diff.row - 1
-                                    ]?.[diff.col - 1],
-                                  )}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="value-cell file2">
-                                  {renderDiffValue(
-                                    diff.file2Value,
-                                    sheets2[selectedSheet2]?.formats?.[
-                                      diff.row - 1
-                                    ]?.[diff.col - 1],
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                <div className="legend">
-                  <h4>Легенда:</h4>
-                  <div className="legend-items">
-                    <div className="legend-item">
-                      <div className="legend-color file1"></div>
-                      <span>— измененные ячейки в Файле 1</span>
-                    </div>
-                    <div className="legend-item">
-                      <div className="legend-color file2"></div>
-                      <span>— измененные ячейки в Файле 2</span>
-                    </div>
-                    <div className="legend-item">
-                      <div
-                        className="legend-color"
-                        style={{ background: "white", borderColor: "#e5e7eb" }}
-                      ></div>
-                      <span>— идентичные ячейки</span>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
+          {excelPair && (
+            <ExcelCompareView
+              sheet1={excelPair.a}
+              sheet2={excelPair.b}
+              fileName1={file1?.name ?? "Файл 1"}
+              fileName2={file2?.name ?? "Файл 2"}
+            />
+          )}
 
           {/* Word сравнение */}
           {fileType1 === "word" &&
@@ -1559,16 +1121,10 @@ const ComparePage: React.FC = () => {
             )}
 
           {comparisonPerformed &&
-            ((fileType1 === "excel" &&
-              fileType2 === "excel" &&
-              differences.length === 0) ||
-              (fileType1 === "word" &&
-                fileType2 === "word" &&
-                wordResult !== null &&
-                wordResult.changed +
-                  wordResult.added +
-                  wordResult.removed ===
-                  0)) &&
+            fileType1 === "word" &&
+            fileType2 === "word" &&
+            wordResult !== null &&
+            wordResult.changed + wordResult.added + wordResult.removed === 0 &&
             !loading &&
             file1 &&
             file2 && (

@@ -1003,3 +1003,34 @@
   position: static !important;
   transform: none !important;
 }
+
+/* Постраничный вывод результатов */
+.workplace-show-more {
+  position: sticky;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.workplace-show-more-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--brand-2);
+  border-radius: var(--radius-sm);
+  background: var(--brand-2);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.workplace-show-more-btn--ghost {
+  background: transparent;
+  color: var(--brand-2);
+}
+:root[data-theme="dark"] .workplace-show-more-btn--ghost {
+  color: #9aa6ff;
+  border-color: #9aa6ff;
+}

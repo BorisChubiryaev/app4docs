@@ -1,14 +1,41 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import * as ExcelJS from "exceljs";
 import { Link } from "react-router-dom";
 import { WorkplaceInstructionsModal } from "./components/WorkplaceInstructionsModal";
 import ThemeToggle from "../../components/ThemeToggle";
-import {
-  normalizeCellValue,
-  isLegacyOfficeFile,
-  LEGACY_XLS_MESSAGE,
-} from "../../utils/excelCell";
+import { isLegacyOfficeFile, LEGACY_XLS_MESSAGE } from "../../utils/excelCell";
+import { parseExcelInWorker } from "../../utils/parseExcelInWorker";
 import "./WorkplaceCompare.css";
+
+const columnLabels: Record<string, string> = {
+  "Column 4": "Адрес",
+  "Column 13": "Этаж",
+  "Column 20": "РМ",
+  "Column 25": "Тип РМ",
+  "Column 39": "Признак",
+  "Column 40": "Таб. №",
+  "Column 41": "ФИО",
+  "Column 45": "Департамент",
+  "Column 49": "Ответственный",
+  "Column 52": "ДП",
+  "Column 54": "Трайб",
+  "Column 59": "Дата с",
+  "Column 62": "Статус",
+  "Column 64": "Кол-во",
+};
+
+const displayColumns = [
+  "Checked",
+  "Status",
+  ...Object.keys(columnLabels),
+  "ChangeType",
+];
+
+const requiredColumns = Object.keys(columnLabels);
+
+// Сколько строк результата рисуем сразу. Остальные — по кнопке:
+// таблица в тысячи строк с десятком колонок заметно тормозит браузер.
+const PAGE_SIZE = 300;
 
 export default function Page() {
   const [firstFile, setFirstFile] = useState<File | null>(null);
@@ -90,32 +117,6 @@ export default function Page() {
     [],
   );
 
-  const columnLabels: Record<string, string> = {
-    "Column 4": "Адрес",
-    "Column 13": "Этаж",
-    "Column 20": "РМ",
-    "Column 25": "Тип РМ",
-    "Column 39": "Признак",
-    "Column 40": "Таб. №",
-    "Column 41": "ФИО",
-    "Column 45": "Департамент",
-    "Column 49": "Ответственный",
-    "Column 52": "ДП",
-    "Column 54": "Трайб",
-    "Column 59": "Дата с",
-    "Column 62": "Статус",
-    "Column 64": "Кол-во",
-  };
-
-  const displayColumns = [
-    "Checked",
-    "Status",
-    ...Object.keys(columnLabels),
-    "ChangeType",
-  ];
-
-  const requiredColumns = Object.keys(columnLabels);
-
   const [filters, setFilters] = useState({
     status: new Set<string>(["БЫЛО", "СТАЛО", "НОВАЯ", "УДАЛЕНА"]),
     address: new Set<string>(),
@@ -143,62 +144,52 @@ export default function Page() {
     }
   };
 
-  const filterColumns = (data: any[]) => {
-    return data.map((row) => {
-      const filteredRow: any = {};
-      requiredColumns.forEach((column) => {
-        filteredRow[column] = row[column] !== undefined ? row[column] : null;
-      });
-      return filteredRow;
-    });
-  };
-
   const readExcel = async (file: File) => {
     const arrayBuffer = await file.arrayBuffer();
     if (isLegacyOfficeFile(arrayBuffer)) {
       throw new Error(`«${file.name}»: ${LEGACY_XLS_MESSAGE}`);
     }
-    const workbook = new ExcelJS.Workbook();
+    // Разбор в Web Worker — страница не замирает на больших файлах.
+    let sheets;
     try {
-      await workbook.xlsx.load(arrayBuffer);
+      sheets = await parseExcelInWorker(arrayBuffer);
     } catch (err) {
       throw new Error(
         `«${file.name}»: не удалось прочитать файл как .xlsx (${(err as Error).message}).`,
       );
     }
 
-    const worksheet = workbook.worksheets[2]; // Третий лист
+    const worksheet = sheets[2]; // Третий лист
     if (!worksheet) {
       throw new Error(
-        `«${file.name}»: в файле ${workbook.worksheets.length} лист(а), а данные по рабочим местам ожидаются на третьем листе.`,
+        `«${file.name}»: в файле ${sheets.length} лист(а), а данные по рабочим местам ожидаются на третьем листе.`,
       );
     }
+
+    const columnIndexes = requiredColumns.map(
+      (key) => [key, Number(key.replace("Column ", "")) - 1] as const,
+    );
     const jsonData: any[] = [];
-
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return; // Пропускаем заголовок
-
+    // Строка 1 — заголовок, пропускаем.
+    for (let r = 1; r < worksheet.rows.length; r++) {
+      const row = worksheet.rows[r];
+      if (!row) continue;
       const rowData: any = {};
-      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        const colKey = `Column ${colNumber}`;
-        if (requiredColumns.includes(colKey)) {
-          // Формулы, даты, форматированный текст и ссылки приходят
-          // объектами — приводим к примитивам, иначе React падает при рендере.
-          rowData[colKey] = normalizeCellValue(cell.value);
-        }
-      });
-
-      // Добавляем строку, только если есть данные
-      if (Object.values(rowData).some((val) => val != null)) {
-        jsonData.push(rowData);
+      let hasData = false;
+      for (const [key, c] of columnIndexes) {
+        const value = row[c] ?? null;
+        rowData[key] = value;
+        if (value !== null) hasData = true;
       }
-    });
+      if (hasData) jsonData.push(rowData);
+    }
 
+    // Последняя строка листа — итоговая.
     if (jsonData.length > 0) {
       jsonData.pop();
     }
 
-    return filterColumns(jsonData);
+    return jsonData;
   };
 
   const compareData = (oldData: any[], newData: any[]) => {
@@ -234,8 +225,10 @@ export default function Page() {
 
     setLoading(true);
     try {
-      const oldData = await readExcel(firstFile);
-      const newData = await readExcel(secondFile);
+      const [oldData, newData] = await Promise.all([
+        readExcel(firstFile),
+        readExcel(secondFile),
+      ]);
       const differences = compareData(oldData, newData);
       setDiffData(differences);
     } catch (error) {
@@ -258,7 +251,7 @@ export default function Page() {
   };
 
   // === Подготовка строк с мета-информацией ===
-  const allRows = diffData.flatMap((diff) => {
+  const allRows = useMemo(() => diffData.flatMap((diff) => {
     const rows = [];
 
     if (diff.type === "changed") {
@@ -308,65 +301,80 @@ export default function Page() {
     }
 
     return rows;
-  });
+  }), [diffData]);
+
+  // Парная строка «БЫЛО» для каждого РМ: раньше её искали перебором
+  // allRows.find(...) в каждой ячейке, и на тысячах строк это было O(n²).
+  const oldByRm = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const r of allRows) if (r.type === "old") m.set(r.rm, r);
+    return m;
+  }, [allRows]);
 
   // === Уникальные значения для фильтров ===
-  const uniqueAddresses = Array.from(
-    new Set(allRows.map((r) => r.data["Column 4"]).filter(Boolean)),
-  ).sort();
+  const { uniqueAddresses, uniqueFloors, uniqueCities, uniqueQuantities } =
+    useMemo(() => {
+      const uniqueAddresses = Array.from(
+        new Set(allRows.map((r) => r.data["Column 4"]).filter(Boolean)),
+      ).sort();
 
-  const uniqueFloors = Array.from(
-    new Set(allRows.map((r) => r.data["Column 13"]).filter(Boolean)),
-  ).sort();
+      const uniqueFloors = Array.from(
+        new Set(allRows.map((r) => r.data["Column 13"]).filter(Boolean)),
+      ).sort();
 
-  const uniqueCities = Array.from(
-    new Set(allRows.map((r) => r.city).filter(Boolean)),
-  ).sort();
+      const uniqueCities = Array.from(
+        new Set(allRows.map((r) => r.city).filter(Boolean)),
+      ).sort();
 
-  const uniqueQuantities = Array.from(
-    new Set(
-      allRows
-        .map((r) => String(r.quantity))
-        .filter((q) => q !== "null" && q !== "undefined" && q !== ""),
-    ),
-  ).sort((a, b) => Number(a) - Number(b));
+      const uniqueQuantities = Array.from(
+        new Set(
+          allRows
+            .map((r) => String(r.quantity))
+            .filter((q) => q !== "null" && q !== "undefined" && q !== ""),
+        ),
+      ).sort((a, b) => Number(a) - Number(b));
+      return { uniqueAddresses, uniqueFloors, uniqueCities, uniqueQuantities };
+    }, [allRows]);
 
-  // Собираем все типы изменений (названия полей)
-  const uniqueChangeTypes: string[] = [];
+  const uniqueChangeTypes = useMemo(() => {
+    // Собираем все типы изменений (названия полей)
+    const uniqueChangeTypes: string[] = [];
 
-  // Добавляем типы из изменённых строк
-  diffData.forEach((diff) => {
-    if (diff.type === "changed") {
-      const oldData = diff.old;
-      const newData = diff.new;
-      const changedFields = requiredColumns.filter(
-        (key) => JSON.stringify(oldData[key]) !== JSON.stringify(newData[key]),
-      );
-      changedFields.forEach((key) => {
-        const label = columnLabels[key];
-        if (!uniqueChangeTypes.includes(label)) {
-          uniqueChangeTypes.push(label);
-        }
-      });
-    }
-  });
+    // Добавляем типы из изменённых строк
+    diffData.forEach((diff) => {
+      if (diff.type === "changed") {
+        const oldData = diff.old;
+        const newData = diff.new;
+        const changedFields = requiredColumns.filter(
+          (key) => JSON.stringify(oldData[key]) !== JSON.stringify(newData[key]),
+        );
+        changedFields.forEach((key) => {
+          const label = columnLabels[key];
+          if (!uniqueChangeTypes.includes(label)) {
+            uniqueChangeTypes.push(label);
+          }
+        });
+      }
+    });
 
-  // Добавляем специальные типы
-  ["Новая запись", "Удалена"].forEach((t) => {
-    if (!uniqueChangeTypes.includes(t)) {
-      uniqueChangeTypes.push(t);
-    }
-  });
+    // Добавляем специальные типы
+    ["Новая запись", "Удалена"].forEach((t) => {
+      if (!uniqueChangeTypes.includes(t)) {
+        uniqueChangeTypes.push(t);
+      }
+    });
 
-  // Сортировка: "Признак" — первым
-  uniqueChangeTypes.sort((a, b) => {
-    if (a === "Признак") return -1;
-    if (b === "Признак") return 1;
-    return a.localeCompare(b);
-  });
+    // Сортировка: "Признак" — первым
+    uniqueChangeTypes.sort((a, b) => {
+      if (a === "Признак") return -1;
+      if (b === "Признак") return 1;
+      return a.localeCompare(b);
+    });
+    return uniqueChangeTypes;
+  }, [diffData]);
 
   // === Фильтрация ===
-  const filteredRows = allRows.filter((row) => {
+  const filteredRows = useMemo(() => allRows.filter((row) => {
     const { data, type, city, quantity, source } = row;
 
     // Определяем отображаемый статус для фильтрации
@@ -408,7 +416,7 @@ export default function Page() {
         matchesChangeType = filters.changeType.has("Удалена");
       } else if (type === "new") {
         // Это "СТАЛО" — ищем изменения
-        const oldRow = allRows.find((r) => r.type === "old" && r.rm === row.rm);
+        const oldRow = oldByRm.get(row.rm);
         if (oldRow) {
           const changedFields = requiredColumns.filter((key) => {
             return (
@@ -430,7 +438,7 @@ export default function Page() {
     if (filters.toReserve) {
       let matches = false;
       if (type === "new" && source !== "new" && source !== "deleted") {
-        const oldRow = allRows.find((r) => r.type === "old" && r.rm === row.rm);
+        const oldRow = oldByRm.get(row.rm);
         if (oldRow) {
           const oldVal = oldRow.data["Column 39"];
           const newVal = row.data["Column 39"];
@@ -451,7 +459,7 @@ export default function Page() {
     if (filters.toPartner) {
       let matches = false;
       if (type === "new" && source !== "new" && source !== "deleted") {
-        const oldRow = allRows.find((r) => r.type === "old" && r.rm === row.rm);
+        const oldRow = oldByRm.get(row.rm);
         if (oldRow) {
           const oldVal = oldRow.data["Column 39"];
           const newVal = row.data["Column 39"];
@@ -475,7 +483,25 @@ export default function Page() {
     }
 
     return true;
-  });
+  }), [allRows, oldByRm, filters]);
+
+  // === Постраничный вывод ===
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filteredRows]);
+
+  const visibleRows = useMemo(() => {
+    let end = Math.min(visibleCount, filteredRows.length);
+    // Не разрываем пару «БЫЛО» + «СТАЛО» на границе страницы.
+    const last = filteredRows[end - 1];
+    const next = filteredRows[end];
+    if (last?.type === "old" && next?.type === "new" && next.rm === last.rm) {
+      end++;
+    }
+    return filteredRows.slice(0, end);
+  }, [filteredRows, visibleCount]);
+  const hiddenCount = filteredRows.length - visibleRows.length;
 
   // Проверяем, активен ли фильтр по изменениям
   const isChangeFilterActive =
@@ -568,9 +594,7 @@ export default function Page() {
           if (row.source === "new") return "Новая запись";
           if (row.source === "deleted") return "Запись удалена";
           if (row.type === "new") {
-            const oldRow = allRows.find(
-              (r) => r.type === "old" && r.rm === row.rm,
-            );
+            const oldRow = oldByRm.get(row.rm);
             if (!oldRow) return "Изменено";
             const changedFields = requiredColumns.filter(
               (key) =>
@@ -1202,7 +1226,7 @@ export default function Page() {
                       </td>
                     </tr>
                   ) : (
-                    filteredRows.map((row, idx) => {
+                    visibleRows.map((row, idx) => {
                       const nextRow = filteredRows[idx + 1];
                       const isPartOfChange =
                         row.type === "old" &&
@@ -1286,9 +1310,7 @@ export default function Page() {
                                   }
                                 } else if (row.type === "new") {
                                   // Это "СТАЛО" — ищем парную "БЫЛО"
-                                  const oldRow = allRows.find(
-                                    (r) => r.type === "old" && r.rm === row.rm,
-                                  );
+                                  const oldRow = oldByRm.get(row.rm);
                                   if (oldRow) {
                                     const oldVal = oldRow.data["Column 39"];
                                     const newVal = row.data["Column 39"];
@@ -1349,7 +1371,10 @@ export default function Page() {
                                 row.type === "new" &&
                                 col !== "Status" &&
                                 col !== "ChangeType";
-                              const oldValue = allRows[idx - 1]?.data[col];
+                              // Сравниваем с парной строкой «БЫЛО» того же РМ
+                              // (раньше брали соседнюю строку allRows[idx - 1],
+                              // что при включённых фильтрах давало чужую строку).
+                              const oldValue = oldByRm.get(row.rm)?.data[col];
                               const newValue = row.data[col];
                               const fieldChanged =
                                 isChanged &&
@@ -1375,7 +1400,7 @@ export default function Page() {
                                 ) {
                                   // skip
                                 } else {
-                                  const oldRow = allRows[idx - 1];
+                                  const oldRow = oldByRm.get(row.rm);
                                   if (
                                     oldRow &&
                                     oldRow.type === "old" &&
@@ -1491,6 +1516,26 @@ export default function Page() {
                   )}
                 </tbody>
               </table>
+              {hiddenCount > 0 && (
+                <div className="workplace-show-more">
+                  <span>
+                    Показано {visibleRows.length} из {filteredRows.length} строк
+                  </span>
+                  <button
+                    className="workplace-show-more-btn"
+                    onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+                  >
+                    Показать ещё {Math.min(PAGE_SIZE, hiddenCount)}
+                  </button>
+                  <button
+                    className="workplace-show-more-btn workplace-show-more-btn--ghost"
+                    onClick={() => setVisibleCount(filteredRows.length)}
+                    title="На больших файлах может работать медленно"
+                  >
+                    Показать все
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
