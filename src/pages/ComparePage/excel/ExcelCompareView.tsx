@@ -16,6 +16,7 @@ import {
   type DiffKind,
 } from "./diff";
 import { cellAddress, columnLetter, displayCell } from "./format";
+import { plural, DIFFS } from "../plural";
 import "./ExcelCompareView.css";
 
 // Фиксированные размеры нужны для виртуальной прокрутки: по ним считаем,
@@ -601,9 +602,9 @@ const ExcelCompareView: React.FC<Props> = ({
       {/* ── Сводка и вид ── */}
       <div className="xc-bar">
         <div className="xc-summary">
-          <strong>{fmtN(total)}</strong> различий в{" "}
+          <strong>{fmtN(total)}</strong> {plural(total, DIFFS)} в{" "}
           <strong>{fmtN(changedRows)}</strong>{" "}
-          строках
+          {changedRows % 10 === 1 && changedRows % 100 !== 11 ? "строке" : "строках"}
           {filtersActive && (
             <span className="xc-summary__filtered">
               · показано {fmtN(filtered.length)}
@@ -779,7 +780,7 @@ const ExcelCompareView: React.FC<Props> = ({
                 filtered[activeIndex].r,
                 filtered[activeIndex].c,
               )}`
-            : `${fmtN(filtered.length)} различий`}
+            : `${fmtN(filtered.length)} ${plural(filtered.length, DIFFS)}`}
         </span>
         <span className="xc-legend">
           <span className="xc-legend__item">

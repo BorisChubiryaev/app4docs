@@ -47,6 +47,16 @@ export interface CompareRow {
   rightTokens: InlineToken[];
 }
 
+/** Параметры сравнения: что не считать различием. */
+export interface WordCompareOptions {
+  /** «Договор» и «ДОГОВОР» — одинаково. */
+  ignoreCase?: boolean;
+  /** Номера пунктов в начале абзаца («1.», «2.3», «а)», «•») не сравниваются. */
+  ignoreNumbering?: boolean;
+  /** Знаки препинания и кавычки («» "" — –) не сравниваются. */
+  ignorePunctuation?: boolean;
+}
+
 export interface WordCompareResult {
   rows: CompareRow[];
   changed: number;
@@ -463,6 +473,38 @@ function norm(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+// Номер пункта в начале абзаца: «1.», «1.2.», «1.2.3», «3)», «IV.», «а)», «•».
+const NUMBERING_RE =
+  /^(?:\d+(?:\.\d+)*[.)]?|[IVXLCDM]+[.)]|[a-zа-яё][.)]|[•·▪◦‣–—-])\s+/iu;
+const PUNCT_RE = /[\p{P}«»„“”]+/gu;
+
+// Ключи сравнения зависят от параметров. compareWordModels синхронно
+// выставляет их на время одного сравнения — так не нужно протаскивать
+// параметры через все внутренние функции.
+let textKey: (s: string) => string = norm;
+let tokenKey: (t: string) => string = (t) => t;
+let ignoreNumberingTokens = false;
+
+// Номер пункта как отдельный токен inline-diff («4.», «2.1», «б)»).
+const NUMBER_TOKEN_RE = /^(?:\d+(?:\.\d+)*[.)]?|[IVXLCDM]+[.)]|[a-zа-яё][.)])$/iu;
+
+function makeKeys(o: WordCompareOptions) {
+  const text = (s: string) => {
+    let t = norm(s);
+    if (o.ignoreNumbering) t = t.replace(NUMBERING_RE, "");
+    if (o.ignorePunctuation) t = norm(t.replace(PUNCT_RE, " "));
+    if (o.ignoreCase) t = t.toLowerCase();
+    return t;
+  };
+  const token = (t: string) => {
+    let k = t;
+    if (o.ignorePunctuation) k = k.replace(PUNCT_RE, "");
+    if (o.ignoreCase) k = k.toLowerCase();
+    return k;
+  };
+  return { text, token };
+}
+
 /** Разбивка на токены (слова и пробелы сохраняются как отдельные токены). */
 function tokenize(s: string): string[] {
   return s.split(/(\s+)/).filter((t) => t.length > 0);
@@ -470,7 +512,7 @@ function tokenize(s: string): string[] {
 
 /** Только «словесные» токены (без пробелов) — для оценки схожести. */
 function words(s: string): string[] {
-  return norm(s)
+  return textKey(s)
     .split(" ")
     .filter((t) => t.length > 0);
 }
@@ -517,15 +559,24 @@ export function inlineDiff(
   const tb = tokenize(b);
   const n = ta.length;
   const m = tb.length;
+  const ka = ta.map(tokenKey);
+  const kb = tb.map(tokenKey);
+  // «4. Текст» → «5. Текст»: номер пункта не подсвечиваем как правку.
+  if (
+    ignoreNumberingTokens &&
+    NUMBER_TOKEN_RE.test(ta[0] ?? "") &&
+    NUMBER_TOKEN_RE.test(tb[0] ?? "")
+  ) {
+    ka[0] = "\u0000№";
+    kb[0] = "\u0000№";
+  }
 
   // Полная таблица LCS для восстановления пути.
-  const dp: number[][] = Array.from({ length: n + 1 }, () =>
-    new Array(m + 1).fill(0),
-  );
+  const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
   for (let i = 1; i <= n; i++) {
     for (let j = 1; j <= m; j++) {
       dp[i][j] =
-        ta[i - 1] === tb[j - 1]
+        ka[i - 1] === kb[j - 1]
           ? dp[i - 1][j - 1] + 1
           : Math.max(dp[i - 1][j], dp[i][j - 1]);
     }
@@ -538,7 +589,7 @@ export function inlineDiff(
   const leftRev: InlineToken[] = [];
   const rightRev: InlineToken[] = [];
   while (i > 0 && j > 0) {
-    if (ta[i - 1] === tb[j - 1]) {
+    if (ka[i - 1] === kb[j - 1]) {
       leftRev.push({ text: ta[i - 1], type: "same" });
       rightRev.push({ text: tb[j - 1], type: "same" });
       i--;
@@ -567,15 +618,8 @@ export function inlineDiff(
 // ─── Сравнение блоков верхнего уровня ───────────────────────────────
 
 function blockKey(b: DocBlock): string {
-  if (b.kind === "paragraph") return "P:" + norm(b.text);
-  return (
-    "T:" +
-    b.rows.map((r) => r.map((c) => norm(c)).join("")).join("")
-  );
-}
-
-function blocksEqual(a: DocBlock, b: DocBlock): boolean {
-  return blockKey(a) === blockKey(b);
+  if (b.kind === "paragraph") return "P:" + textKey(b.text);
+  return "T:" + b.rows.map(rowSignature).join("\u0002");
 }
 
 type Op =
@@ -583,41 +627,76 @@ type Op =
   | { type: "del"; a: DocBlock }
   | { type: "ins"; b: DocBlock };
 
-/** LCS по блокам (равенство — точное), восстановление операций по порядку. */
-function diffBlocks(a: DocBlock[], b: DocBlock[]): Op[] {
-  const n = a.length;
-  const m = b.length;
-  const dp: number[][] = Array.from({ length: n + 1 }, () =>
-    new Array(m + 1).fill(0),
-  );
-  for (let i = 1; i <= n; i++) {
-    for (let j = 1; j <= m; j++) {
-      dp[i][j] = blocksEqual(a[i - 1], b[j - 1])
-        ? dp[i - 1][j - 1] + 1
-        : Math.max(dp[i - 1][j], dp[i][j - 1]);
+type KeyOp = { type: "equal" | "del" | "ins"; i: number; j: number };
+
+/**
+ * LCS по ключам (равенство — точное), восстановление операций по порядку.
+ * Общие начало и конец отрезаются заранее: обычно правки — в середине
+ * документа, и матрица LCS строится только по изменённому участку.
+ */
+function diffKeys(ka: string[], kb: string[], preferDel: boolean): KeyOp[] {
+  const ops: KeyOp[] = [];
+  let start = 0;
+  while (start < ka.length && start < kb.length && ka[start] === kb[start]) {
+    ops.push({ type: "equal", i: start, j: start });
+    start++;
+  }
+  let endA = ka.length;
+  let endB = kb.length;
+  while (endA > start && endB > start && ka[endA - 1] === kb[endB - 1]) {
+    endA--;
+    endB--;
+  }
+
+  const n = endA - start;
+  const m = endB - start;
+  // dp[i][j] — LCS суффиксов (для восстановления в прямом порядке).
+  const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] =
+        ka[start + i] === kb[start + j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
     }
   }
-  const ops: Op[] = [];
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
-    if (blocksEqual(a[i], b[j])) {
-      ops.push({ type: "equal", a: a[i], b: b[j] });
+    const down = dp[i + 1][j];
+    const right = dp[i][j + 1];
+    if (ka[start + i] === kb[start + j]) {
+      ops.push({ type: "equal", i: start + i, j: start + j });
       i++;
       j++;
-    } else if (dp[i + 1][j] > dp[i][j + 1]) {
-      ops.push({ type: "del", a: a[i] });
+    } else if (down > right || (preferDel && down === right)) {
+      ops.push({ type: "del", i: start + i, j: -1 });
       i++;
     } else {
-      // На равенстве предпочитаем вставку — так идентичные блоки после
-      // добавленного контента остаются выровненными, а не дробятся.
-      ops.push({ type: "ins", b: b[j] });
+      ops.push({ type: "ins", i: -1, j: start + j });
       j++;
     }
   }
-  while (i < n) ops.push({ type: "del", a: a[i++] });
-  while (j < m) ops.push({ type: "ins", b: b[j++] });
+  while (i < n) ops.push({ type: "del", i: start + i++, j: -1 });
+  while (j < m) ops.push({ type: "ins", i: -1, j: start + j++ });
+
+  for (let k = 0; k < ka.length - endA; k++) {
+    ops.push({ type: "equal", i: endA + k, j: endB + k });
+  }
   return ops;
+}
+
+function diffBlocks(a: DocBlock[], b: DocBlock[]): Op[] {
+  // На равенстве предпочитаем вставку — так идентичные блоки после
+  // добавленного контента остаются выровненными, а не дробятся.
+  return diffKeys(a.map(blockKey), b.map(blockKey), false).map(
+    (op): Op =>
+      op.type === "equal"
+        ? { type: "equal", a: a[op.i], b: b[op.j] }
+        : op.type === "del"
+          ? { type: "del", a: a[op.i] }
+          : { type: "ins", b: b[op.j] },
+  );
 }
 
 const SIM_THRESHOLD = 0.4;
@@ -639,7 +718,7 @@ function blockSimilarity(a: DocBlock, b: DocBlock): number {
 // ─── Сравнение таблиц (строки/ячейки) ───────────────────────────────
 
 function rowSignature(row: string[]): string {
-  return row.map((c) => norm(c)).join("");
+  return row.map((c) => textKey(c)).join("\u0001");
 }
 
 interface TableRowOp {
@@ -656,51 +735,17 @@ function diffTable(
 ): { rows: CompareRow[]; changed: number; added: number; removed: number } {
   const a = t1.rows;
   const b = t2.rows;
-  const n = a.length;
-  const m = b.length;
 
   // LCS по строкам (равенство — по сигнатуре).
-  const dp: number[][] = Array.from({ length: n + 1 }, () =>
-    new Array(m + 1).fill(0),
-  );
-  for (let i = 1; i <= n; i++) {
-    for (let j = 1; j <= m; j++) {
-      dp[i][j] =
-        rowSignature(a[i - 1]) === rowSignature(b[j - 1])
-          ? dp[i - 1][j - 1] + 1
-          : Math.max(dp[i - 1][j], dp[i][j - 1]);
-    }
-  }
-
-  // Восстанавливаем последовательность операций по строкам.
-  const ops: TableRowOp[] = [];
-  let i = 0;
-  let j = 0;
-  let visualRow = 0;
-  while (i < n && j < m) {
-    if (rowSignature(a[i]) === rowSignature(b[j])) {
-      visualRow++;
-      ops.push({ type: "equal", row: a[i], index: visualRow });
-      i++;
-      j++;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      visualRow++;
-      ops.push({ type: "del", row: a[i], index: visualRow });
-      i++;
-    } else {
-      visualRow++;
-      ops.push({ type: "ins", row: b[j], index: visualRow });
-      j++;
-    }
-  }
-  while (i < n) {
-    visualRow++;
-    ops.push({ type: "del", row: a[i++], index: visualRow });
-  }
-  while (j < m) {
-    visualRow++;
-    ops.push({ type: "ins", row: b[j++], index: visualRow });
-  }
+  const ops: TableRowOp[] = diffKeys(
+    a.map(rowSignature),
+    b.map(rowSignature),
+    true,
+  ).map((op, k) => ({
+    type: op.type,
+    row: op.type === "ins" ? b[op.j] : a[op.i],
+    index: k + 1,
+  }));
 
   const rows: CompareRow[] = [];
   let changed = 0;
@@ -713,7 +758,7 @@ function diffTable(
     for (let c = 0; c < cols; c++) {
       const lc = left[c] ?? "";
       const rc = right[c] ?? "";
-      if (norm(lc) === norm(rc)) continue;
+      if (textKey(lc) === textKey(rc)) continue;
       changed++;
       const d = inlineDiff(lc, rc);
       rows.push({
@@ -809,7 +854,22 @@ function diffTable(
 export function compareWordModels(
   m1: WordDocModel,
   m2: WordDocModel,
+  options: WordCompareOptions = {},
 ): WordCompareResult {
+  const keys = makeKeys(options);
+  textKey = keys.text;
+  tokenKey = keys.token;
+  ignoreNumberingTokens = !!options.ignoreNumbering;
+  try {
+    return compareBlocks(m1, m2);
+  } finally {
+    textKey = norm;
+    tokenKey = (t) => t;
+    ignoreNumberingTokens = false;
+  }
+}
+
+function compareBlocks(m1: WordDocModel, m2: WordDocModel): WordCompareResult {
   const ops = diffBlocks(m1.blocks, m2.blocks);
 
   const rows: CompareRow[] = [];
@@ -826,7 +886,9 @@ export function compareWordModels(
   let delBuf: DocBlock[] = [];
   let insBuf: DocBlock[] = [];
 
-  const emitParagraphIdentical = (text: string) => {
+  // Тексты могут отличаться, если равенство дали параметры сравнения
+  // (регистр, нумерация, пунктуация) — показываем каждый как есть.
+  const emitParagraphIdentical = (left: string, right: string) => {
     paraNo++;
     identical++;
     rows.push({
@@ -834,10 +896,10 @@ export function compareWordModels(
       kind: "paragraph",
       status: "identical",
       location: `Абзац ${paraNo}`,
-      leftText: text,
-      rightText: text,
-      leftTokens: [{ text, type: "same" }],
-      rightTokens: [{ text, type: "same" }],
+      leftText: left,
+      rightText: right,
+      leftTokens: [{ text: left, type: "same" }],
+      rightTokens: [{ text: right, type: "same" }],
     });
   };
 
@@ -982,8 +1044,8 @@ export function compareWordModels(
         if (d.kind === "paragraph" && partner.kind === "paragraph") {
           // LCS-выравнивание иногда прогоняет идентичный блок через
           // буферы del/ins — не помечаем такой абзац как изменённый.
-          if (norm(d.text) === norm(partner.text)) {
-            emitParagraphIdentical(partner.text);
+          if (textKey(d.text) === textKey(partner.text)) {
+            emitParagraphIdentical(d.text, partner.text);
           } else {
             emitParagraphModified(d.text, partner.text);
           }
@@ -1006,8 +1068,11 @@ export function compareWordModels(
   for (const op of ops) {
     if (op.type === "equal") {
       flush();
-      if (op.a.kind === "paragraph") emitParagraphIdentical(op.a.text);
-      else emitTableIdentical(op.a as DocTable);
+      if (op.a.kind === "paragraph" && op.b.kind === "paragraph") {
+        emitParagraphIdentical(op.a.text, op.b.text);
+      } else {
+        emitTableIdentical(op.a as DocTable);
+      }
     } else if (op.type === "del") {
       delBuf.push(op.a);
     } else {

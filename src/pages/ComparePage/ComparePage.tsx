@@ -1,14 +1,8 @@
 import React, { useState, useCallback, useEffect } from "react";
 import InstructionsModalShell from "../../components/InstructionsModal";
 import PageShell from "../../components/PageShell";
-import {
-  parseDocx,
-  compareWordModels,
-  type WordDocModel,
-  type WordCompareResult,
-  type CompareRow,
-  type InlineToken,
-} from "./wordCompare";
+import { parseDocx, type WordDocModel } from "./wordCompare";
+import WordCompareView from "./word/WordCompareView";
 
 import { isLegacyOfficeFile, LEGACY_XLS_MESSAGE } from "../../utils/excelCell";
 import { parseExcelInWorker } from "../../utils/parseExcelInWorker";
@@ -70,25 +64,22 @@ const ComparePage: React.FC = () => {
     a: ExcelSheet;
     b: ExcelSheet;
   } | null>(null);
-  const [wordResult, setWordResult] = useState<WordCompareResult | null>(null);
+  const [wordPair, setWordPair] = useState<{
+    a: WordDocModel;
+    b: WordDocModel;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [comparisonPerformed, setComparisonPerformed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"table" | "sideBySide" | "wordView">(
-    "sideBySide",
-  );
   const [fullScreenMode, setFullScreenMode] = useState<boolean>(false);
   const [showInstructions, setShowInstructions] = useState<boolean>(false);
   const [fileType1, setFileType1] = useState<"excel" | "word" | null>(null);
   const [fileType2, setFileType2] = useState<"excel" | "word" | null>(null);
-  const [activeWordTab, setActiveWordTab] = useState<
-    "all" | "differences" | "identical"
-  >("all");
 
   // Результат сравнения Excel относится к конкретной паре листов —
   // при смене файла или листа он устаревает.
   useEffect(() => {
     setExcelPair(null);
+    setWordPair(null);
   }, [sheets1, sheets2, selectedSheet1, selectedSheet2]);
 
   const [dragOverFirst, setDragOverFirst] = useState(false);
@@ -358,17 +349,7 @@ const ComparePage: React.FC = () => {
     }
   };
 
-  // Структурное сравнение Word через новый движок (wordCompare.ts).
-  const compareWordDocuments = (
-    wordData1: WordDocumentData,
-    wordData2: WordDocumentData,
-  ): WordCompareResult => {
-    return compareWordModels(wordData1.model, wordData2.model);
-  };
-
   const compareFiles = () => {
-    setComparisonPerformed(true);
-    setActiveWordTab("all");
 
     if (sheets1.length === 0 || sheets2.length === 0) {
       setError("Пожалуйста, загрузите оба файла.");
@@ -395,19 +376,15 @@ const ComparePage: React.FC = () => {
       sheetData1.wordData &&
       sheetData2.wordData
     ) {
-      const result = compareWordDocuments(
-        sheetData1.wordData,
-        sheetData2.wordData,
-      );
-      setWordResult(result);
+      // Само сравнение и фильтры — в WordCompareView.
+      setWordPair({ a: sheetData1.wordData.model, b: sheetData2.wordData.model });
       setExcelPair(null);
-      setViewMode("wordView");
       return;
     }
 
     // Excel: само сравнение и фильтры — в ExcelCompareView.
     if (sheetData1.excel && sheetData2.excel) {
-      setWordResult(null);
+      setWordPair(null);
       setExcelPair({ a: sheetData1.excel, b: sheetData2.excel });
     }
   };
@@ -420,14 +397,11 @@ const ComparePage: React.FC = () => {
     setSelectedSheet1(0);
     setSelectedSheet2(0);
     setExcelPair(null);
-    setWordResult(null);
+    setWordPair(null);
     setError(null);
-    setComparisonPerformed(false);
     setFullScreenMode(false);
     setFileType1(null);
     setFileType2(null);
-    setViewMode("sideBySide");
-    setActiveWordTab("all");
   };
 
   // Отображение Word документа
@@ -531,166 +505,6 @@ const ComparePage: React.FC = () => {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Рендер пословного inline-diff.
-  const renderTokens = (tokens: InlineToken[]) => {
-    if (!tokens || tokens.length === 0) {
-      return <span className="wd-empty">（пусто）</span>;
-    }
-    return (
-      <>
-        {tokens.map((t, i) => (
-          <span key={i} className={`wd-tok wd-tok--${t.type}`}>
-            {t.text}
-          </span>
-        ))}
-      </>
-    );
-  };
-
-  const statusMeta = (status: CompareRow["status"]) => {
-    switch (status) {
-      case "added":
-        return { label: "➕ Добавлено", cls: "added" };
-      case "removed":
-        return { label: "🗑️ Удалено", cls: "removed" };
-      case "modified":
-        return { label: "✏️ Изменено", cls: "modified" };
-      default:
-        return { label: "✅ Идентично", cls: "identical" };
-    }
-  };
-
-  const kindIcon = (kind: CompareRow["kind"]) => {
-    if (kind === "paragraph") return "📝";
-    if (kind === "table") return "📊";
-    if (kind === "table-row") return "▦";
-    return "▣"; // table-cell
-  };
-
-  // Отображение сравнения Word документов
-  const renderWordComparison = () => {
-    if (!wordResult) return null;
-
-    const { rows, changed, added, removed, identical } = wordResult;
-    const totalDiff = changed + added + removed;
-
-    const differentRows = rows.filter((r) => r.status !== "identical");
-    const identicalRows = rows.filter((r) => r.status === "identical");
-
-    const filteredRows =
-      activeWordTab === "differences"
-        ? differentRows
-        : activeWordTab === "identical"
-          ? identicalRows
-          : rows;
-
-    return (
-      <div className="word-comparison-view">
-        <div className="word-comparison-header">
-          <h2>Сравнение Word-документов</h2>
-          <div className="comparison-stats">
-            <span
-              className={`stat-badge ${totalDiff > 0 ? "has-differences" : "no-differences"}`}
-            >
-              {totalDiff > 0
-                ? `🔍 Различий: ${totalDiff}`
-                : "✅ Различий не найдено"}
-            </span>
-            {changed > 0 && (
-              <span className="stat-badge stat-badge--modified">
-                ✏️ Изменено: {changed}
-              </span>
-            )}
-            {added > 0 && (
-              <span className="stat-badge stat-badge--added">
-                ➕ Добавлено: {added}
-              </span>
-            )}
-            {removed > 0 && (
-              <span className="stat-badge stat-badge--removed">
-                🗑️ Удалено: {removed}
-              </span>
-            )}
-            <span className="stat-badge">✅ Идентично: {identical}</span>
-          </div>
-        </div>
-
-        <div className="ds-tabs ds-tabs--fill">
-          <button
-            className={`ds-tab ${activeWordTab === "all" ? "ds-tab--active" : ""}`}
-            onClick={() => setActiveWordTab("all")}
-          >
-            Все элементы ({rows.length})
-          </button>
-          <button
-            className={`ds-tab ${activeWordTab === "differences" ? "ds-tab--active" : ""}`}
-            onClick={() => setActiveWordTab("differences")}
-          >
-            Различия ({differentRows.length})
-          </button>
-          <button
-            className={`ds-tab ${activeWordTab === "identical" ? "ds-tab--active" : ""}`}
-            onClick={() => setActiveWordTab("identical")}
-          >
-            Идентичные ({identicalRows.length})
-          </button>
-        </div>
-
-        <div className="word-comparison-content">
-          <div className="wd-table">
-            <div className="wd-row wd-row--head">
-              <div className="wd-cell wd-cell--loc">Расположение</div>
-              <div className="wd-cell">Файл 1</div>
-              <div className="wd-cell">Файл 2</div>
-              <div className="wd-cell wd-cell--status">Статус</div>
-            </div>
-
-            {filteredRows.length > 0 ? (
-              filteredRows.map((row) => {
-                const meta = statusMeta(row.status);
-                return (
-                  <div key={row.id} className={`wd-row wd-row--${meta.cls}`}>
-                    <div className="wd-cell wd-cell--loc">
-                      <span className="wd-kind">{kindIcon(row.kind)}</span>
-                      {row.location}
-                    </div>
-                    <div className="wd-cell">
-                      {row.status === "identical" ? (
-                        <span className="wd-plain">{row.leftText}</span>
-                      ) : (
-                        renderTokens(row.leftTokens)
-                      )}
-                    </div>
-                    <div className="wd-cell">
-                      {row.status === "identical" ? (
-                        <span className="wd-plain">{row.rightText}</span>
-                      ) : (
-                        renderTokens(row.rightTokens)
-                      )}
-                    </div>
-                    <div className="wd-cell wd-cell--status">
-                      <span className={`wd-status wd-status--${meta.cls}`}>
-                        {meta.label}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <div className="no-items-message">
-                {activeWordTab === "differences"
-                  ? "Различий не найдено"
-                  : activeWordTab === "identical"
-                    ? "Нет идентичных элементов"
-                    : "Нет элементов для отображения"}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -806,8 +620,18 @@ const ComparePage: React.FC = () => {
             документа
           </li>
           <li>
-            <strong>Фильтрация:</strong> Просмотр только различий или только
-            идентичных элементов
+            <strong>Фильтры:</strong> статус (изменено, добавлено, удалено,
+            без изменений), только абзацы или только таблицы, поиск по тексту
+            и месту («Абзац 12»)
+          </li>
+          <li>
+            <strong>Параметры сравнения:</strong> без учёта регистра,
+            игнорировать нумерацию пунктов (после вставки пункта остальные не
+            считаются изменёнными) и пунктуацию
+          </li>
+          <li>
+            <strong>Навигация:</strong> кнопки «Предыдущее / Следующее»
+            переходят между различиями
           </li>
         </ul>
       </div>
@@ -1095,46 +919,19 @@ const ComparePage: React.FC = () => {
           )}
 
           {/* Word сравнение */}
-          {fileType1 === "word" &&
-            fileType2 === "word" &&
-            wordResult !== null && (
-              <>
-                <div className="view-mode-toggle">
-                  <button
-                    onClick={() => setViewMode("wordView")}
-                    className={`view-mode-btn ${
-                      viewMode === "wordView" ? "active" : ""
-                    }`}
-                  >
-                    📝 Режим Word
-                  </button>
-                  <button
-                    onClick={() => setFullScreenMode(true)}
-                    className="btn btn-fullscreen-small"
-                  >
-                    📺 Полноэкранный режим
-                  </button>
-                </div>
-
-                {viewMode === "wordView" && renderWordComparison()}
-              </>
-            )}
-
-          {comparisonPerformed &&
-            fileType1 === "word" &&
-            fileType2 === "word" &&
-            wordResult !== null &&
-            wordResult.changed + wordResult.added + wordResult.removed === 0 &&
-            !loading &&
-            file1 &&
-            file2 && (
-              <div className="alert alert-success">
-                <div className="alert-icon">✅</div>
-                <div className="alert-content">
-                  <strong>Файлы идентичны</strong> во всех элементах
-                </div>
+          {wordPair && (
+            <>
+              <div className="view-mode-toggle">
+                <button
+                  onClick={() => setFullScreenMode(true)}
+                  className="btn btn-fullscreen-small"
+                >
+                  📺 Просмотр документов целиком
+                </button>
               </div>
-            )}
+              <WordCompareView model1={wordPair.a} model2={wordPair.b} />
+            </>
+          )}
       </PageShell>
     </>
   );
