@@ -71,6 +71,8 @@ const PdfToPptx: React.FC = () => {
   const [showHelp, setShowHelp] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [skipped, setSkipped] = useState<string[]>([]);
+  // Подсказку про первую загрузку показываем, только если подготовка затянулась.
+  const [slowStart, setSlowStart] = useState(false);
 
   const workerRef = useRef<Worker | null>(null);
   const nextId = useRef(1);
@@ -161,6 +163,15 @@ const PdfToPptx: React.FC = () => {
       );
     });
   }, [engine.status, jobs]);
+
+  useEffect(() => {
+    if (engine.status !== "loading") {
+      setSlowStart(false);
+      return;
+    }
+    const t = setTimeout(() => setSlowStart(true), 4000);
+    return () => clearTimeout(t);
+  }, [engine.status]);
 
   // Тикающий таймер для «прошло N с».
   const converting = jobs.some((j) => j.status === "converting");
@@ -255,53 +266,40 @@ const PdfToPptx: React.FC = () => {
       onShowInstructions={() => setShowHelp(true)}
       width={960}
     >
-      {/* ── Состояние движка ── */}
-      <div className={`p2p-engine p2p-engine--${engine.status}`}>
-        {engine.status === "loading" && (
-          <>
-            <div className="p2p-engine__row">
-              <span className="p2p-spinner" aria-hidden="true" />
-              <span>{engine.text}</span>
-              {engine.steps > 1 && (
-                <span className="p2p-engine__step">
-                  {engine.step} / {engine.steps}
-                </span>
-              )}
-            </div>
-            <div className="p2p-bar">
-              <div
-                className="p2p-bar__fill"
-                style={{ width: `${(engine.step / Math.max(1, engine.steps)) * 100}%` }}
-              />
-            </div>
-            <p className="p2p-muted">
-              Первый запуск скачивает движок (~33 МБ), дальше он берётся из
-              кэша браузера. Файлы можно добавлять уже сейчас.
-            </p>
-          </>
-        )}
-        {engine.status === "ready" && (
+      {/* ── Состояние движка: тонкая строка, пока он готовится; после — скрыта ── */}
+      {engine.status === "loading" && (
+        <div className="p2p-engine" role="status">
           <div className="p2p-engine__row">
-            <span aria-hidden="true">✅</span>
-            <span>
-              Движок готов
-              <span className="p2p-muted"> · запуск {fmtSec(engine.ms)}</span>
-            </span>
+            <span className="p2p-spinner" aria-hidden="true" />
+            <span>{engine.text}</span>
           </div>
-        )}
-        {engine.status === "error" && (
-          <>
-            <div className="p2p-engine__row">
-              <span aria-hidden="true">⚠️</span>
-              <strong>{engine.message}</strong>
-              <button className="btn-secondary p2p-small" onClick={restartEngine}>
-                Повторить
-              </button>
-            </div>
-            {engine.details && <pre className="p2p-details">{engine.details}</pre>}
-          </>
-        )}
-      </div>
+          <div className="p2p-bar">
+            <div
+              className="p2p-bar__fill"
+              style={{ width: `${(engine.step / Math.max(1, engine.steps)) * 100}%` }}
+            />
+          </div>
+          {slowStart && (
+            <p className="p2p-muted">
+              Первый запуск на этом компьютере: движок (~33 МБ) копируется с
+              сервера приложения в браузер, дальше запуск быстрее. Файлы можно
+              добавлять уже сейчас.
+            </p>
+          )}
+        </div>
+      )}
+      {engine.status === "error" && (
+        <div className="p2p-engine p2p-engine--error" role="alert">
+          <div className="p2p-engine__row">
+            <span aria-hidden="true">⚠️</span>
+            <strong>{engine.message}</strong>
+            <button className="btn-secondary p2p-small" onClick={restartEngine}>
+              Повторить
+            </button>
+          </div>
+          {engine.details && <pre className="p2p-details">{engine.details}</pre>}
+        </div>
+      )}
 
       {/* ── Режим ── */}
       <div className="p2p-modes" role="radiogroup" aria-label="Режим конвертации">
@@ -488,7 +486,10 @@ const PdfToPptx: React.FC = () => {
         <div className="instructions-section">
           <h3>Скорость</h3>
           <ul>
-            <li>Первый запуск скачивает движок (~33 МБ) — потом из кэша.</li>
+            <li>
+              Интернет не нужен: движок (~33 МБ) входит в приложение и один
+              раз копируется в браузер — обычно в фоне, пока открыта главная.
+            </li>
             <li>
               Текстовая страница — около полсекунды, сложный слайд с
               графикой — несколько секунд.

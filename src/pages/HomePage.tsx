@@ -7,6 +7,7 @@ import {
 import DownloadSuccessModal from "../components/DownloadSuccessModal";
 import ThemeToggle from "../components/ThemeToggle";
 import { Link } from "react-router-dom";
+import { warmUpEngine } from "./PdfToPptx/engineAssets";
 import "./HomePage.css";
 
 // ⬇️ ССЫЛКА НА ОПРОС CSI (удовлетворённость проектом).
@@ -468,7 +469,6 @@ const tools: Tool[] = [
       "Режим «точная копия» для сложных страниц",
       "Работает в браузере — файлы не уходят на сервер",
     ],
-    note: "Первый запуск загружает движок (~33 МБ)",
   },
 ];
 
@@ -1203,6 +1203,21 @@ const HomePage = () => {
     // Анонс нового имени показываем один раз — дальше запоминаем, что видели.
     localStorage.setItem("convertixAnnounced", "true");
     setIsRebrandingOpen(false);
+  }, []);
+
+  // Тихо подкачиваем движок PDF → PowerPoint (~33 МБ) в кэш браузера, когда
+  // страница простаивает: к открытию инструмента он уже на месте. Файлы
+  // берутся с того же сервера, что и приложение; скачиваются один раз.
+  useEffect(() => {
+    const start = () => void warmUpEngine();
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+    };
+    const timer = window.setTimeout(() => {
+      if (w.requestIdleCallback) w.requestIdleCallback(start, { timeout: 10000 });
+      else start();
+    }, 4000);
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Добавьте эффект для обработки URL при загрузке главной страницы:

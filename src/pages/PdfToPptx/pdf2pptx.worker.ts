@@ -7,11 +7,8 @@
 // относительному адресу — работает и на обычном хостинге, и в мэшапе
 // Qlik Sense. Движок загружается один раз и переиспользуется.
 
-import type {
-  WorkerRequest,
-  WorkerResponse,
-  Manifest,
-} from "./pdf2pptx.types";
+import type { WorkerRequest, WorkerResponse } from "./pdf2pptx.types";
+import { dropOldCaches, loadManifest, makeCachedFetch } from "./engineAssets";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -35,12 +32,15 @@ interface PyodideAPI {
 const post = (msg: WorkerResponse, transfer: Transferable[] = []) =>
   self.postMessage(msg, transfer);
 
-// Хостинг (например, Qlik Sense) может отдавать .wasm не как
-// application/wasm — тогда WebAssembly.instantiateStreaming падает, а
-// Pyodide не переходит на запасной путь и зависает. Проставляем тип сами.
+// Все запросы Pyodide идут через self.fetch, поэтому подменяем его:
+// 1) файлы движка берутся из постоянного кэша (см. engineAssets.ts);
+// 2) хостинг (например, Qlik Sense) может отдавать .wasm не как
+//    application/wasm — тогда WebAssembly.instantiateStreaming падает, а
+//    Pyodide не переходит на запасной путь и зависает. Проставляем тип сами.
 const nativeFetch = self.fetch.bind(self);
+let engineFetch: typeof fetch = nativeFetch;
 self.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-  const res = await nativeFetch(input, init);
+  const res = await engineFetch(input, init);
   const url = String(input instanceof Request ? input.url : input);
   if (
     url.split("?")[0].endsWith(".wasm") &&
@@ -61,7 +61,9 @@ const fmtMb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
 
 const init = async (base: string) => {
   const t0 = performance.now();
-  const manifest: Manifest = await (await fetch(base + "manifest.json")).json();
+  const manifest = await loadManifest(base);
+  engineFetch = makeCachedFetch(manifest, base, nativeFetch);
+  dropOldCaches(manifest).catch(() => {});
   const runtime = base + "runtime/";
   const steps = manifest.wheels.length + 2;
 

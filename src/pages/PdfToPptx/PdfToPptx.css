@@ -10,12 +10,16 @@
 .p2p-engine {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px 18px;
-  margin-bottom: 18px;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
+  font-size: 0.9rem;
+}
+.p2p-engine .p2p-bar {
+  height: 3px;
 }
 .p2p-engine p {
   margin: 0;
