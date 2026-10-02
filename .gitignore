@@ -35,3 +35,4 @@ node_modules_gen
 __pycache__/
 *.pyc
 scripts/*.mjs
+!scripts/vendor-pdf2pptx.mjs
