@@ -1,6 +1,7 @@
 // src/components/PdfEditor.tsx
 import React, { useState, useRef, ChangeEvent, useEffect } from "react";
-import { PDFDocument, degrees, rgb } from "pdf-lib";
+import { PDFDocument, degrees, rgb, type PDFPage } from "pdf-lib";
+import { compressPdfImages } from "./compressImages";
 import PageShell from "../../components/PageShell";
 import { PdfEditorInstructions } from "./components/PdfEditorInstructions";
 import PageAnnotator, { type Annotation } from "./components/PageAnnotator";
@@ -92,12 +93,19 @@ const PdfEditor: React.FC = () => {
   // ─── Сжатие ──────────────────────────────────────────────────────
   const [showCompress, setShowCompress] = useState(false);
   const [compressQuality, setCompressQuality] = useState(0.7);
+  // images — пережать только картинки (текст остаётся текстом);
+  // raster — перерисовать страницы целиком в JPEG (максимальное сжатие).
+  const [compressMode, setCompressMode] = useState<"images" | "raster">(
+    "images",
+  );
   const [compressResult, setCompressResult] = useState<{
     originalSize: number;
     compressedSize: number;
     ratio: number;
     url: string;
     fileName: string;
+    mode: "images" | "raster";
+    images?: { total: number; recompressed: number };
   } | null>(null);
 
   // ─── Оформление: номера страниц и водяной знак ───────────────────
@@ -1288,6 +1296,9 @@ const PdfEditor: React.FC = () => {
   const buildMergedBytes = async (
     items: PageItem[],
     decorate = false,
+    // Обработка документа до наложения аннотаций и оформления
+    // (используется сжатием изображений).
+    transform?: (doc: PDFDocument) => Promise<void>,
   ): Promise<Uint8Array> => {
     const mergedPdf = await PDFDocument.create();
     const uniqueFileIds = [...new Set(items.map((it) => it.fileId))];
@@ -1306,21 +1317,33 @@ const PdfEditor: React.FC = () => {
       }
     }
 
-    for (const item of items) {
-      const srcDoc = loadedDocs.get(item.fileId);
-      if (!srcDoc) continue;
+    // Копируем страницы одним вызовом на исходный файл: pdf-lib переиспользует
+    // общие ресурсы (шрифты, картинки) только в пределах одного copyPages.
+    // Постраничное копирование дублировало их для каждой страницы и
+    // раздувало файл (картинка на 2 страницах → вдвое больший PDF).
+    const copied = new Map<number, PDFPage[]>();
+    for (const [fileId, srcDoc] of loadedDocs) {
+      const indices = items
+        .filter((it) => it.fileId === fileId)
+        .map((it) => it.pageIndex);
       try {
-        const [page] = await mergedPdf.copyPages(srcDoc, [item.pageIndex]);
-        if (item.rotation) {
-          const current = page.getRotation().angle;
-          page.setRotation(degrees((current + item.rotation) % 360));
-        }
-        mergedPdf.addPage(page);
+        copied.set(fileId, await mergedPdf.copyPages(srcDoc, indices));
       } catch (err) {
-        console.error(`Ошибка копирования стр. ${item.pageIndex}:`, err);
+        console.error(`Ошибка копирования страниц fileId=${fileId}:`, err);
       }
     }
 
+    for (const item of items) {
+      const page = copied.get(item.fileId)?.shift();
+      if (!page) continue;
+      if (item.rotation) {
+        const current = page.getRotation().angle;
+        page.setRotation(degrees((current + item.rotation) % 360));
+      }
+      mergedPdf.addPage(page);
+    }
+
+    if (transform) await transform(mergedPdf);
     await applyAnnotations(mergedPdf, items);
     if (decorate) await applyDecorations(mergedPdf);
     return mergedPdf.save();
@@ -1368,6 +1391,9 @@ const PdfEditor: React.FC = () => {
         const page = await pdfjsDoc.getPage(item.pageIndex + 1);
         const rotation = ((page.rotate || 0) + (item.rotation ?? 0)) % 360;
         const viewport = page.getViewport({ scale, rotation });
+        // Физический размер страницы в пунктах — его и сохраняем, иначе
+        // A4 превращался в лист размером с картинку в пикселях.
+        const pageSize = page.getViewport({ scale: 1, rotation });
 
         let width = Math.floor(viewport.width);
         let height = Math.floor(viewport.height);
@@ -1400,8 +1426,13 @@ const PdfEditor: React.FC = () => {
 
         const dataUrl = canvas.toDataURL("image/jpeg", quality);
         const img = await outPdf.embedJpg(dataUrl);
-        const pdfPage = outPdf.addPage([width, height]);
-        pdfPage.drawImage(img, { x: 0, y: 0, width, height });
+        const pdfPage = outPdf.addPage([pageSize.width, pageSize.height]);
+        pdfPage.drawImage(img, {
+          x: 0,
+          y: 0,
+          width: pageSize.width,
+          height: pageSize.height,
+        });
 
         canvas.width = 0;
         canvas.height = 0;
@@ -1422,20 +1453,35 @@ const PdfEditor: React.FC = () => {
     setCompressResult(null);
     try {
       const originalBytes = await buildMergedBytes(items, true);
-      let compressedBytes = await buildCompressedBytes(
-        items,
-        compressQuality,
-        true,
-      );
-      // Гарантия: не отдаём файл больше исходного — если растеризация не
-      // помогла (типично для текстовых PDF), возвращаем исходные байты.
+      let compressedBytes: Uint8Array;
+      let images: { total: number; recompressed: number } | undefined;
+
+      if (compressMode === "images") {
+        // Разрешение картинок: ~110 DPI на 30% … ~220 DPI на 95%.
+        const maxDpi = Math.round(60 + compressQuality * 170);
+        compressedBytes = await buildMergedBytes(items, true, async (doc) => {
+          images = await compressPdfImages(doc, {
+            quality: compressQuality,
+            maxDpi,
+          });
+        });
+      } else {
+        compressedBytes = await buildCompressedBytes(
+          items,
+          compressQuality,
+          true,
+        );
+      }
+
+      // Гарантия: не отдаём файл больше исходного — если сжатие не
+      // помогло (типично для текстовых PDF), возвращаем исходные байты.
       if (compressedBytes.byteLength >= originalBytes.byteLength) {
         compressedBytes = originalBytes;
       }
       const originalSize = originalBytes.byteLength;
       const compressedSize = compressedBytes.byteLength;
       const url = URL.createObjectURL(
-        new Blob([compressedBytes], { type: "application/pdf" }),
+        new Blob([compressedBytes as BlobPart], { type: "application/pdf" }),
       );
       setCompressResult({
         originalSize,
@@ -1446,6 +1492,8 @@ const PdfEditor: React.FC = () => {
             : 0,
         url,
         fileName: `compressed-${Date.now()}.pdf`,
+        mode: compressMode,
+        images,
       });
     } catch (err) {
       console.error("Ошибка сжатия:", err);
@@ -2078,11 +2126,19 @@ const PdfEditor: React.FC = () => {
                         : "Уже оптимально — сохранён исходный файл"}
                     </div>
                   </div>
+                  {compressResult.mode === "images" &&
+                    compressResult.images && (
+                      <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                        Пережато изображений: {compressResult.images.recompressed}{" "}
+                        из {compressResult.images.total}. Текст и векторная
+                        графика не изменились.
+                      </p>
+                    )}
                   {compressResult.ratio <= 0 && (
                     <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
-                      Растеризация не уменьшила вес (обычно так с текстовыми
-                      PDF), поэтому отдаём исходный файл без потерь. Для более
-                      сильного сжатия сканов снизьте качество.
+                      {compressResult.mode === "images"
+                        ? "В документе нечего пережимать (обычно так с текстовыми PDF), поэтому отдаём исходный файл без потерь."
+                        : "Растеризация не уменьшила вес (обычно так с текстовыми PDF), поэтому отдаём исходный файл без потерь. Для более сильного сжатия сканов снизьте качество."}
                     </p>
                   )}
                 </div>
@@ -2105,10 +2161,48 @@ const PdfEditor: React.FC = () => {
             ) : (
               <>
                 <div className="im-body">
-                  <p>
-                    Страницы будут перерисованы в изображения — это эффективно
-                    уменьшает вес PDF со сканами и картинками. Учитываются
-                    текущий порядок, удаления и повороты страниц.
+                  <div className="compress-modes" role="radiogroup">
+                    <label
+                      className={`compress-mode ${
+                        compressMode === "images" ? "is-active" : ""
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="compress-mode"
+                        checked={compressMode === "images"}
+                        onChange={() => setCompressMode("images")}
+                      />
+                      <span>
+                        <strong>Сжать изображения</strong>
+                        <small>
+                          Текст остаётся текстом: его можно выделять и искать.
+                          Подходит для большинства документов.
+                        </small>
+                      </span>
+                    </label>
+                    <label
+                      className={`compress-mode ${
+                        compressMode === "raster" ? "is-active" : ""
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="compress-mode"
+                        checked={compressMode === "raster"}
+                        onChange={() => setCompressMode("raster")}
+                      />
+                      <span>
+                        <strong>Максимальное сжатие</strong>
+                        <small>
+                          Страницы целиком превращаются в картинки — меньше
+                          вес, но текст нельзя будет выделить или найти.
+                        </small>
+                      </span>
+                    </label>
+                  </div>
+                  <p style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+                    Учитываются текущий порядок, удаления и повороты страниц.
                   </p>
                   <label
                     className="ds-section-title"
