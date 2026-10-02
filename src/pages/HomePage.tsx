@@ -456,16 +456,20 @@ const tools: Tool[] = [
       "Выделение цветом или как исправления Word"
     ],
   },
-  //   {
-  //   title: "Ваши идеи здесь",
-  //   description: "Конвертер PDF файлов в PPTX формат",
-  //   icon: "💫",
-  //   features: [
-  //     "❗ Тестовый формат",
-  //     "Обработка в браузере",
-  //     "Извлечение изображений и текста",
-  //   ],
-  // },
+  {
+    title: "PDF → PowerPoint",
+    path: "/PdfToPptx",
+    description:
+      "Редактируемая презентация из PDF: текст, картинки и фигуры — как в оригинале",
+    icon: "📊",
+    features: [
+      "Слайд того же размера на каждую страницу",
+      "Текст, картинки и графика остаются редактируемыми",
+      "Режим «точная копия» для сложных страниц",
+      "Работает в браузере — файлы не уходят на сервер",
+    ],
+    note: "Первый запуск загружает движок (~33 МБ)",
+  },
 ];
 
 // ─── Переключатель вида ───
@@ -912,6 +916,46 @@ const JpgToPdfArt = memo(() => {
   );
 });
 
+// 📊 PDF → PowerPoint — страница превращается в слайд
+const PdfToPptxArt = memo(() => (
+  <svg
+    className="hp-menu__art"
+    viewBox="0 0 400 360"
+    fill="none"
+    aria-hidden="true"
+    preserveAspectRatio="xMidYMid meet"
+  >
+    <g className="art-bob">
+      <g className="p2w-flip">
+        <rect className="art-card" x="162" y="120" width="190" height="120" rx="12" />
+        <text
+          className="p2w-pdf art-label"
+          x="257"
+          y="192"
+          fontSize="34"
+          textAnchor="middle"
+        >
+          PDF
+        </text>
+        <text
+          className="p2w-word art-label"
+          x="257"
+          y="192"
+          fontSize="34"
+          textAnchor="middle"
+        >
+          PPT
+        </text>
+      </g>
+      <path
+        className="art-stroke"
+        d="M150 300 h100 m0 0 l-16 -12 m16 12 l-16 12"
+        strokeWidth="4"
+      />
+    </g>
+  </svg>
+));
+
 // Кастомные «скринкасты» по инструментам (иначе — эмодзи-водяной знак)
 const MENU_ART = {
   "/WorkplaceCompare": WorkplaceCompareArt,
@@ -924,6 +968,7 @@ const MENU_ART = {
   "/ChartCraft": ChartCraftArt,
   "/PdfToWord": PdfToWordArt,
   "/JpgToPdfPage": JpgToPdfArt,
+  "/PdfToPptx": PdfToPptxArt,
 };
 
 // ─── Эффект «набора на клавиатуре» для описания инструмента ───

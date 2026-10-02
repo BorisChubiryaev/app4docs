@@ -1,0 +1,25 @@
+{
+  "pyodide": "0.28.3",
+  "engineCommit": "28f77c4eaa80c317e28e05298b050f54614391e8",
+  "engineFiles": [
+    "__init__.py",
+    "build.py",
+    "convert.py",
+    "extract.py",
+    "fonts.py",
+    "graphics.py",
+    "layers.py",
+    "model.py",
+    "text.py",
+    "verify.py"
+  ],
+  "wheels": [
+    "lxml-6.0.0-cp313-cp313-pyodide_2025_0_wasm32.whl",
+    "pillow-11.3.0-cp313-cp313-pyodide_2025_0_wasm32.whl",
+    "pymupdf-1.28.2-cp313-abi3-pyemscripten_2025_0_wasm32.whl",
+    "typing_extensions-4.16.0-py3-none-any.whl",
+    "xlsxwriter-3.2.9-py3-none-any.whl",
+    "python_pptx-1.0.2-py3-none-any.whl"
+  ],
+  "runtimeBytes": 34191489
+}

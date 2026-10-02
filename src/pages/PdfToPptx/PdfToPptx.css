@@ -1,0 +1,239 @@
+/* PDF → PowerPoint. Цвета — токены дизайн-системы (tokens.css),
+   тёмная тема переопределяет их глобально. */
+
+.p2p-muted {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* ── Состояние движка ── */
+.p2p-engine {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.p2p-engine p {
+  margin: 0;
+}
+.p2p-engine__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.p2p-engine__step {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.p2p-engine--ready {
+  border-color: rgba(17, 148, 107, 0.35);
+}
+.p2p-engine--error {
+  border-color: rgba(229, 72, 77, 0.45);
+}
+
+.p2p-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--brand-2);
+  animation: p2p-spin 0.8s linear infinite;
+  flex: none;
+}
+@keyframes p2p-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.p2p-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.p2p-bar__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand-gradient);
+  transition: width 0.3s ease;
+}
+
+.p2p-details {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  max-height: 120px;
+  overflow: auto;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  color: var(--muted);
+}
+
+/* ── Режимы ── */
+.p2p-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.p2p-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.p2p-mode:hover {
+  border-color: var(--brand-2);
+}
+.p2p-mode.is-active {
+  border-color: var(--brand-2);
+  box-shadow: 0 0 0 3px rgba(81, 93, 173, 0.12);
+}
+.p2p-mode input {
+  margin-top: 3px;
+  accent-color: var(--brand-2);
+}
+.p2p-mode span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.p2p-mode small {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+/* ── Загрузка ── */
+.p2p-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 36px 24px;
+}
+.p2p-drop__icon {
+  font-size: 2rem;
+}
+.p2p-warn {
+  margin: 10px 0 0;
+  color: #b4530a;
+  font-size: 0.88rem;
+}
+:root[data-theme="dark"] .p2p-warn {
+  color: #f5b26b;
+}
+
+/* ── Очередь ── */
+.p2p-jobs {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.p2p-jobs__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.p2p-jobs__head .ds-section-title {
+  margin: 0;
+}
+.p2p-jobs__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.p2p-job {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.p2p-job--done {
+  border-color: rgba(17, 148, 107, 0.35);
+}
+.p2p-job--error {
+  border-color: rgba(229, 72, 77, 0.45);
+}
+.p2p-job__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.p2p-job__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.p2p-job__meta {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+.p2p-job__error {
+  color: #c4282d;
+  font-size: 0.88rem;
+}
+:root[data-theme="dark"] .p2p-job__error {
+  color: #ff9d96;
+}
+.p2p-job__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.p2p-small {
+  padding: 8px 14px;
+  font-size: 0.88rem;
+}
+.p2p-remove {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.p2p-remove:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .p2p-modes {
+    grid-template-columns: 1fr;
+  }
+  .p2p-job {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .p2p-job__actions {
+    justify-content: flex-end;
+  }
+}
