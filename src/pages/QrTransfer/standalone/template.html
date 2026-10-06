@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Передача файлов через QR</title>
+<style>
+:root {
+  --brand: #515dad;
+  --grad: linear-gradient(135deg, #0087cd 0%, #515dad 45%, #8253aa 75%, #ff1c77 100%);
+  --ink: #1d1d1f;
+  --ink-soft: #3a3a3c;
+  --muted: #6b7280;
+  --line: rgba(0, 0, 0, 0.1);
+  --surface: #ffffff;
+  --surface-2: #f5f6f8;
+  --bg: #eef0f5;
+  --ok: #30c48d;
+  --bad: #e5484d;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8e8ea;
+    --ink-soft: #c7c7cc;
+    --muted: #9a9aa2;
+    --line: rgba(255, 255, 255, 0.12);
+    --surface: #1b1e28;
+    --surface-2: #0f111a;
+    --bg: #0d0f16;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+}
+button, input, select { font: inherit; }
+[hidden] { display: none !important; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+header { text-align: center; margin-bottom: 20px; }
+h1 { margin: 0 0 6px; font-size: 1.6rem; }
+.sub { margin: 0; color: var(--muted); }
+.tabs {
+  display: inline-flex; gap: 4px; padding: 4px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px;
+}
+.tabs button {
+  padding: 8px 18px; border: none; background: transparent; border-radius: 8px;
+  color: var(--muted); font-weight: 600; cursor: pointer;
+}
+.tabs button.active { background: var(--surface); color: var(--ink); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.tabs.fill { display: flex; width: 100%; }
+.tabs.fill button { flex: 1; padding: 8px 6px; }
+.mode { display: flex; justify-content: center; margin-bottom: 20px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.grid.rx { grid-template-columns: 3fr 2fr; }
+@media (max-width: 860px) { .grid, .grid.rx { grid-template-columns: 1fr; } }
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 22px;
+  padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+.card h2 { margin: 0 0 14px; font-size: 1.05rem; }
+.muted { color: var(--muted); font-size: .9rem; }
+.drop {
+  border: 2px dashed var(--line); border-radius: 22px; padding: 40px; text-align: center;
+  cursor: pointer; transition: border-color .15s, background .15s;
+}
+.drop:hover, .drop.over { border-color: var(--brand); background: rgba(81, 93, 173, .05); }
+.drop-icon { font-size: 2.2rem; margin-bottom: 8px; }
+.fname { font-weight: 600; margin-bottom: 4px; word-break: break-all; }
+label { display: block; margin: 16px 0 8px; font-size: .9rem; font-weight: 600; color: var(--ink-soft); }
+label:first-of-type { margin-top: 0; }
+input[type="range"] { width: 100%; accent-color: var(--brand); }
+.hint { margin-top: 6px; }
+.estimate { margin: 16px 0; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 11px 22px; border-radius: 14px; border: none; font-weight: 600; cursor: pointer;
+}
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn-primary { background: var(--grad); color: #fff; box-shadow: 0 8px 20px rgba(81,93,173,.3); }
+.btn-secondary { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+.btn-danger { background: rgba(255,59,48,.1); color: var(--bad); border: 1px solid rgba(255,59,48,.25); }
+.wide { width: 100%; }
+select {
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink);
+}
+.help { margin-top: 20px; }
+.help ol { margin: 0; padding-left: 20px; line-height: 1.6; }
+
+/* показ */
+.broadcast { position: fixed; inset: 0; z-index: 1000; background: #fff; display: flex; flex-direction: column; }
+.codes { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 2vw; padding: 1vh 1vw; }
+.code { image-rendering: pixelated; height: 100%; max-height: 100%; max-width: 100%; aspect-ratio: 1; object-fit: contain; }
+.codes-2 .code { max-width: calc(50% - 1vw); }
+.bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 8px 16px; font-size: .85rem; color: #3a3a3c; background: #f5f6f8; border-top: 1px solid rgba(0,0,0,.08);
+}
+.bar .btn { padding: 6px 14px; }
+.bar .btn-secondary { background: #fff; color: #1d1d1f; }
+.bar-actions { display: flex; gap: 8px; }
+
+/* приём */
+.cam-card { padding: 16px; }
+.video-wrap {
+  position: relative; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden;
+  background: #0f111a; outline: 3px solid transparent; transition: outline-color .15s;
+}
+.video-wrap.hit { outline-color: var(--ok); }
+video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.cam-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.cam-row select { flex: 1; min-width: 0; }
+.cam-row .muted { white-space: nowrap; }
+.error { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: rgba(255,59,48,.1); color: var(--bad); font-size: .9rem; }
+.progress { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.progress-fill { height: 100%; width: 0; background: var(--grad); transition: width .25s ease; }
+.percent { margin: 8px 0 16px; font-weight: 700; font-size: 1.1rem; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: .9rem; }
+dt { color: var(--muted); }
+dd { margin: 0; font-variant-numeric: tabular-nums; }
+.result { margin-top: 20px; padding: 16px; border-radius: 14px; border: 1px solid rgba(48,196,141,.4); background: rgba(48,196,141,.08); }
+.result.bad { border-color: rgba(255,59,48,.4); background: rgba(255,59,48,.08); }
+.result .btn { margin-top: 12px; }
+.reset { margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📡 Передача файлов через QR</h1>
+    <p class="sub">Без сети, AirDrop и Bluetooth: экран одного ноутбука → камера другого</p>
+  </header>
+
+  <div class="mode">
+    <div class="tabs">
+      <button id="tab-send">📤 Отправить</button>
+      <button id="tab-receive">📥 Получить</button>
+    </div>
+  </div>
+
+  <div id="panel-send" class="grid">
+    <section class="card">
+      <h2>1. Файл</h2>
+      <div id="drop" class="drop">
+        <input id="file" type="file" multiple hidden />
+        <div id="drop-icon" class="drop-icon">📤</div>
+        <div id="drop-text" class="fname">Перетащите файл или нажмите</div>
+        <div id="drop-sub" class="muted">Несколько файлов будут упакованы в ZIP</div>
+      </div>
+    </section>
+    <section class="card">
+      <h2>2. Параметры</h2>
+      <label>Плотность кода</label>
+      <div id="presets" class="tabs fill"></div>
+      <div id="preset-hint" class="muted hint"></div>
+      <label>Кодов на экране</label>
+      <div id="codes" class="tabs fill">
+        <button data-n="1">Один</button>
+        <button data-n="2">Два рядом</button>
+      </div>
+      <label>Скорость смены: <strong><span id="fps-value">8</span> кадр/с</strong></label>
+      <input id="fps" type="range" min="2" max="20" value="8" />
+      <div id="estimate" class="estimate"></div>
+      <button id="start" class="btn btn-primary wide" disabled>▶ Начать показ</button>
+    </section>
+  </div>
+
+  <div id="panel-receive" class="grid rx" hidden>
+    <section class="card cam-card">
+      <div id="video-wrap" class="video-wrap">
+        <video id="video" muted playsinline></video>
+        <div id="camera-placeholder" class="placeholder">
+          <div class="drop-icon">📷</div>
+          <button id="camera-on" class="btn btn-primary">Включить камеру</button>
+        </div>
+      </div>
+      <div id="camera-row" class="cam-row" hidden>
+        <select id="camera"></select>
+        <span id="resolution" class="muted"></span>
+        <button id="camera-off" class="btn btn-secondary">Выключить</button>
+      </div>
+      <div id="error" class="error" hidden></div>
+    </section>
+    <section class="card">
+      <h2>Приём</h2>
+      <p id="rx-idle" class="muted">
+        Включите камеру и направьте её на экран отправителя так, чтобы коды целиком
+        помещались в кадр. Рамка видео подсветится зелёным, когда коды начнут читаться.
+      </p>
+      <div id="rx-progress" hidden>
+        <div class="progress"><div id="rx-fill" class="progress-fill"></div></div>
+        <div id="rx-percent" class="percent"></div>
+        <dl>
+          <dt>Объём</dt><dd id="st-size"></dd>
+          <dt>Принято кодов</dt><dd id="st-codes"></dd>
+          <dt>Восстановлено блоков</dt><dd id="st-blocks"></dd>
+          <dt>Скорость</dt><dd id="st-speed"></dd>
+          <div id="st-foreign-row" style="display: contents" hidden>
+            <dt>Чужие коды</dt><dd id="st-foreign"></dd>
+          </div>
+        </dl>
+      </div>
+      <div id="rx-result" class="result" hidden>
+        <div id="res-name" class="fname"></div>
+        <div id="res-info" class="muted"></div>
+        <button id="res-save" class="btn btn-primary">⬇ Сохранить файл</button>
+      </div>
+      <button id="rx-reset" class="btn btn-secondary reset" hidden>↺ Принять другой файл</button>
+    </section>
+  </div>
+
+  <section class="card help">
+    <h2>Как пользоваться</h2>
+    <ol>
+      <li>Откройте этот файл в Google Chrome на обоих ноутбуках.</li>
+      <li><strong>Отправитель:</strong> «Отправить» → выберите файл → «Начать показ». Яркость экрана — на максимум.</li>
+      <li><strong>Получатель:</strong> «Получить» → «Включить камеру», разрешите доступ и направьте камеру на экран отправителя (обычно 30–50 см).</li>
+      <li>Пропущенные кадры ловить заново не нужно — достаточно любых ≈ 105% кодов. При 100% нажмите «Сохранить файл».</li>
+      <li>Если «код/с» у получателя намного ниже, чем кадров/с × кодов у отправителя — уменьшите плотность или скорость. Пробел — пауза, Esc — выход из показа.</li>
+    </ol>
+  </section>
+</div>
+
+<div id="broadcast" class="broadcast" hidden>
+  <div id="codes-holder" class="codes"></div>
+  <div class="bar">
+    <span id="bc-file"></span>
+    <span id="bc-count"></span>
+    <span class="bar-actions">
+      <button id="bc-pause" class="btn btn-secondary">⏸ Пауза</button>
+      <button id="bc-stop" class="btn btn-danger">✕ Стоп</button>
+    </span>
+  </div>
+</div>
+
+<script>/*__APP__*/</script>
+</body>
+</html>

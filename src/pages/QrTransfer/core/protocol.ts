@@ -10,10 +10,12 @@
 //   6..9  u32 длина контейнера
 //   10..11 u16 размер блока
 //   12..15 u32 id символа фонтанного кода
-//   16..  полезная нагрузка (ровно «размер блока» байт)
+//   16..  полезная нагрузка (ровно «размер блока» байт), «отбеленная»
+//         гаммой от id символа: иначе участки из нулей дают почти сплошную
+//         шахматку, на которой камера ловит муар и не читает код.
 
 export const FRAME_MAGIC = 0xf7;
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 export const FRAME_HEADER = 16;
 const CONTAINER_MAGIC = [0x51, 0x52, 0x46, 0x54]; // "QRFT"
 
@@ -76,6 +78,20 @@ export interface FrameHeader {
   symbolId: number;
 }
 
+/** XOR с псевдослучайной гаммой (xorshift32) — операция обратима сама собой. */
+function whiten(buf: Uint8Array, seed: number) {
+  let x = (seed ^ 0x5bd1e995) >>> 0 || 1;
+  for (let i = 0; i < buf.length; i += 4) {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    buf[i] ^= x;
+    buf[i + 1] ^= x >>> 8;
+    buf[i + 2] ^= x >>> 16;
+    buf[i + 3] ^= x >>> 24;
+  }
+}
+
 export function packFrame(h: FrameHeader, payload: Uint8Array): Uint8Array {
   const out = new Uint8Array(FRAME_HEADER + payload.length);
   const dv = new DataView(out.buffer);
@@ -86,6 +102,7 @@ export function packFrame(h: FrameHeader, payload: Uint8Array): Uint8Array {
   dv.setUint16(10, h.blockSize);
   dv.setUint32(12, h.symbolId);
   out.set(payload, FRAME_HEADER);
+  whiten(out.subarray(FRAME_HEADER), h.symbolId ^ h.transferId);
   return out;
 }
 
@@ -95,13 +112,11 @@ export function parseFrame(bytes: Uint8Array): (FrameHeader & { payload: Uint8Ar
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const blockSize = dv.getUint16(10);
   if (bytes.length < FRAME_HEADER + blockSize) return null;
-  return {
-    transferId: dv.getUint32(2),
-    containerLength: dv.getUint32(6),
-    blockSize,
-    symbolId: dv.getUint32(12),
-    payload: bytes.subarray(FRAME_HEADER, FRAME_HEADER + blockSize),
-  };
+  const transferId = dv.getUint32(2);
+  const symbolId = dv.getUint32(12);
+  const payload = bytes.slice(FRAME_HEADER, FRAME_HEADER + blockSize);
+  whiten(payload, symbolId ^ transferId);
+  return { transferId, containerLength: dv.getUint32(6), blockSize, symbolId, payload };
 }
 
 /** Вместимость QR в байтовом режиме по версиям (уровни коррекции L / M). */

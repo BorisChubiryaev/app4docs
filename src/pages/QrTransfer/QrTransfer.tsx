@@ -18,6 +18,16 @@ const QrTransfer: React.FC = () => {
       icon="📡"
       width={1200}
       onShowInstructions={() => setHelp(true)}
+      actions={
+        <a
+          className="ds-nav-btn"
+          href="./qr-transfer.html"
+          download="qr-transfer.html"
+          title="Один HTML-файл: открыть в Chrome без установки и сети"
+        >
+          💾 <span>Автономный HTML</span>
+        </a>
+      }
     >
       <div className="qrt-mode">
         <div className="ds-tabs">
@@ -54,6 +64,13 @@ const QrTransfer: React.FC = () => {
             файла. Начинать приём можно в любой момент показа.
           </p>
           <p>Всё работает офлайн, данные никуда не отправляются.</p>
+          <p>
+            Кнопка <strong>«Автономный HTML»</strong> скачивает весь инструмент
+            одним файлом: его можно скопировать на второй ноутбук и открыть в
+            Chrome двойным кликом — без установки, сервера и интернета.
+            Версии совместимы: показывать можно в приложении, а принимать в
+            HTML-файле, и наоборот.
+          </p>
         </div>
         <div className="instructions-section">
           <h3>🛠 Порядок действий</h3>
