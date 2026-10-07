@@ -8,7 +8,13 @@
 // Qlik Sense. Движок загружается один раз и переиспользуется.
 
 import type { WorkerRequest, WorkerResponse } from "./pdf2pptx.types";
-import { dropOldCaches, loadManifest, makeCachedFetch } from "./engineAssets";
+import {
+  dropOldCaches,
+  loadManifest,
+  makeCachedFetch,
+  storedUrl,
+  LOADER_FILE,
+} from "./engineAssets";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -33,15 +39,18 @@ const post = (msg: WorkerResponse, transfer: Transferable[] = []) =>
   self.postMessage(msg, transfer);
 
 // Все запросы Pyodide идут через self.fetch, поэтому подменяем его:
-// 1) файлы движка берутся из постоянного кэша (см. engineAssets.ts);
-// 2) хостинг (например, Qlik Sense) может отдавать .wasm не как
+// 1) файлы с «непривычными» для Qlik типами лежат под именем …<ext>.txt —
+//    запрос к исходному имени подменяется на реальный файл (storedUrl);
+// 2) файлы движка берутся из постоянного кэша (см. engineAssets.ts);
+// 3) хостинг (например, Qlik Sense) может отдавать .wasm не как
 //    application/wasm — тогда WebAssembly.instantiateStreaming падает, а
 //    Pyodide не переходит на запасной путь и зависает. Проставляем тип сами.
 const nativeFetch = self.fetch.bind(self);
 let engineFetch: typeof fetch = nativeFetch;
 self.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-  const res = await engineFetch(input, init);
   const url = String(input instanceof Request ? input.url : input);
+  const stored = storedUrl(url);
+  const res = await engineFetch(stored === url ? input : stored, init);
   if (
     url.split("?")[0].endsWith(".wasm") &&
     res.headers.get("content-type") !== "application/wasm"
@@ -68,7 +77,7 @@ const init = async (base: string) => {
   const steps = manifest.wheels.length + 2;
 
   post({ type: "stage", text: "Запускаем Python (WebAssembly)…", step: 1, steps });
-  const { loadPyodide } = await import(/* @vite-ignore */ runtime + "pyodide.mjs");
+  const { loadPyodide } = await import(/* @vite-ignore */ runtime + LOADER_FILE);
   const py: PyodideAPI = await loadPyodide({ indexURL: runtime });
 
   for (let i = 0; i < manifest.wheels.length; i++) {
@@ -87,7 +96,8 @@ const init = async (base: string) => {
   py.FS.mkdirTree("/app/engine");
   await Promise.all(
     manifest.engineFiles.map(async (f) => {
-      const res = await fetch(base + "engine/" + f);
+      // self.fetch подменит «engine/x.py» на реальный «engine/x.py.txt».
+      const res = await self.fetch(base + "engine/" + f);
       if (!res.ok) throw new Error(`Не удалось загрузить engine/${f}`);
       py.FS.writeFile("/app/engine/" + f, new Uint8Array(await res.arrayBuffer()));
     }),

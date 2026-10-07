@@ -27,6 +27,18 @@ const ENGINE = path.join(OUT, "engine");
 const PYODIDE = "0.28.3";
 const JSDELIVR = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE}/full`;
 
+// Qlik Sense при импорте расширения отклоняет пакет с «непривычными» типами
+// файлов (.wasm/.whl/.zip/.py). Поэтому на диск они пишутся под именем
+// «…<ext>.txt», а pyodide.mjs (ES-модуль, обязан быть .js) — как
+// pyodide.loader.js. Воркер (engineAssets.storedUrl) восстанавливает исходные
+// адреса. В манифесте имена остаются логическими.
+const safeName = (name) =>
+  name === "pyodide.mjs"
+    ? "pyodide.loader.js"
+    : /\.(wasm|whl|zip|py)$/.test(name)
+      ? name + ".txt"
+      : name;
+
 // Файлы ядра Pyodide из npm-пакета pyodide.
 const CORE_FILES = [
   "pyodide.mjs",
@@ -80,7 +92,7 @@ const vendorRuntime = async (force) => {
   fs.mkdirSync(RUNTIME, { recursive: true });
 
   const missingCore = CORE_FILES.filter(
-    (f) => force || !fs.existsSync(path.join(RUNTIME, f)),
+    (f) => force || !fs.existsSync(path.join(RUNTIME, safeName(f))),
   );
   if (missingCore.length) {
     console.log(`Pyodide ${PYODIDE} из npm…`);
@@ -92,20 +104,20 @@ const vendorRuntime = async (force) => {
     );
     execFileSync("tar", ["-xzf", tgz, "-C", tmp]);
     for (const f of missingCore) {
-      fs.copyFileSync(path.join(tmp, "package", f), path.join(RUNTIME, f));
-      console.log("  ✓", f);
+      fs.copyFileSync(path.join(tmp, "package", f), path.join(RUNTIME, safeName(f)));
+      console.log("  ✓", safeName(f));
     }
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 
   for (const [fileName, source] of WHEELS) {
-    const target = path.join(RUNTIME, fileName);
+    const target = path.join(RUNTIME, safeName(fileName));
     if (!force && fs.existsSync(target)) continue;
     const url = source.startsWith("pypi:")
       ? await pypiUrl(source.slice(5), fileName)
       : source;
     fs.writeFileSync(target, await download(url));
-    console.log("  ✓", fileName);
+    console.log("  ✓", safeName(fileName));
   }
 };
 
@@ -123,7 +135,9 @@ const vendorEngine = (engineDir) => {
     .readdirSync(src)
     .filter((f) => f.endsWith(".py") && f !== "__main__.py")
     .sort();
-  for (const f of files) fs.copyFileSync(path.join(src, f), path.join(ENGINE, f));
+  for (const f of files) {
+    fs.copyFileSync(path.join(src, f), path.join(ENGINE, safeName(f)));
+  }
 
   let commit = "unknown";
   try {
@@ -140,7 +154,7 @@ const vendorEngine = (engineDir) => {
 const writeManifest = (engine) => {
   const runtimeFiles = fs.readdirSync(RUNTIME);
   const missing = [...CORE_FILES, ...WHEELS.map(([f]) => f)].filter(
-    (f) => !runtimeFiles.includes(f),
+    (f) => !runtimeFiles.includes(safeName(f)),
   );
   if (missing.length) {
     throw new Error(
@@ -152,7 +166,7 @@ const writeManifest = (engine) => {
     ? JSON.parse(fs.readFileSync(manifestPath, "utf8"))
     : {};
   const bytes = [...CORE_FILES, ...WHEELS.map(([f]) => f)].reduce(
-    (sum, f) => sum + fs.statSync(path.join(RUNTIME, f)).size,
+    (sum, f) => sum + fs.statSync(path.join(RUNTIME, safeName(f))).size,
     0,
   );
   const manifest = {
