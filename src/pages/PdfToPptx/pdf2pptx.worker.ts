@@ -70,7 +70,16 @@ let engineFetch: typeof fetch = nativeFetch;
 self.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input instanceof Request ? input.url : input);
   const stored = storedUrl(url);
-  const res = await engineFetch(stored === url ? input : stored, init);
+  let res: Response;
+  try {
+    res = await engineFetch(stored === url ? input : stored, init);
+  } catch (err) {
+    // Pyodide глотает ошибки загрузки некоторых файлов (например,
+    // python_stdlib.zip — тогда Python падает с «No module named
+    // 'encodings'»), поэтому сообщаем настоящую причину сами.
+    reportUnhandled(err);
+    throw err;
+  }
   const path = url.split("?")[0];
   const magic = MAGIC.find(([re]) => re.test(path))?.[1];
   if (!magic) return res;
@@ -136,6 +145,18 @@ const remember = (line: string) => {
   pyLog.push(line);
   if (pyLog.length > 12) pyLog.shift();
 };
+
+// Pyodide пишет часть ошибок только в console.error (например, «Error
+// occurred while installing the standard library») — сохраняем их в лог.
+const nativeError = console.error.bind(console);
+console.error = (...args: unknown[]) => {
+  nativeError(...args);
+  remember(
+    "console: " +
+      args.map((a) => (a instanceof Error ? `${a.name}: ${a.message}` : String(a))).join(" "),
+  );
+};
+
 const setStage = (text: string, step: number, steps: number) => {
   stage = text;
   post({ type: "stage", text, step, steps });
@@ -223,7 +244,7 @@ const errorText = (err: unknown): string => {
 /** Текст ошибки для пользователя: сообщение ConversionError или общее. */
 const describeError = (err: unknown): { message: string; details?: string } => {
   // Исходный объект — в консоль DevTools, его можно раскрыть и изучить.
-  console.error("[pdf2pptx] этап:", stage, err);
+  nativeError("[pdf2pptx] этап:", stage, err);
   const text = errorText(err);
   const known = text.match(/ConversionError: (.+?)\s*$/m);
   if (known) return { message: known[1] };

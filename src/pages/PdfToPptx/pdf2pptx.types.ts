@@ -9,6 +9,8 @@ export interface Manifest {
   engineFiles: string[];
   wheels: string[];
   runtimeBytes: number;
+  /** Размер и SHA-256 файлов движка по реальным путям (runtime/…, engine/…). */
+  files?: Record<string, { size: number; sha256: string }>;
 }
 
 export type WorkerRequest =

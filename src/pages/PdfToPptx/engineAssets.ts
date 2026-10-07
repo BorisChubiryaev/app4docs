@@ -58,9 +58,53 @@ export const engineFiles = (m: Manifest): string[] =>
 const hasCacheStorage = () =>
   typeof caches !== "undefined" && typeof caches.open === "function";
 
+const fmtBytes = (n: number) => n.toLocaleString("ru-RU") + " байт";
+
 /**
- * fetch с постоянным кэшем для файлов движка. Ошибки кэша (переполнено,
- * запрещено политикой) не ломают загрузку — просто идём в сеть.
+ * Сверяет файл с манифестом (размер и SHA-256). Возвращает текст проблемы
+ * или null, если всё совпало или проверять нечем (старый манифест;
+ * crypto.subtle есть только по https/localhost — тогда сверяем лишь размер).
+ */
+export const checkFile = async (
+  manifest: Manifest,
+  rel: string,
+  bytes: ArrayBuffer,
+): Promise<string | null> => {
+  const want = manifest.files?.[rel];
+  if (!want) return null;
+  if (bytes.byteLength !== want.size) {
+    return `${rel}: получено ${fmtBytes(bytes.byteLength)}, ожидалось ${fmtBytes(want.size)}`;
+  }
+  if (typeof crypto === "undefined" || !crypto.subtle) return null;
+  const hash = Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+    (b) => b.toString(16).padStart(2, "0"),
+  ).join("");
+  return hash === want.sha256
+    ? null
+    : `${rel}: размер совпал (${fmtBytes(want.size)}), но содержимое другое (SHA-256)`;
+};
+
+/** Файл движка отличается от собранного — с подсказкой, где искать причину. */
+export class DamagedFileError extends Error {
+  constructor(problem: string) {
+    super(
+      `Файл движка повреждён — ${problem}. Файл изменился по дороге на сервер ` +
+        "(почтовый шлюз, антивирус, архиватор) или при загрузке в Qlik: " +
+        "сравните его с файлом из папки dist/pdf2pptx/ после сборки.",
+    );
+    this.name = "DamagedFileError";
+  }
+}
+
+const relPath = (url: string, base: string) =>
+  url.slice(base.length).split("?")[0];
+
+/**
+ * fetch с постоянным кэшем для файлов движка. Каждый файл сверяется с
+ * манифестом: испорченная копия в кэше удаляется и скачивается заново,
+ * испорченный файл с сервера — ошибка DamagedFileError. Ошибки самого кэша
+ * (переполнено, запрещено политикой) не ломают загрузку — идём в сеть.
  */
 export const makeCachedFetch = (
   manifest: Manifest,
@@ -74,19 +118,31 @@ export const makeCachedFetch = (
       ? caches.open(name).catch(() => null)
       : Promise.resolve(null));
 
+  const withBody = (res: Response, bytes: ArrayBuffer) =>
+    new Response(bytes, { status: res.status, headers: res.headers });
+
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (!url.startsWith(base) || url.endsWith("manifest.json")) {
       return nativeFetch(input, init);
     }
+    const rel = relPath(url, base);
     const cache = await openCache();
     const hit = await cache?.match(url).catch(() => undefined);
-    if (hit) return hit;
-    const res = await nativeFetch(input, init);
-    if (res.ok && cache) {
-      await cache.put(url, res.clone()).catch(() => {});
+    if (hit) {
+      const bytes = await hit.arrayBuffer();
+      if (!(await checkFile(manifest, rel, bytes))) return withBody(hit, bytes);
+      await cache?.delete(url).catch(() => false); // испорчен — качаем заново
     }
-    return res;
+    const res = await nativeFetch(input, init);
+    if (!res.ok) return res;
+    const bytes = await res.arrayBuffer();
+    const problem = await checkFile(manifest, rel, bytes);
+    if (problem) throw new DamagedFileError(problem);
+    if (cache) {
+      await cache.put(url, withBody(res, bytes)).catch(() => {});
+    }
+    return withBody(res, bytes);
   };
 };
 
@@ -121,7 +177,11 @@ export const warmUpEngine = async (): Promise<void> => {
       if (await cache.match(url)) continue;
       // По одному файлу и с низким приоритетом — не мешаем работе страницы.
       const res = await fetch(url, { priority: "low" } as RequestInit);
-      if (res.ok) await cache.put(url, res);
+      if (!res.ok) continue;
+      // Испорченное в кэш не кладём — воркер скачает сам и покажет ошибку.
+      const bytes = await res.arrayBuffer();
+      if (await checkFile(manifest, file, bytes)) continue;
+      await cache.put(url, new Response(bytes, { headers: res.headers }));
     }
   } catch {
     /* фоновая подкачка не критична */

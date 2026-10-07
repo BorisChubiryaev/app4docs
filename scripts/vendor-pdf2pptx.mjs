@@ -14,6 +14,7 @@
 // (Pyodide 0.28, Python 3.13) — менять их нужно вместе.
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -169,12 +170,29 @@ const writeManifest = (engine) => {
     (sum, f) => sum + fs.statSync(path.join(RUNTIME, safeName(f))).size,
     0,
   );
+  const engineFiles = engine?.files ?? prev.engineFiles;
+  // Размер и SHA-256 каждого файла: воркер сверяет их при загрузке и сразу
+  // сообщает, если файл изменился по дороге (почтовый шлюз, антивирус,
+  // распаковка) или в кэше браузера лежит испорченная копия.
+  const files = {};
+  const addFile = (rel) => {
+    const data = fs.readFileSync(path.join(OUT, rel));
+    files[rel] = {
+      size: data.length,
+      sha256: createHash("sha256").update(data).digest("hex"),
+    };
+  };
+  for (const f of [...CORE_FILES, ...WHEELS.map(([w]) => w)]) {
+    addFile("runtime/" + safeName(f));
+  }
+  for (const f of engineFiles) addFile("engine/" + safeName(f));
   const manifest = {
     pyodide: PYODIDE,
     engineCommit: engine?.commit ?? prev.engineCommit,
-    engineFiles: engine?.files ?? prev.engineFiles,
+    engineFiles,
     wheels: WHEELS.map(([f]) => f),
     runtimeBytes: bytes,
+    files,
   };
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   console.log(
