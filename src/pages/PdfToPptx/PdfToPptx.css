@@ -241,3 +241,27 @@
     justify-content: flex-end;
   }
 }
+
+/* Текст ошибки + кнопка «Скопировать» */
+.p2p-details-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.p2p-details-wrap .p2p-details {
+  align-self: stretch;
+  max-height: 200px;
+}
+.p2p-copy {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.p2p-copy:hover {
+  border-color: var(--brand-2);
+}

@@ -55,6 +55,39 @@ const fmtSec = (ms: number) =>
     : `${Math.floor(ms / 60000)} мин ${Math.round((ms % 60000) / 1000)} с`;
 const pptxName = (file: File) => file.name.replace(/\.pdf$/i, "") + ".pptx";
 
+/**
+ * Текст ошибки с кнопкой «Скопировать» — чтобы переслать его, а не
+ * фотографировать экран. navigator.clipboard работает только по https,
+ * поэтому на http копируем через временное текстовое поле.
+ */
+const ErrorDetails: React.FC<{ text: string }> = ({ text }) => {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="p2p-details-wrap">
+      <pre className="p2p-details">{text}</pre>
+      <button type="button" className="p2p-copy" onClick={copy}>
+        {copied ? "Скопировано" : "Скопировать текст ошибки"}
+      </button>
+    </div>
+  );
+};
+
 const isPdf = (f: File) =>
   f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
 
@@ -297,7 +330,7 @@ const PdfToPptx: React.FC = () => {
               Повторить
             </button>
           </div>
-          {engine.details && <pre className="p2p-details">{engine.details}</pre>}
+          {engine.details && <ErrorDetails text={`${engine.message}\n${engine.details}`} />}
         </div>
       )}
 
@@ -417,7 +450,7 @@ const PdfToPptx: React.FC = () => {
                   {j.status === "error" && (
                     <div className="p2p-job__error">
                       {j.error}
-                      {j.details && <pre className="p2p-details">{j.details}</pre>}
+                      {j.details && <ErrorDetails text={`${j.error}\n${j.details}`} />}
                     </div>
                   )}
                 </div>
