@@ -24,22 +24,35 @@ export const loadManifest = async (base: string): Promise<Manifest> => {
 const cacheName = (m: Manifest) =>
   `${CACHE_PREFIX}${m.pyodide}-${m.engineCommit.slice(0, 12)}-${m.runtimeBytes}`;
 
-// Загрузчик Pyodide импортируется как ES-модуль (import()), а браузер
-// исполняет модуль, только если сервер отдаёт его с JavaScript-типом.
-// Qlik Sense не отдаёт .mjs как JavaScript (в отличие от .js) — поэтому
-// pyodide.mjs вендорится под именем pyodide.loader.js. Остальные файлы
-// грузятся через fetch, где MIME не важен, и переименования не требуют.
+// Qlik Sense при импорте расширения отклоняет пакет с «непривычными» типами
+// файлов (.wasm, .whl, .zip, .py). Поэтому на диске такие файлы лежат под именем
+// «…<ext>.txt», а здесь восстанавливается реальный адрес. Pyodide запрашивает
+// исходные имена — storedUrl() подменяет их на .txt-вариант прозрачно в
+// перехвате fetch. pyodide.mjs импортируется как ES-модуль, поэтому обязан
+// оставаться .js — переименован в pyodide.loader.js (а .js Qlik принимает).
 export const LOADER_FILE = "pyodide.loader.js";
+const SAFE_SUFFIX = ".txt";
+const RISKY = /\.(wasm|whl|zip|py)$/;
+
+/** Логический адрес файла движка → имя, под которым он реально лежит. */
+export const storedUrl = (url: string): string => {
+  const q = url.indexOf("?");
+  const path = q === -1 ? url : url.slice(0, q);
+  const query = q === -1 ? "" : url.slice(q);
+  return RISKY.test(path) ? path + SAFE_SUFFIX + query : url;
+};
 
 /** Все файлы движка под их реальными именами (для кэша и подкачки). */
-export const engineFiles = (m: Manifest): string[] => [
-  "runtime/pyodide.asm.js",
-  "runtime/pyodide.asm.wasm",
-  "runtime/python_stdlib.zip",
-  "runtime/pyodide-lock.json",
-  ...m.wheels.map((w) => "runtime/" + w),
-  ...m.engineFiles.map((f) => "engine/" + f),
-];
+export const engineFiles = (m: Manifest): string[] =>
+  [
+    "runtime/" + LOADER_FILE,
+    "runtime/pyodide.asm.js",
+    "runtime/pyodide.asm.wasm",
+    "runtime/python_stdlib.zip",
+    "runtime/pyodide-lock.json",
+    ...m.wheels.map((w) => "runtime/" + w),
+    ...m.engineFiles.map((f) => "engine/" + f),
+  ].map(storedUrl);
 
 // Cache Storage есть только в защищённом контексте (https или localhost).
 const hasCacheStorage = () =>

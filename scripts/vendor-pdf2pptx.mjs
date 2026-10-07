@@ -27,11 +27,17 @@ const ENGINE = path.join(OUT, "engine");
 const PYODIDE = "0.28.3";
 const JSDELIVR = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE}/full`;
 
-// pyodide.mjs вендорится под именем pyodide.loader.js: его импортирует ES-модуль
-// (import()), а Qlik Sense не отдаёт .mjs как JavaScript — браузер отказывается
-// исполнять модуль. Файл с .js Qlik отдаёт правильно. Остальные файлы грузятся
-// через fetch, где тип не важен, и переименования не требуют.
-const safeName = (name) => (name === "pyodide.mjs" ? "pyodide.loader.js" : name);
+// Qlik Sense при импорте расширения отклоняет пакет с «непривычными» типами
+// файлов (.wasm/.whl/.zip/.py). Поэтому на диск они пишутся под именем
+// «…<ext>.txt», а pyodide.mjs (ES-модуль, обязан быть .js) — как
+// pyodide.loader.js. Воркер (engineAssets.storedUrl) восстанавливает исходные
+// адреса. В манифесте имена остаются логическими.
+const safeName = (name) =>
+  name === "pyodide.mjs"
+    ? "pyodide.loader.js"
+    : /\.(wasm|whl|zip|py)$/.test(name)
+      ? name + ".txt"
+      : name;
 
 // Файлы ядра Pyodide из npm-пакета pyodide.
 const CORE_FILES = [
