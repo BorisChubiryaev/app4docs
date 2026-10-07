@@ -12,7 +12,6 @@ import {
   dropOldCaches,
   loadManifest,
   makeCachedFetch,
-  storedUrl,
   LOADER_FILE,
 } from "./engineAssets";
 
@@ -39,18 +38,15 @@ const post = (msg: WorkerResponse, transfer: Transferable[] = []) =>
   self.postMessage(msg, transfer);
 
 // Все запросы Pyodide идут через self.fetch, поэтому подменяем его:
-// 1) файлы с «непривычными» для Qlik типами лежат под именем …<ext>.txt —
-//    запрос к исходному имени подменяется на реальный файл (storedUrl);
-// 2) файлы движка берутся из постоянного кэша (см. engineAssets.ts);
-// 3) хостинг (например, Qlik Sense) может отдавать .wasm не как
+// 1) файлы движка берутся из постоянного кэша (см. engineAssets.ts);
+// 2) хостинг (например, Qlik Sense) может отдавать .wasm не как
 //    application/wasm — тогда WebAssembly.instantiateStreaming падает, а
 //    Pyodide не переходит на запасной путь и зависает. Проставляем тип сами.
 const nativeFetch = self.fetch.bind(self);
 let engineFetch: typeof fetch = nativeFetch;
 self.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const res = await engineFetch(input, init);
   const url = String(input instanceof Request ? input.url : input);
-  const stored = storedUrl(url);
-  const res = await engineFetch(stored === url ? input : stored, init);
   if (
     url.split("?")[0].endsWith(".wasm") &&
     res.headers.get("content-type") !== "application/wasm"
