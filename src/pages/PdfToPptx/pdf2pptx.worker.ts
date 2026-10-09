@@ -141,6 +141,7 @@ const fmtMb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
 // Без этого ошибки, пришедшие не как Error, видны только как «[object Object]».
 let stage = "подготовка";
 const pyLog: string[] = [];
+const loaded: string[] = []; // файлы движка: размер, откуда, проверка
 const remember = (line: string) => {
   pyLog.push(line);
   if (pyLog.length > 12) pyLog.shift();
@@ -165,7 +166,9 @@ const setStage = (text: string, step: number, steps: number) => {
 const init = async (base: string) => {
   const t0 = performance.now();
   const manifest = await loadManifest(base);
-  engineFetch = makeCachedFetch(manifest, base, nativeFetch);
+  engineFetch = makeCachedFetch(manifest, base, nativeFetch, (line) =>
+    loaded.push(line),
+  );
   dropOldCaches(manifest).catch(() => {});
   const runtime = base + "runtime/";
   const steps = manifest.wheels.length + 2;
@@ -254,6 +257,7 @@ const describeError = (err: unknown): { message: string; details?: string } => {
     ...lines.slice(0, 2),
     ...lines.slice(2).slice(-4),
     ...(pyLog.length ? ["— вывод Python:", ...pyLog.slice(-6)] : []),
+    ...(loaded.length ? ["— файлы движка:", ...loaded] : []),
   ].join("\n");
   return {
     message:

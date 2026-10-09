@@ -110,8 +110,15 @@ export const makeCachedFetch = (
   manifest: Manifest,
   base: string,
   nativeFetch: typeof fetch,
+  /** Для диагностики: какой файл, откуда взят и прошёл ли проверку. */
+  onLoaded?: (line: string) => void,
 ) => {
   const name = cacheName(manifest);
+  const note = (rel: string, bytes: ArrayBuffer, from: string, problem: string | null) =>
+    onLoaded?.(
+      `${rel}: ${fmtBytes(bytes.byteLength)}, ${from}, ` +
+        (problem ? "НЕ СОВПАДАЕТ" : manifest.files?.[rel] ? "проверен" : "без проверки"),
+    );
   let cachePromise: Promise<Cache | null> | null = null;
   const openCache = () =>
     (cachePromise ??= hasCacheStorage()
@@ -131,13 +138,16 @@ export const makeCachedFetch = (
     const hit = await cache?.match(url).catch(() => undefined);
     if (hit) {
       const bytes = await hit.arrayBuffer();
-      if (!(await checkFile(manifest, rel, bytes))) return withBody(hit, bytes);
+      const bad = await checkFile(manifest, rel, bytes);
+      note(rel, bytes, "из кэша", bad);
+      if (!bad) return withBody(hit, bytes);
       await cache?.delete(url).catch(() => false); // испорчен — качаем заново
     }
     const res = await nativeFetch(input, init);
     if (!res.ok) return res;
     const bytes = await res.arrayBuffer();
     const problem = await checkFile(manifest, rel, bytes);
+    note(rel, bytes, `с сервера (${res.headers.get("content-type") ?? "тип ?"})`, problem);
     if (problem) throw new DamagedFileError(problem);
     if (cache) {
       await cache.put(url, withBody(res, bytes)).catch(() => {});
