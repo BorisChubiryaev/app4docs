@@ -31,11 +31,11 @@
       "size": 1073033,
       "sha256": "b22e5831eade9ff10e6fe2c811c68688cd91f10154377b4f80debcf5bafa1e56"
     },
-    "runtime/pyodide.asm.wasm.txt": {
+    "runtime/pyodide_asm_wasm.txt": {
       "size": 8645967,
       "sha256": "5effb6a1a6cc4a1a85bec4622701aa797c031e1de923cbbaf2ad47abdc4ab325"
     },
-    "runtime/python_stdlib.zip.txt": {
+    "runtime/python_stdlib_zip.txt": {
       "size": 2416866,
       "sha256": "0edae06e0f0d02983ceb9dc8b419dc72b9b944fc6caa39112b96e7514a799c66"
     },
@@ -43,67 +43,67 @@
       "size": 109732,
       "sha256": "f6e6f42f451f42affbbcddb00e8c9a3278dcbf399f57aab9f3f568839a7ff4a6"
     },
-    "runtime/lxml-6.0.0-cp313-cp313-pyodide_2025_0_wasm32.whl.txt": {
+    "runtime/lxml-6_0_0-cp313-cp313-pyodide_2025_0_wasm32_whl.txt": {
       "size": 1778068,
       "sha256": "b8f6421960b4519da498c43a554c4fb2b6797020e42bc4564b52af3ccfdd33b6"
     },
-    "runtime/pillow-11.3.0-cp313-cp313-pyodide_2025_0_wasm32.whl.txt": {
+    "runtime/pillow-11_3_0-cp313-cp313-pyodide_2025_0_wasm32_whl.txt": {
       "size": 1058399,
       "sha256": "8d5228bfaf01e75f12a8ac88e838ccc79d5e67bcac875e4a5f6bc1b4438077fd"
     },
-    "runtime/pymupdf-1.28.2-cp313-abi3-pyemscripten_2025_0_wasm32.whl.txt": {
+    "runtime/pymupdf-1_28_2-cp313-abi3-pyemscripten_2025_0_wasm32_whl.txt": {
       "size": 18399403,
       "sha256": "262abd9574237fead25115dc004bff34220d90add5d988abe0f14fd670505ad6"
     },
-    "runtime/typing_extensions-4.16.0-py3-none-any.whl.txt": {
+    "runtime/typing_extensions-4_16_0-py3-none-any_whl.txt": {
       "size": 45571,
       "sha256": "21324185cc90f14763b78815ca37847699325abc9dc03c28e4c9a162852b5b59"
     },
-    "runtime/xlsxwriter-3.2.9-py3-none-any.whl.txt": {
+    "runtime/xlsxwriter-3_2_9-py3-none-any_whl.txt": {
       "size": 175315,
       "sha256": "28d2452e6d3b16de7f84756a9b0d72de3a08102583e6a346c064243c859fc77b"
     },
-    "runtime/python_pptx-1.0.2-py3-none-any.whl.txt": {
+    "runtime/python_pptx-1_0_2-py3-none-any_whl.txt": {
       "size": 472788,
       "sha256": "57110c58c01e9a88a0d564824ecbb6f38ab5b095845df120352f2d76da91bdb6"
     },
-    "engine/__init__.py.txt": {
+    "engine/__init___py.txt": {
       "size": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
-    "engine/build.py.txt": {
+    "engine/build_py.txt": {
       "size": 10294,
       "sha256": "16110dd164303afa9e4d50cdd27367bc038fd9e6726cfbc7bd2407b5e8538f45"
     },
-    "engine/convert.py.txt": {
+    "engine/convert_py.txt": {
       "size": 2878,
       "sha256": "124b7a70dd5551efc7519a231b16eea7df022c9eb896be85e20d99ff82c38033"
     },
-    "engine/extract.py.txt": {
+    "engine/extract_py.txt": {
       "size": 6431,
       "sha256": "d0586a8c5dcfa3fa065579bf66ed1506e2b8c4d4cab27eb30ad5471c964a7d0e"
     },
-    "engine/fonts.py.txt": {
+    "engine/fonts_py.txt": {
       "size": 3524,
       "sha256": "090791d8c98d46d456506e188d88c558457e3b7c73f4aad880d448fcfb08a5c1"
     },
-    "engine/graphics.py.txt": {
+    "engine/graphics_py.txt": {
       "size": 9790,
       "sha256": "a28cf6a2c7f45786abdba47b1c194bfb910222e3137b81128485b309eb895cb3"
     },
-    "engine/layers.py.txt": {
+    "engine/layers_py.txt": {
       "size": 7252,
       "sha256": "54b59f30c21aab09c5cbd3ea5f73c9ac6652090aa949b9d3be72a4df19832b6b"
     },
-    "engine/model.py.txt": {
+    "engine/model_py.txt": {
       "size": 2898,
       "sha256": "6c7b0057db741f28f54d6a2a3f703d2968459b30d4ade4118c81f705de9beae3"
     },
-    "engine/text.py.txt": {
+    "engine/text_py.txt": {
       "size": 21406,
       "sha256": "4f92cd3d2e4cd326516d63fa416ed8dfa6378953d046a0a5b63834bb026cc5d8"
     },
-    "engine/verify.py.txt": {
+    "engine/verify_py.txt": {
       "size": 12111,
       "sha256": "81b2a00fec55492c54a07e8d28771d6010fd0c20a2a91615349fbea772269352"
     }

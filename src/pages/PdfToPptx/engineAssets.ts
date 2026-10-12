@@ -24,30 +24,38 @@ export const loadManifest = async (base: string): Promise<Manifest> => {
 const cacheName = (m: Manifest) =>
   `${CACHE_PREFIX}${m.pyodide}-${m.engineCommit.slice(0, 12)}-${m.runtimeBytes}`;
 
-// Qlik Sense при импорте расширения отклоняет пакет с «непривычными» типами
-// файлов (.wasm, .whl, .zip, .py). Поэтому на диске такие файлы лежат под именем
-// «…<ext>.txt», а здесь восстанавливается реальный адрес. Pyodide запрашивает
-// исходные имена — storedUrl() подменяет их на .txt-вариант прозрачно в
-// перехвате fetch. pyodide.mjs импортируется как ES-модуль, поэтому обязан
-// оставаться .js — переименован в pyodide.loader.js (а .js Qlik принимает).
+// Имена файлов — под ограничения сервера Qlik Sense. У него две проверки:
+//   1) статический сервер отдаёт только разрешённые типы (js, json, txt…),
+//      на .wasm/.whl/.zip/.py отвечает HTTP 415;
+//   2) веб-файрвол (ModSecurity CWAF) блокирует сам запрос с HTTP 403, если
+//      в АДРЕСЕ встречается «архивное» расширение — даже как часть имени
+//      («…python_stdlib.zip.txt» → 403 из-за «.zip»).
+// Поэтому в имени не должно остаться ни одной такой точки-расширения: точки
+// в имени заменяются на «_», и добавляется «.txt». Было «python_stdlib.zip» →
+// стало «python_stdlib_zip.txt». Pyodide запрашивает исходные имена —
+// storedUrl() прозрачно подменяет их в перехвате fetch. pyodide.mjs
+// (ES-модуль, обязан быть .js) → pyodide.loader.js.
 //
-// Zip-архивы (.zip, .whl) хранятся в перемешанном виде: почтовый шлюз на пути
-// к закрытому серверу находит внутри zip и пересобирает его, меняя байты, —
-// Python тогда не запускается. XOR-перестановка (unscramble) убирает
-// zip-структуру: файл становится обычными двоичными данными, как pyodide.asm.wasm
-// (он тот же путь проходит без изменений). base64 не подошёл — его шлюз
-// блокирует. Восстанавливает байты makeCachedFetch — после сверки с манифестом.
+// Zip-архивы (.zip, .whl) к тому же хранятся перемешанными (XOR): почтовый шлюз
+// на пути к закрытому серверу находит внутри zip и пересобирает его, меняя
+// байты, — Python тогда не запускается. XOR убирает zip-структуру: файл
+// становится обычными двоичными данными, как pyodide.asm.wasm (он тот же путь
+// проходит без изменений). Восстанавливает байты makeCachedFetch — после
+// сверки с манифестом.
 export const LOADER_FILE = "pyodide.loader.js";
-const SCRAMBLE = /\.(whl|zip)$/; // логические имена zip-архивов
-const RAW = /\.(wasm|py)$/;
+const RISKY = /\.(whl|zip|wasm|py)$/; // типы, которые Qlik режет (415 или 403)
 
 /** Логический адрес файла движка → имя, под которым он реально лежит. */
 export const storedUrl = (url: string): string => {
   const q = url.indexOf("?");
   const path = q === -1 ? url : url.slice(0, q);
   const query = q === -1 ? "" : url.slice(q);
-  if (SCRAMBLE.test(path) || RAW.test(path)) return path + ".txt" + query;
-  return url;
+  const slash = path.lastIndexOf("/");
+  const dir = path.slice(0, slash + 1);
+  const base = path.slice(slash + 1);
+  if (!RISKY.test(base)) return url;
+  // Убираем все точки из имени (чтобы в адресе не было «.zip», «.whl»…).
+  return dir + base.replace(/\./g, "_") + ".txt" + query;
 };
 
 // Ключ XOR-перестановки. Тот же массив — в scripts/vendor-pdf2pptx.mjs
@@ -55,7 +63,7 @@ export const storedUrl = (url: string): string => {
 const SCRAMBLE_KEY = [0x3f, 0x5c, 0xa7, 0x11, 0x9e, 0x42, 0xd8, 0x6b];
 
 /** Хранится ли файл в перемешанном виде (по реальному имени на диске). */
-const isScrambled = (storedRel: string) => /\.(whl|zip)\.txt$/.test(storedRel);
+const isScrambled = (storedRel: string) => /_(whl|zip)\.txt$/.test(storedRel);
 
 const unscramble = (bytes: ArrayBuffer): ArrayBuffer => {
   const out = new Uint8Array(bytes.slice(0));

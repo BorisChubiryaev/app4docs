@@ -28,24 +28,27 @@ const ENGINE = path.join(OUT, "engine");
 const PYODIDE = "0.28.3";
 const JSDELIVR = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE}/full`;
 
-// Qlik Sense при импорте расширения отклоняет пакет с «непривычными» типами
-// файлов (.wasm/.whl/.zip/.py). Поэтому на диск они пишутся под именем
-// «…<ext>.txt», а pyodide.mjs (ES-модуль, обязан быть .js) — как
-// pyodide.loader.js. Воркер (engineAssets.storedUrl) восстанавливает исходные
-// адреса. В манифесте имена остаются логическими.
+// Имена файлов — под ограничения Qlik Sense. Две проверки сервера:
+//   1) статический сервер отдаёт только разрешённые типы, на .wasm/.whl/.zip/.py
+//      отвечает HTTP 415;
+//   2) веб-файрвол (ModSecurity CWAF) блокирует запрос с HTTP 403, если в АДРЕСЕ
+//      есть «архивное» расширение — даже как часть имени («…python_stdlib.zip.txt»
+//      → 403 из-за «.zip»).
+// Поэтому в имени не остаётся ни одной такой точки-расширения: все точки имени
+// заменяются на «_», добавляется «.txt». «python_stdlib.zip» → «python_stdlib_zip.txt».
+// pyodide.mjs (ES-модуль, обязан быть .js) → pyodide.loader.js.
 //
-// Zip-архивы (.zip, .whl) хранятся перемешанными (XOR): почтовый шлюз на пути
-// к закрытому серверу находит zip по содержимому — даже под именем «…zip.txt» —
-// и пересобирает его (python_stdlib.zip приходил на 2 831 байт больше), и Python
-// не запускался. XOR убирает zip-структуру: файл становится двоичным, как
-// pyodide.asm.wasm (тот проходит шлюз без изменений). base64 не подошёл —
-// письмо с ним шлюз блокирует. Воркер восстанавливает байты (engineAssets).
+// Zip-архивы (.zip, .whl) к тому же хранятся перемешанными (XOR): почтовый шлюз
+// на пути к закрытому серверу находит zip по содержимому и пересобирает его
+// (python_stdlib.zip приходил на 2 831 байт больше) — Python не запускался. XOR
+// убирает zip-структуру: файл становится двоичным, как pyodide.asm.wasm (тот
+// проходит шлюз без изменений). Воркер восстанавливает байты (engineAssets).
 const isScramble = (name) => /\.(whl|zip)$/.test(name);
 const safeName = (name) =>
   name === "pyodide.mjs"
     ? "pyodide.loader.js"
     : /\.(whl|zip|wasm|py)$/.test(name)
-      ? name + ".txt"
+      ? name.replace(/\./g, "_") + ".txt"
       : name;
 
 // Ключ XOR-перестановки. Тот же массив — в src/pages/PdfToPptx/engineAssets.ts
@@ -66,31 +69,37 @@ const writeRuntimeFile = (name, data) => {
   );
 };
 
-/** Прежние хранилища архивов (сырой zip в «…zip.txt» или base64 «…b64.txt») →
- *  перемешанный «…zip.txt», без повторного скачивания. */
-const migrateLegacyArchives = () => {
-  if (!fs.existsSync(RUNTIME)) return;
-  for (const f of fs.readdirSync(RUNTIME)) {
-    const b64 = f.match(/^(.+\.(?:whl|zip))\.b64\.txt$/);
-    if (b64) {
-      const raw = Buffer.from(
-        fs.readFileSync(path.join(RUNTIME, f), "utf8"),
-        "base64",
-      );
-      writeRuntimeFile(b64[1], raw);
-      fs.rmSync(path.join(RUNTIME, f));
-      console.log("  перемешан:", safeName(b64[1]));
-      continue;
+/** Переносит файлы прежних схем хранения (сырой «…zip.txt», base64 «…b64.txt»
+ *  или перемешанный «…zip.txt» со старыми точками) к текущей — без скачивания.
+ *  Восстанавливает логическое имя, приводит содержимое к нужному виду и
+ *  сохраняет под безопасным именем safeName(). */
+const migrateDir = (dir) => {
+  if (!fs.existsSync(dir)) return;
+  for (const f of fs.readdirSync(dir)) {
+    let logical, body;
+    let m;
+    if ((m = f.match(/^(.+)\.b64\.txt$/))) {
+      logical = m[1];
+      body = Buffer.from(fs.readFileSync(path.join(dir, f), "utf8"), "base64");
+    } else if ((m = f.match(/^(.+)\.txt$/))) {
+      logical = m[1];
+      body = fs.readFileSync(path.join(dir, f));
+    } else continue;
+    if (!/\.(whl|zip|wasm|py)$/.test(logical)) continue; // уже новая схема/не наш
+    const target = safeName(logical);
+    if (target === f) continue;
+    // Zip-архивы должны лежать перемешанными: сырой zip начинается с «PK».
+    if (isScramble(logical) && body[0] === 0x50 && body[1] === 0x4b) {
+      body = scramble(body);
     }
-    const txt = f.match(/^(.+\.(?:whl|zip))\.txt$/);
-    if (!txt) continue;
-    const data = fs.readFileSync(path.join(RUNTIME, f));
-    // Сырой zip начинается с «PK» (0x50 0x4b) — перемешиваем; иначе уже перемешан.
-    if (data[0] === 0x50 && data[1] === 0x4b) {
-      fs.writeFileSync(path.join(RUNTIME, f), scramble(data));
-      console.log("  перемешан:", f);
-    }
+    fs.writeFileSync(path.join(dir, target), body);
+    fs.rmSync(path.join(dir, f));
+    console.log("  →", target);
   }
+};
+const migrateLegacyArchives = () => {
+  migrateDir(RUNTIME);
+  migrateDir(ENGINE);
 };
 
 // Файлы ядра Pyodide из npm-пакета pyodide.
