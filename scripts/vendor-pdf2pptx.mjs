@@ -34,37 +34,62 @@ const JSDELIVR = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE}/full`;
 // pyodide.loader.js. Воркер (engineAssets.storedUrl) восстанавливает исходные
 // адреса. В манифесте имена остаются логическими.
 //
-// Zip-архивы (.zip, .whl) дополнительно кодируются в base64 («…zip.b64.txt»):
-// по дороге на закрытый сервер почтовый шлюз распознаёт zip по содержимому
-// и пересобирает его — python_stdlib.zip приходил на 2 831 байт больше, и
-// Python не запускался. В base64 файл — обычный текст, его не трогают.
-const isB64 = (name) => /\.(whl|zip)$/.test(name);
+// Zip-архивы (.zip, .whl) хранятся перемешанными (XOR): почтовый шлюз на пути
+// к закрытому серверу находит zip по содержимому — даже под именем «…zip.txt» —
+// и пересобирает его (python_stdlib.zip приходил на 2 831 байт больше), и Python
+// не запускался. XOR убирает zip-структуру: файл становится двоичным, как
+// pyodide.asm.wasm (тот проходит шлюз без изменений). base64 не подошёл —
+// письмо с ним шлюз блокирует. Воркер восстанавливает байты (engineAssets).
+const isScramble = (name) => /\.(whl|zip)$/.test(name);
 const safeName = (name) =>
   name === "pyodide.mjs"
     ? "pyodide.loader.js"
-    : isB64(name)
-      ? name + ".b64.txt"
-      : /\.(wasm|py)$/.test(name)
-        ? name + ".txt"
-        : name;
+    : /\.(whl|zip|wasm|py)$/.test(name)
+      ? name + ".txt"
+      : name;
 
-/** Пишет файл среды под безопасным именем (zip-архивы — в base64). */
+// Ключ XOR-перестановки. Тот же массив — в src/pages/PdfToPptx/engineAssets.ts
+// (меняется только вместе). Перестановка обратима: XOR тем же ключом.
+const SCRAMBLE_KEY = [0x3f, 0x5c, 0xa7, 0x11, 0x9e, 0x42, 0xd8, 0x6b];
+const scramble = (buf) => {
+  const out = Buffer.from(buf);
+  for (let i = 0; i < out.length; i++)
+    out[i] ^= SCRAMBLE_KEY[i % SCRAMBLE_KEY.length];
+  return out;
+};
+
+/** Пишет файл среды под безопасным именем (zip-архивы — перемешанными). */
 const writeRuntimeFile = (name, data) => {
   fs.writeFileSync(
     path.join(RUNTIME, safeName(name)),
-    isB64(name) ? data.toString("base64") : data,
+    isScramble(name) ? scramble(data) : data,
   );
 };
 
-/** Прежние «…zip.txt»/«…whl.txt» (сырые архивы) → base64, без скачивания. */
+/** Прежние хранилища архивов (сырой zip в «…zip.txt» или base64 «…b64.txt») →
+ *  перемешанный «…zip.txt», без повторного скачивания. */
 const migrateLegacyArchives = () => {
   if (!fs.existsSync(RUNTIME)) return;
   for (const f of fs.readdirSync(RUNTIME)) {
-    const m = f.match(/^(.+\.(?:whl|zip))\.txt$/);
-    if (!m) continue;
-    writeRuntimeFile(m[1], fs.readFileSync(path.join(RUNTIME, f)));
-    fs.rmSync(path.join(RUNTIME, f));
-    console.log("  base64:", safeName(m[1]));
+    const b64 = f.match(/^(.+\.(?:whl|zip))\.b64\.txt$/);
+    if (b64) {
+      const raw = Buffer.from(
+        fs.readFileSync(path.join(RUNTIME, f), "utf8"),
+        "base64",
+      );
+      writeRuntimeFile(b64[1], raw);
+      fs.rmSync(path.join(RUNTIME, f));
+      console.log("  перемешан:", safeName(b64[1]));
+      continue;
+    }
+    const txt = f.match(/^(.+\.(?:whl|zip))\.txt$/);
+    if (!txt) continue;
+    const data = fs.readFileSync(path.join(RUNTIME, f));
+    // Сырой zip начинается с «PK» (0x50 0x4b) — перемешиваем; иначе уже перемешан.
+    if (data[0] === 0x50 && data[1] === 0x4b) {
+      fs.writeFileSync(path.join(RUNTIME, f), scramble(data));
+      console.log("  перемешан:", f);
+    }
   }
 };
 

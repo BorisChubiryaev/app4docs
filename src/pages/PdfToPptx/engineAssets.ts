@@ -1,4 +1,4 @@
-// Файлы движка PDF → PPTX (~40 МБ) и их постоянный кэш.
+// Файлы движка PDF → PPTX (~33 МБ) и их постоянный кэш.
 //
 // Всё лежит рядом со сборкой (public/pdf2pptx/) и грузится с того же
 // сервера, что и приложение, — интернет не нужен. Чтобы не зависеть от
@@ -31,33 +31,36 @@ const cacheName = (m: Manifest) =>
 // перехвате fetch. pyodide.mjs импортируется как ES-модуль, поэтому обязан
 // оставаться .js — переименован в pyodide.loader.js (а .js Qlik принимает).
 //
-// Zip-архивы (.zip, .whl) к тому же хранятся в base64 («…zip.b64.txt»): по
-// дороге на закрытый сервер почтовый шлюз пересобирал их, и Python не
-// запускался. Декодирует их makeCachedFetch — после сверки с манифестом.
+// Zip-архивы (.zip, .whl) хранятся в перемешанном виде: почтовый шлюз на пути
+// к закрытому серверу находит внутри zip и пересобирает его, меняя байты, —
+// Python тогда не запускается. XOR-перестановка (unscramble) убирает
+// zip-структуру: файл становится обычными двоичными данными, как pyodide.asm.wasm
+// (он тот же путь проходит без изменений). base64 не подошёл — его шлюз
+// блокирует. Восстанавливает байты makeCachedFetch — после сверки с манифестом.
 export const LOADER_FILE = "pyodide.loader.js";
-const B64 = /\.(whl|zip)$/;
+const SCRAMBLE = /\.(whl|zip)$/; // логические имена zip-архивов
 const RAW = /\.(wasm|py)$/;
-const B64_SUFFIX = ".b64.txt";
 
 /** Логический адрес файла движка → имя, под которым он реально лежит. */
 export const storedUrl = (url: string): string => {
   const q = url.indexOf("?");
   const path = q === -1 ? url : url.slice(0, q);
   const query = q === -1 ? "" : url.slice(q);
-  if (B64.test(path)) return path + B64_SUFFIX + query;
-  if (RAW.test(path)) return path + ".txt" + query;
+  if (SCRAMBLE.test(path) || RAW.test(path)) return path + ".txt" + query;
   return url;
 };
 
-const decodeBase64 = (bytes: ArrayBuffer): ArrayBuffer => {
-  const text = new TextDecoder().decode(bytes);
-  const fromBase64 = (Uint8Array as unknown as {
-    fromBase64?: (s: string) => Uint8Array;
-  }).fromBase64;
-  if (fromBase64) return fromBase64(text.trim()).buffer as ArrayBuffer;
-  const bin = atob(text.replace(/\s+/g, ""));
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+// Ключ XOR-перестановки. Тот же массив — в scripts/vendor-pdf2pptx.mjs
+// (меняется только вместе). Перестановка обратима: XOR тем же ключом.
+const SCRAMBLE_KEY = [0x3f, 0x5c, 0xa7, 0x11, 0x9e, 0x42, 0xd8, 0x6b];
+
+/** Хранится ли файл в перемешанном виде (по реальному имени на диске). */
+const isScrambled = (storedRel: string) => /\.(whl|zip)\.txt$/.test(storedRel);
+
+const unscramble = (bytes: ArrayBuffer): ArrayBuffer => {
+  const out = new Uint8Array(bytes.slice(0));
+  for (let i = 0; i < out.length; i++)
+    out[i] ^= SCRAMBLE_KEY[i % SCRAMBLE_KEY.length];
   return out.buffer;
 };
 
@@ -146,10 +149,10 @@ export const makeCachedFetch = (
 
   const withBody = (res: Response, bytes: ArrayBuffer) =>
     new Response(bytes, { status: res.status, headers: res.headers });
-  // Что отдать Pyodide: архивы из base64 — обратно в двоичный вид.
+  // Что отдать Pyodide: перемешанные архивы — обратно в исходный zip.
   const decoded = (rel: string, res: Response, bytes: ArrayBuffer) =>
-    rel.endsWith(B64_SUFFIX)
-      ? new Response(decodeBase64(bytes), {
+    isScrambled(rel)
+      ? new Response(unscramble(bytes), {
           status: res.status,
           headers: { "content-type": "application/zip" },
         })

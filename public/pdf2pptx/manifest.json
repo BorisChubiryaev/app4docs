@@ -21,7 +21,7 @@
     "xlsxwriter-3.2.9-py3-none-any.whl",
     "python_pptx-1.0.2-py3-none-any.whl"
   ],
-  "runtimeBytes": 42306971,
+  "runtimeBytes": 34191489,
   "files": {
     "runtime/pyodide.loader.js": {
       "size": 16347,
@@ -35,37 +35,37 @@
       "size": 8645967,
       "sha256": "5effb6a1a6cc4a1a85bec4622701aa797c031e1de923cbbaf2ad47abdc4ab325"
     },
-    "runtime/python_stdlib.zip.b64.txt": {
-      "size": 3222488,
-      "sha256": "cef07dd77ea9ea0e003f0c3ae4350d6d18fa1ce9f890684e1b6b9c10854683cf"
+    "runtime/python_stdlib.zip.txt": {
+      "size": 2416866,
+      "sha256": "0edae06e0f0d02983ceb9dc8b419dc72b9b944fc6caa39112b96e7514a799c66"
     },
     "runtime/pyodide-lock.json": {
       "size": 109732,
       "sha256": "f6e6f42f451f42affbbcddb00e8c9a3278dcbf399f57aab9f3f568839a7ff4a6"
     },
-    "runtime/lxml-6.0.0-cp313-cp313-pyodide_2025_0_wasm32.whl.b64.txt": {
-      "size": 2370760,
-      "sha256": "432bba50b6e80fcbbcc7ebe82c6dcaf5cf2117da0014761baf2dd8e8e42bd1f2"
+    "runtime/lxml-6.0.0-cp313-cp313-pyodide_2025_0_wasm32.whl.txt": {
+      "size": 1778068,
+      "sha256": "b8f6421960b4519da498c43a554c4fb2b6797020e42bc4564b52af3ccfdd33b6"
     },
-    "runtime/pillow-11.3.0-cp313-cp313-pyodide_2025_0_wasm32.whl.b64.txt": {
-      "size": 1411200,
-      "sha256": "1eac19163d33f6c1d34da67ffa726bc9d80d2bdbbb59e7987b1c8fe951474010"
+    "runtime/pillow-11.3.0-cp313-cp313-pyodide_2025_0_wasm32.whl.txt": {
+      "size": 1058399,
+      "sha256": "8d5228bfaf01e75f12a8ac88e838ccc79d5e67bcac875e4a5f6bc1b4438077fd"
     },
-    "runtime/pymupdf-1.28.2-cp313-abi3-pyemscripten_2025_0_wasm32.whl.b64.txt": {
-      "size": 24532540,
-      "sha256": "7eac8e614699e8213b717bc2f9a05531afbeffdc4c648f97a7d67a7ca932dfa3"
+    "runtime/pymupdf-1.28.2-cp313-abi3-pyemscripten_2025_0_wasm32.whl.txt": {
+      "size": 18399403,
+      "sha256": "262abd9574237fead25115dc004bff34220d90add5d988abe0f14fd670505ad6"
     },
-    "runtime/typing_extensions-4.16.0-py3-none-any.whl.b64.txt": {
-      "size": 60764,
-      "sha256": "f8542a3a528dcae6c4ba1c3ae7549b35bba52ee82785de6b714030784bf121af"
+    "runtime/typing_extensions-4.16.0-py3-none-any.whl.txt": {
+      "size": 45571,
+      "sha256": "21324185cc90f14763b78815ca37847699325abc9dc03c28e4c9a162852b5b59"
     },
-    "runtime/xlsxwriter-3.2.9-py3-none-any.whl.b64.txt": {
-      "size": 233756,
-      "sha256": "3376ef479b7f0f4a56006cee68f54643470151672a5c00742137827a8220b799"
+    "runtime/xlsxwriter-3.2.9-py3-none-any.whl.txt": {
+      "size": 175315,
+      "sha256": "28d2452e6d3b16de7f84756a9b0d72de3a08102583e6a346c064243c859fc77b"
     },
-    "runtime/python_pptx-1.0.2-py3-none-any.whl.b64.txt": {
-      "size": 630384,
-      "sha256": "ec33b541511bfee7584a7c7ee6c2017818a928e0fef1e419c55ef286929ac67c"
+    "runtime/python_pptx-1.0.2-py3-none-any.whl.txt": {
+      "size": 472788,
+      "sha256": "57110c58c01e9a88a0d564824ecbb6f38ab5b095845df120352f2d76da91bdb6"
     },
     "engine/__init__.py.txt": {
       "size": 0,
