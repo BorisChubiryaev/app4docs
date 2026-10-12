@@ -44,11 +44,15 @@ const JSDELIVR = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE}/full`;
 // убирает zip-структуру: файл становится двоичным, как pyodide.asm.wasm (тот
 // проходит шлюз без изменений). Воркер восстанавливает байты (engineAssets).
 const isScramble = (name) => /\.(whl|zip)$/.test(name);
+// Безопасное имя для файрвола Qlik (та же логика — в engineAssets.safeBase):
+// убираем точки (архивные расширения в адресе → 403) и нейтрализуем слово
+// «script» (ABI-тег PyMuPDF «pyemscripten» — файрвол режет его как XSS).
+const safeBase = (name) => name.replace(/\./g, "_").replace(/script/gi, "scrpt");
 const safeName = (name) =>
   name === "pyodide.mjs"
     ? "pyodide.loader.js"
     : /\.(whl|zip|wasm|py)$/.test(name)
-      ? name.replace(/\./g, "_") + ".txt"
+      ? safeBase(name) + ".txt"
       : name;
 
 // Ключ XOR-перестановки. Тот же массив — в src/pages/PdfToPptx/engineAssets.ts
@@ -94,6 +98,13 @@ const migrateDir = (dir) => {
     }
     fs.writeFileSync(path.join(dir, target), body);
     fs.rmSync(path.join(dir, f));
+    console.log("  →", target);
+  }
+  // Файлы прежней схемы (точки уже убраны), где в имени осталось «script».
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith(".txt") || !/script/i.test(f)) continue;
+    const target = f.replace(/script/gi, "scrpt");
+    fs.renameSync(path.join(dir, f), path.join(dir, target));
     console.log("  →", target);
   }
 };

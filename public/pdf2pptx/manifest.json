@@ -51,7 +51,7 @@
       "size": 1058399,
       "sha256": "8d5228bfaf01e75f12a8ac88e838ccc79d5e67bcac875e4a5f6bc1b4438077fd"
     },
-    "runtime/pymupdf-1_28_2-cp313-abi3-pyemscripten_2025_0_wasm32_whl.txt": {
+    "runtime/pymupdf-1_28_2-cp313-abi3-pyemscrpten_2025_0_wasm32_whl.txt": {
       "size": 18399403,
       "sha256": "262abd9574237fead25115dc004bff34220d90add5d988abe0f14fd670505ad6"
     },

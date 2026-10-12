@@ -530,6 +530,10 @@ JavaScript-тип, а `.mjs` Qlik отдаёт как text/plain) → `pyodide.l
 итоге все файлы движка — типов `txt`, `js`, `json`, и в их адресах нет
 архивных расширений.
 
+Тот же файрвол режет слово `script` в адресе (как попытку XSS), а оно есть в
+ABI-теге колеса PyMuPDF (`pyemscripten`). Поэтому `script` в именах заменяется
+на `scrpt` (та же замена — в `engineAssets.safeBase` и `scripts/vendor-pdf2pptx.mjs`).
+
 Zip-архивы (`python_stdlib.zip` и колёса `.whl`) к тому же хранятся
 перемешанными (обратимый XOR, `scripts/vendor-pdf2pptx.mjs`). По дороге на
 закрытый сервер почтовый шлюз находит zip по содержимому — даже под именем

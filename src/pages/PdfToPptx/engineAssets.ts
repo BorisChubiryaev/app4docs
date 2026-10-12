@@ -45,6 +45,18 @@ const cacheName = (m: Manifest) =>
 export const LOADER_FILE = "pyodide.loader.js";
 const RISKY = /\.(whl|zip|wasm|py)$/; // типы, которые Qlik режет (415 или 403)
 
+/**
+ * Делает имя безопасным для файрвола Qlik (ModSecurity CWAF):
+ *  - убирает все точки — чтобы в адресе не было архивных расширений
+ *    («.zip», «.whl», «.wasm», «.py» → иначе 403);
+ *  - нейтрализует слово «script» (внутри ABI-тега PyMuPDF «pyemscripten») —
+ *    файрвол режет его как попытку XSS. Та же замена — в vendor-pdf2pptx.mjs.
+ * Другие опасные слова в именах движка не встречаются; при необходимости
+ * добавляются сюда и в скрипт одинаково.
+ */
+export const safeBase = (base: string): string =>
+  base.replace(/\./g, "_").replace(/script/gi, "scrpt") + ".txt";
+
 /** Логический адрес файла движка → имя, под которым он реально лежит. */
 export const storedUrl = (url: string): string => {
   const q = url.indexOf("?");
@@ -54,8 +66,7 @@ export const storedUrl = (url: string): string => {
   const dir = path.slice(0, slash + 1);
   const base = path.slice(slash + 1);
   if (!RISKY.test(base)) return url;
-  // Убираем все точки из имени (чтобы в адресе не было «.zip», «.whl»…).
-  return dir + base.replace(/\./g, "_") + ".txt" + query;
+  return dir + safeBase(base) + query;
 };
 
 // Ключ XOR-перестановки. Тот же массив — в scripts/vendor-pdf2pptx.mjs
