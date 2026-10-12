@@ -1,4 +1,4 @@
-// Файлы движка PDF → PPTX (~33 МБ) и их постоянный кэш.
+// Файлы движка PDF → PPTX (~40 МБ) и их постоянный кэш.
 //
 // Всё лежит рядом со сборкой (public/pdf2pptx/) и грузится с того же
 // сервера, что и приложение, — интернет не нужен. Чтобы не зависеть от
@@ -30,16 +30,35 @@ const cacheName = (m: Manifest) =>
 // исходные имена — storedUrl() подменяет их на .txt-вариант прозрачно в
 // перехвате fetch. pyodide.mjs импортируется как ES-модуль, поэтому обязан
 // оставаться .js — переименован в pyodide.loader.js (а .js Qlik принимает).
+//
+// Zip-архивы (.zip, .whl) к тому же хранятся в base64 («…zip.b64.txt»): по
+// дороге на закрытый сервер почтовый шлюз пересобирал их, и Python не
+// запускался. Декодирует их makeCachedFetch — после сверки с манифестом.
 export const LOADER_FILE = "pyodide.loader.js";
-const SAFE_SUFFIX = ".txt";
-const RISKY = /\.(wasm|whl|zip|py)$/;
+const B64 = /\.(whl|zip)$/;
+const RAW = /\.(wasm|py)$/;
+const B64_SUFFIX = ".b64.txt";
 
 /** Логический адрес файла движка → имя, под которым он реально лежит. */
 export const storedUrl = (url: string): string => {
   const q = url.indexOf("?");
   const path = q === -1 ? url : url.slice(0, q);
   const query = q === -1 ? "" : url.slice(q);
-  return RISKY.test(path) ? path + SAFE_SUFFIX + query : url;
+  if (B64.test(path)) return path + B64_SUFFIX + query;
+  if (RAW.test(path)) return path + ".txt" + query;
+  return url;
+};
+
+const decodeBase64 = (bytes: ArrayBuffer): ArrayBuffer => {
+  const text = new TextDecoder().decode(bytes);
+  const fromBase64 = (Uint8Array as unknown as {
+    fromBase64?: (s: string) => Uint8Array;
+  }).fromBase64;
+  if (fromBase64) return fromBase64(text.trim()).buffer as ArrayBuffer;
+  const bin = atob(text.replace(/\s+/g, ""));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
 };
 
 /** Все файлы движка под их реальными именами (для кэша и подкачки). */
@@ -127,6 +146,14 @@ export const makeCachedFetch = (
 
   const withBody = (res: Response, bytes: ArrayBuffer) =>
     new Response(bytes, { status: res.status, headers: res.headers });
+  // Что отдать Pyodide: архивы из base64 — обратно в двоичный вид.
+  const decoded = (rel: string, res: Response, bytes: ArrayBuffer) =>
+    rel.endsWith(B64_SUFFIX)
+      ? new Response(decodeBase64(bytes), {
+          status: res.status,
+          headers: { "content-type": "application/zip" },
+        })
+      : withBody(res, bytes);
 
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
@@ -140,7 +167,7 @@ export const makeCachedFetch = (
       const bytes = await hit.arrayBuffer();
       const bad = await checkFile(manifest, rel, bytes);
       note(rel, bytes, "из кэша", bad);
-      if (!bad) return withBody(hit, bytes);
+      if (!bad) return decoded(rel, hit, bytes);
       await cache?.delete(url).catch(() => false); // испорчен — качаем заново
     }
     const res = await nativeFetch(input, init);
@@ -152,7 +179,7 @@ export const makeCachedFetch = (
     if (cache) {
       await cache.put(url, withBody(res, bytes)).catch(() => {});
     }
-    return withBody(res, bytes);
+    return decoded(rel, res, bytes);
   };
 };
 

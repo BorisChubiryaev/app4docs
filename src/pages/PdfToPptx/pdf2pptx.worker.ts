@@ -39,8 +39,9 @@ const post = (msg: WorkerResponse, transfer: Transferable[] = []) =>
   self.postMessage(msg, transfer);
 
 // Все запросы Pyodide идут через self.fetch, поэтому подменяем его:
-// 1) файлы с «непривычными» для Qlik типами лежат под именем …<ext>.txt —
-//    запрос к исходному имени подменяется на реальный файл (storedUrl);
+// 1) файлы с «непривычными» для Qlik типами лежат под именем …<ext>.txt
+//    (zip-архивы — …<ext>.b64.txt, в base64) — запрос к исходному имени
+//    подменяется на реальный файл (storedUrl), архивы декодируются;
 // 2) файлы движка берутся из постоянного кэша (см. engineAssets.ts);
 // 3) хостинг (например, Qlik Sense) может отдавать .wasm не как
 //    application/wasm — тогда WebAssembly.instantiateStreaming падает, а

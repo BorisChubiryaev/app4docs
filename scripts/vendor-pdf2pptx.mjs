@@ -33,12 +33,40 @@ const JSDELIVR = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE}/full`;
 // «…<ext>.txt», а pyodide.mjs (ES-модуль, обязан быть .js) — как
 // pyodide.loader.js. Воркер (engineAssets.storedUrl) восстанавливает исходные
 // адреса. В манифесте имена остаются логическими.
+//
+// Zip-архивы (.zip, .whl) дополнительно кодируются в base64 («…zip.b64.txt»):
+// по дороге на закрытый сервер почтовый шлюз распознаёт zip по содержимому
+// и пересобирает его — python_stdlib.zip приходил на 2 831 байт больше, и
+// Python не запускался. В base64 файл — обычный текст, его не трогают.
+const isB64 = (name) => /\.(whl|zip)$/.test(name);
 const safeName = (name) =>
   name === "pyodide.mjs"
     ? "pyodide.loader.js"
-    : /\.(wasm|whl|zip|py)$/.test(name)
-      ? name + ".txt"
-      : name;
+    : isB64(name)
+      ? name + ".b64.txt"
+      : /\.(wasm|py)$/.test(name)
+        ? name + ".txt"
+        : name;
+
+/** Пишет файл среды под безопасным именем (zip-архивы — в base64). */
+const writeRuntimeFile = (name, data) => {
+  fs.writeFileSync(
+    path.join(RUNTIME, safeName(name)),
+    isB64(name) ? data.toString("base64") : data,
+  );
+};
+
+/** Прежние «…zip.txt»/«…whl.txt» (сырые архивы) → base64, без скачивания. */
+const migrateLegacyArchives = () => {
+  if (!fs.existsSync(RUNTIME)) return;
+  for (const f of fs.readdirSync(RUNTIME)) {
+    const m = f.match(/^(.+\.(?:whl|zip))\.txt$/);
+    if (!m) continue;
+    writeRuntimeFile(m[1], fs.readFileSync(path.join(RUNTIME, f)));
+    fs.rmSync(path.join(RUNTIME, f));
+    console.log("  base64:", safeName(m[1]));
+  }
+};
 
 // Файлы ядра Pyodide из npm-пакета pyodide.
 const CORE_FILES = [
@@ -91,6 +119,7 @@ const pypiUrl = async (project, fileName) => {
 
 const vendorRuntime = async (force) => {
   fs.mkdirSync(RUNTIME, { recursive: true });
+  migrateLegacyArchives();
 
   const missingCore = CORE_FILES.filter(
     (f) => force || !fs.existsSync(path.join(RUNTIME, safeName(f))),
@@ -105,7 +134,7 @@ const vendorRuntime = async (force) => {
     );
     execFileSync("tar", ["-xzf", tgz, "-C", tmp]);
     for (const f of missingCore) {
-      fs.copyFileSync(path.join(tmp, "package", f), path.join(RUNTIME, safeName(f)));
+      writeRuntimeFile(f, fs.readFileSync(path.join(tmp, "package", f)));
       console.log("  ✓", safeName(f));
     }
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -117,7 +146,7 @@ const vendorRuntime = async (force) => {
     const url = source.startsWith("pypi:")
       ? await pypiUrl(source.slice(5), fileName)
       : source;
-    fs.writeFileSync(target, await download(url));
+    writeRuntimeFile(fileName, await download(url));
     console.log("  ✓", safeName(fileName));
   }
 };
@@ -153,6 +182,7 @@ const vendorEngine = (engineDir) => {
 };
 
 const writeManifest = (engine) => {
+  migrateLegacyArchives();
   const runtimeFiles = fs.readdirSync(RUNTIME);
   const missing = [...CORE_FILES, ...WHEELS.map(([f]) => f)].filter(
     (f) => !runtimeFiles.includes(safeName(f)),
