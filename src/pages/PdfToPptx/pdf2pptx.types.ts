@@ -11,6 +11,8 @@ export interface Manifest {
   runtimeBytes: number;
   /** Размер и SHA-256 файлов движка по реальным путям (runtime/…, engine/…). */
   files?: Record<string, { size: number; sha256: string }>;
+  /** Крупные файлы, разбитые на части: логический путь → список частей. */
+  parts?: Record<string, string[]>;
 }
 
 export type WorkerRequest =

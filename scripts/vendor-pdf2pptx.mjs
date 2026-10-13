@@ -65,12 +65,35 @@ const scramble = (buf) => {
   return out;
 };
 
+// Файрвол Qlik (ModSecurity CWAF) блокирует с 403 слишком большой ответ:
+// pymupdf (~18 МБ) не проходит, а pyodide.asm.wasm (~8.6 МБ) — проходит.
+// Поэтому файлы крупнее CHUNK режем на части «…_p0.txt», «…_p1.txt», …
+// (каждая заведомо меньше того, что уже проходит), воркер склеивает обратно.
+const CHUNK = 6 * 1024 * 1024;
+const partName = (stored, i) => stored.replace(/\.txt$/, `_p${i}.txt`);
+const chunkCount = (len) => Math.ceil(len / CHUNK);
+/** Есть ли файл на диске — целиком или первой частью. */
+const storedExists = (dir, stored) =>
+  fs.existsSync(path.join(dir, stored)) ||
+  fs.existsSync(path.join(dir, partName(stored, 0)));
+
+/** Записывает байты под безопасным именем, крупные — частями. */
+const writeStored = (dir, stored, body) => {
+  if (body.length <= CHUNK) {
+    fs.writeFileSync(path.join(dir, stored), body);
+    return;
+  }
+  for (let i = 0, n = chunkCount(body.length); i < n; i++) {
+    fs.writeFileSync(
+      path.join(dir, partName(stored, i)),
+      body.subarray(i * CHUNK, (i + 1) * CHUNK),
+    );
+  }
+};
+
 /** Пишет файл среды под безопасным именем (zip-архивы — перемешанными). */
 const writeRuntimeFile = (name, data) => {
-  fs.writeFileSync(
-    path.join(RUNTIME, safeName(name)),
-    isScramble(name) ? scramble(data) : data,
-  );
+  writeStored(RUNTIME, safeName(name), isScramble(name) ? scramble(data) : data);
 };
 
 /** Переносит файлы прежних схем хранения (сырой «…zip.txt», base64 «…b64.txt»
@@ -106,6 +129,15 @@ const migrateDir = (dir) => {
     const target = f.replace(/script/gi, "scrpt");
     fs.renameSync(path.join(dir, f), path.join(dir, target));
     console.log("  →", target);
+  }
+  // Крупные целые файлы прежних сборок → части (чтобы проходили файрвол).
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith(".txt") || /_p\d+\.txt$/.test(f)) continue;
+    const data = fs.readFileSync(path.join(dir, f));
+    if (data.length <= CHUNK) continue;
+    writeStored(dir, f, data);
+    fs.rmSync(path.join(dir, f));
+    console.log(`  разбит: ${f} → ${chunkCount(data.length)} частей`);
   }
 };
 const migrateLegacyArchives = () => {
@@ -167,7 +199,7 @@ const vendorRuntime = async (force) => {
   migrateLegacyArchives();
 
   const missingCore = CORE_FILES.filter(
-    (f) => force || !fs.existsSync(path.join(RUNTIME, safeName(f))),
+    (f) => force || !storedExists(RUNTIME, safeName(f)),
   );
   if (missingCore.length) {
     console.log(`Pyodide ${PYODIDE} из npm…`);
@@ -186,8 +218,7 @@ const vendorRuntime = async (force) => {
   }
 
   for (const [fileName, source] of WHEELS) {
-    const target = path.join(RUNTIME, safeName(fileName));
-    if (!force && fs.existsSync(target)) continue;
+    if (!force && storedExists(RUNTIME, safeName(fileName))) continue;
     const url = source.startsWith("pypi:")
       ? await pypiUrl(source.slice(5), fileName)
       : source;
@@ -228,9 +259,8 @@ const vendorEngine = (engineDir) => {
 
 const writeManifest = (engine) => {
   migrateLegacyArchives();
-  const runtimeFiles = fs.readdirSync(RUNTIME);
   const missing = [...CORE_FILES, ...WHEELS.map(([f]) => f)].filter(
-    (f) => !runtimeFiles.includes(safeName(f)),
+    (f) => !storedExists(RUNTIME, safeName(f)),
   );
   if (missing.length) {
     throw new Error(
@@ -241,15 +271,14 @@ const writeManifest = (engine) => {
   const prev = fs.existsSync(manifestPath)
     ? JSON.parse(fs.readFileSync(manifestPath, "utf8"))
     : {};
-  const bytes = [...CORE_FILES, ...WHEELS.map(([f]) => f)].reduce(
-    (sum, f) => sum + fs.statSync(path.join(RUNTIME, safeName(f))).size,
-    0,
-  );
   const engineFiles = engine?.files ?? prev.engineFiles;
   // Размер и SHA-256 каждого файла: воркер сверяет их при загрузке и сразу
   // сообщает, если файл изменился по дороге (почтовый шлюз, антивирус,
-  // распаковка) или в кэше браузера лежит испорченная копия.
+  // распаковка) или в кэше браузера лежит испорченная копия. Крупные файлы
+  // разбиты на части — в `parts` перечислены реальные файлы под логическим
+  // именем, их воркер склеивает обратно.
   const files = {};
+  const parts = {};
   const addFile = (rel) => {
     const data = fs.readFileSync(path.join(OUT, rel));
     files[rel] = {
@@ -257,10 +286,34 @@ const writeManifest = (engine) => {
       sha256: createHash("sha256").update(data).digest("hex"),
     };
   };
+  // Добавляет логический файл: целиком или частями «…_p0.txt, …_p1.txt».
+  const addStored = (dir, stored) => {
+    const baseRel = `${dir}/${stored}`;
+    if (fs.existsSync(path.join(OUT, baseRel))) {
+      addFile(baseRel);
+      return;
+    }
+    const stem = stored.replace(/\.txt$/, "");
+    const chunks = fs
+      .readdirSync(path.join(OUT, dir))
+      .filter((f) => f.startsWith(stem + "_p") && /_p\d+\.txt$/.test(f))
+      .sort(
+        (a, b) =>
+          Number(a.match(/_p(\d+)\.txt$/)[1]) -
+          Number(b.match(/_p(\d+)\.txt$/)[1]),
+      )
+      .map((f) => `${dir}/${f}`);
+    if (!chunks.length) throw new Error(`Нет файла и частей: ${baseRel}`);
+    chunks.forEach(addFile);
+    parts[baseRel] = chunks;
+  };
   for (const f of [...CORE_FILES, ...WHEELS.map(([w]) => w)]) {
-    addFile("runtime/" + safeName(f));
+    addStored("runtime", safeName(f));
   }
-  for (const f of engineFiles) addFile("engine/" + safeName(f));
+  for (const f of engineFiles) addStored("engine", safeName(f));
+  const bytes = Object.entries(files)
+    .filter(([rel]) => rel.startsWith("runtime/"))
+    .reduce((sum, [, v]) => sum + v.size, 0);
   const manifest = {
     pyodide: PYODIDE,
     engineCommit: engine?.commit ?? prev.engineCommit,
@@ -268,6 +321,7 @@ const writeManifest = (engine) => {
     wheels: WHEELS.map(([f]) => f),
     runtimeBytes: bytes,
     files,
+    parts,
   };
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   console.log(

@@ -31,9 +31,13 @@
       "size": 1073033,
       "sha256": "b22e5831eade9ff10e6fe2c811c68688cd91f10154377b4f80debcf5bafa1e56"
     },
-    "runtime/pyodide_asm_wasm.txt": {
-      "size": 8645967,
-      "sha256": "5effb6a1a6cc4a1a85bec4622701aa797c031e1de923cbbaf2ad47abdc4ab325"
+    "runtime/pyodide_asm_wasm_p0.txt": {
+      "size": 6291456,
+      "sha256": "ba187499f4aedfe9ed70bc93dbb31dbe054c618c78ffa025dc91b20e21a95cee"
+    },
+    "runtime/pyodide_asm_wasm_p1.txt": {
+      "size": 2354511,
+      "sha256": "09281591a2b3f23195d5f56f042ccd8f783ec5ba601596038250ec9e1e6c7976"
     },
     "runtime/python_stdlib_zip.txt": {
       "size": 2416866,
@@ -51,9 +55,17 @@
       "size": 1058399,
       "sha256": "8d5228bfaf01e75f12a8ac88e838ccc79d5e67bcac875e4a5f6bc1b4438077fd"
     },
-    "runtime/pymupdf-1_28_2-cp313-abi3-pyemscrpten_2025_0_wasm32_whl.txt": {
-      "size": 18399403,
-      "sha256": "262abd9574237fead25115dc004bff34220d90add5d988abe0f14fd670505ad6"
+    "runtime/pymupdf-1_28_2-cp313-abi3-pyemscrpten_2025_0_wasm32_whl_p0.txt": {
+      "size": 6291456,
+      "sha256": "32068446c66bb11b66093065ad46b25a605a832278cfa4b5715639e0d3c28f76"
+    },
+    "runtime/pymupdf-1_28_2-cp313-abi3-pyemscrpten_2025_0_wasm32_whl_p1.txt": {
+      "size": 6291456,
+      "sha256": "95b37ee6c40b988fff724de09ff33610001bd418ae63f10c17b379aeba61580e"
+    },
+    "runtime/pymupdf-1_28_2-cp313-abi3-pyemscrpten_2025_0_wasm32_whl_p2.txt": {
+      "size": 5816491,
+      "sha256": "a7ca4011ec61c21957a7ea5fe983bbf78e18da10b81df478f62853e0dc6d76e9"
     },
     "runtime/typing_extensions-4_16_0-py3-none-any_whl.txt": {
       "size": 45571,
@@ -107,5 +119,16 @@
       "size": 12111,
       "sha256": "81b2a00fec55492c54a07e8d28771d6010fd0c20a2a91615349fbea772269352"
     }
+  },
+  "parts": {
+    "runtime/pyodide_asm_wasm.txt": [
+      "runtime/pyodide_asm_wasm_p0.txt",
+      "runtime/pyodide_asm_wasm_p1.txt"
+    ],
+    "runtime/pymupdf-1_28_2-cp313-abi3-pyemscrpten_2025_0_wasm32_whl.txt": [
+      "runtime/pymupdf-1_28_2-cp313-abi3-pyemscrpten_2025_0_wasm32_whl_p0.txt",
+      "runtime/pymupdf-1_28_2-cp313-abi3-pyemscrpten_2025_0_wasm32_whl_p1.txt",
+      "runtime/pymupdf-1_28_2-cp313-abi3-pyemscrpten_2025_0_wasm32_whl_p2.txt"
+    ]
   }
 }

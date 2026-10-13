@@ -83,7 +83,7 @@ const unscramble = (bytes: ArrayBuffer): ArrayBuffer => {
   return out.buffer;
 };
 
-/** Все файлы движка под их реальными именами (для кэша и подкачки). */
+/** Все реальные файлы движка (для кэша и подкачки) — крупные как части. */
 export const engineFiles = (m: Manifest): string[] =>
   [
     "runtime/" + LOADER_FILE,
@@ -93,7 +93,10 @@ export const engineFiles = (m: Manifest): string[] =>
     "runtime/pyodide-lock.json",
     ...m.wheels.map((w) => "runtime/" + w),
     ...m.engineFiles.map((f) => "engine/" + f),
-  ].map(storedUrl);
+  ].flatMap((rel) => {
+    const stored = storedUrl(rel);
+    return m.parts?.[stored] ?? [stored];
+  });
 
 // Cache Storage есть только в защищённом контексте (https или localhost).
 const hasCacheStorage = () =>
@@ -177,12 +180,64 @@ export const makeCachedFetch = (
         })
       : withBody(res, bytes);
 
+  // Один реальный файл (часть или целый): кэш → сеть, со сверкой по манифесту.
+  // Возвращает сырые байты; при 403/404 или повреждении бросает ошибку.
+  const fetchRaw = async (
+    storedRel: string,
+    init?: RequestInit,
+  ): Promise<ArrayBuffer> => {
+    const url = base + storedRel;
+    const cache = await openCache();
+    const hit = await cache?.match(url).catch(() => undefined);
+    if (hit) {
+      const bytes = await hit.arrayBuffer();
+      const bad = await checkFile(manifest, storedRel, bytes);
+      note(storedRel, bytes, "из кэша", bad);
+      if (!bad) return bytes;
+      await cache?.delete(url).catch(() => false); // испорчен — качаем заново
+    }
+    const res = await nativeFetch(url, init);
+    if (!res.ok) {
+      const err = new Error(
+        `Сервер не отдал ${storedRel.split("/").pop()}: HTTP ${res.status}`,
+      );
+      note(storedRel, new ArrayBuffer(0), `с сервера (HTTP ${res.status})`, "");
+      throw err;
+    }
+    const bytes = await res.arrayBuffer();
+    const problem = await checkFile(manifest, storedRel, bytes);
+    note(storedRel, bytes, `с сервера (${res.headers.get("content-type") ?? "тип ?"})`, problem);
+    if (problem) throw new DamagedFileError(problem);
+    if (cache) await cache.put(url, new Response(bytes)).catch(() => {});
+    return bytes;
+  };
+
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
     if (!url.startsWith(base) || url.endsWith("manifest.json")) {
       return nativeFetch(input, init);
     }
     const rel = relPath(url, base);
+
+    // Крупный файл, разбитый на части: качаем каждую и склеиваем обратно.
+    const chunks = manifest.parts?.[rel];
+    if (chunks) {
+      const bufs: Uint8Array[] = [];
+      for (const c of chunks) bufs.push(new Uint8Array(await fetchRaw(c, init)));
+      const total = bufs.reduce((n, b) => n + b.byteLength, 0);
+      const all = new Uint8Array(total);
+      let off = 0;
+      for (const b of bufs) {
+        all.set(b, off);
+        off += b.byteLength;
+      }
+      return isScrambled(rel)
+        ? new Response(unscramble(all.buffer), {
+            headers: { "content-type": "application/zip" },
+          })
+        : new Response(all.buffer);
+    }
+
     const cache = await openCache();
     const hit = await cache?.match(url).catch(() => undefined);
     if (hit) {
