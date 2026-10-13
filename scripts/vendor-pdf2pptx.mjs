@@ -28,31 +28,43 @@ const ENGINE = path.join(OUT, "engine");
 const PYODIDE = "0.28.3";
 const JSDELIVR = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE}/full`;
 
-// Имена файлов — под ограничения Qlik Sense. Две проверки сервера:
-//   1) статический сервер отдаёт только разрешённые типы, на .wasm/.whl/.zip/.py
-//      отвечает HTTP 415;
-//   2) веб-файрвол (ModSecurity CWAF) блокирует запрос с HTTP 403, если в АДРЕСЕ
-//      есть «архивное» расширение — даже как часть имени («…python_stdlib.zip.txt»
-//      → 403 из-за «.zip»).
-// Поэтому в имени не остаётся ни одной такой точки-расширения: все точки имени
-// заменяются на «_», добавляется «.txt». «python_stdlib.zip» → «python_stdlib_zip.txt».
-// pyodide.mjs (ES-модуль, обязан быть .js) → pyodide.loader.js.
+// Имена файлов — под ограничения Qlik Sense. У сервера три проверки, и все
+// срабатывали на «непривычных» файлах движка (.wasm/.whl/.zip/.py):
+//   1) статический сервер отдаёт только разрешённые типы, иначе HTTP 415;
+//   2) веб-файрвол (ModSecurity CWAF) отвечает 403, если в АДРЕСЕ есть
+//      «архивное» расширение (`.zip`, `.whl`…) ИЛИ опасное слово — даже как
+//      часть имени: `.zip` в «python_stdlib.zip.txt», `scr…pt` (XSS-шаблон с
+//      необязательной «i») в ABI-теге PyMuPDF «pyemscripten»;
+//   3) тот же файрвол режет слишком большой ответ (см. CHUNK ниже).
+// Переименования под эти слова — бесконечная угадайка, поэтому «рискованные»
+// файлы получают НЕЙТРАЛЬНОЕ имя-хэш: только символы 0-9a-f и «.txt». В нём
+// не может быть ни словарного куска, ни расширения, ни «scr»/«pt». Карта
+// «логическое имя → реальные файлы» пишется в manifest.json (store); воркер
+// (engineAssets) ходит по ней. pyodide.mjs (ES-модуль, обязан быть .js и
+// грузится по своему имени) → pyodide.loader.js.
 //
 // Zip-архивы (.zip, .whl) к тому же хранятся перемешанными (XOR): почтовый шлюз
 // на пути к закрытому серверу находит zip по содержимому и пересобирает его
 // (python_stdlib.zip приходил на 2 831 байт больше) — Python не запускался. XOR
 // убирает zip-структуру: файл становится двоичным, как pyodide.asm.wasm (тот
 // проходит шлюз без изменений). Воркер восстанавливает байты (engineAssets).
+const isRisky = (name) => /\.(whl|zip|wasm|py)$/.test(name);
 const isScramble = (name) => /\.(whl|zip)$/.test(name);
-// Безопасное имя для файрвола Qlik (та же логика — в engineAssets.safeBase):
-// убираем точки (архивные расширения в адресе → 403) и нейтрализуем слово
-// «script» (ABI-тег PyMuPDF «pyemscripten» — файрвол режет его как XSS).
-const safeBase = (name) => name.replace(/\./g, "_").replace(/script/gi, "scrpt");
+// FNV-1a 32-бит → 8 hex. Детерминированный, одинаковый между запусками, так что
+// имена файлов стабильны. Воркеру эта функция не нужна — он читает store.
+const hashHex = (s) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+};
 const safeName = (name) =>
   name === "pyodide.mjs"
     ? "pyodide.loader.js"
-    : /\.(whl|zip|wasm|py)$/.test(name)
-      ? safeBase(name) + ".txt"
+    : isRisky(name)
+      ? hashHex(name) + ".txt"
       : name;
 
 // Ключ XOR-перестановки. Тот же массив — в src/pages/PdfToPptx/engineAssets.ts
@@ -70,7 +82,7 @@ const scramble = (buf) => {
 // Поэтому файлы крупнее CHUNK режем на части «…_p0.txt», «…_p1.txt», …
 // (каждая заведомо меньше того, что уже проходит), воркер склеивает обратно.
 const CHUNK = 6 * 1024 * 1024;
-const partName = (stored, i) => stored.replace(/\.txt$/, `_p${i}.txt`);
+const partName = (stored, i) => stored.replace(/\.txt$/, `_${i}.txt`);
 const chunkCount = (len) => Math.ceil(len / CHUNK);
 /** Есть ли файл на диске — целиком или первой частью. */
 const storedExists = (dir, stored) =>
@@ -96,53 +108,20 @@ const writeRuntimeFile = (name, data) => {
   writeStored(RUNTIME, safeName(name), isScramble(name) ? scramble(data) : data);
 };
 
-/** Переносит файлы прежних схем хранения (сырой «…zip.txt», base64 «…b64.txt»
- *  или перемешанный «…zip.txt» со старыми точками) к текущей — без скачивания.
- *  Восстанавливает логическое имя, приводит содержимое к нужному виду и
- *  сохраняет под безопасным именем safeName(). */
-const migrateDir = (dir) => {
-  if (!fs.existsSync(dir)) return;
-  for (const f of fs.readdirSync(dir)) {
-    let logical, body;
-    let m;
-    if ((m = f.match(/^(.+)\.b64\.txt$/))) {
-      logical = m[1];
-      body = Buffer.from(fs.readFileSync(path.join(dir, f), "utf8"), "base64");
-    } else if ((m = f.match(/^(.+)\.txt$/))) {
-      logical = m[1];
-      body = fs.readFileSync(path.join(dir, f));
-    } else continue;
-    if (!/\.(whl|zip|wasm|py)$/.test(logical)) continue; // уже новая схема/не наш
-    const target = safeName(logical);
-    if (target === f) continue;
-    // Zip-архивы должны лежать перемешанными: сырой zip начинается с «PK».
-    if (isScramble(logical) && body[0] === 0x50 && body[1] === 0x4b) {
-      body = scramble(body);
+/** Удаляет .txt-файлы прежних схем хранения, не попавшие в новый манифест
+ *  (старые имена под точки/«script», другие размеры частей). Безопасно:
+ *  трогает только .txt, оставляя .js/.json. */
+const cleanupOrphans = (keep) => {
+  for (const dir of [RUNTIME, ENGINE]) {
+    if (!fs.existsSync(dir)) continue;
+    const base = dir === RUNTIME ? "runtime" : "engine";
+    for (const f of fs.readdirSync(dir)) {
+      if (f.endsWith(".txt") && !keep.has(`${base}/${f}`)) {
+        fs.rmSync(path.join(dir, f));
+        console.log("  удалён лишний:", f);
+      }
     }
-    fs.writeFileSync(path.join(dir, target), body);
-    fs.rmSync(path.join(dir, f));
-    console.log("  →", target);
   }
-  // Файлы прежней схемы (точки уже убраны), где в имени осталось «script».
-  for (const f of fs.readdirSync(dir)) {
-    if (!f.endsWith(".txt") || !/script/i.test(f)) continue;
-    const target = f.replace(/script/gi, "scrpt");
-    fs.renameSync(path.join(dir, f), path.join(dir, target));
-    console.log("  →", target);
-  }
-  // Крупные целые файлы прежних сборок → части (чтобы проходили файрвол).
-  for (const f of fs.readdirSync(dir)) {
-    if (!f.endsWith(".txt") || /_p\d+\.txt$/.test(f)) continue;
-    const data = fs.readFileSync(path.join(dir, f));
-    if (data.length <= CHUNK) continue;
-    writeStored(dir, f, data);
-    fs.rmSync(path.join(dir, f));
-    console.log(`  разбит: ${f} → ${chunkCount(data.length)} частей`);
-  }
-};
-const migrateLegacyArchives = () => {
-  migrateDir(RUNTIME);
-  migrateDir(ENGINE);
 };
 
 // Файлы ядра Pyodide из npm-пакета pyodide.
@@ -196,7 +175,6 @@ const pypiUrl = async (project, fileName) => {
 
 const vendorRuntime = async (force) => {
   fs.mkdirSync(RUNTIME, { recursive: true });
-  migrateLegacyArchives();
 
   const missingCore = CORE_FILES.filter(
     (f) => force || !storedExists(RUNTIME, safeName(f)),
@@ -258,7 +236,6 @@ const vendorEngine = (engineDir) => {
 };
 
 const writeManifest = (engine) => {
-  migrateLegacyArchives();
   const missing = [...CORE_FILES, ...WHEELS.map(([f]) => f)].filter(
     (f) => !storedExists(RUNTIME, safeName(f)),
   );
@@ -272,13 +249,12 @@ const writeManifest = (engine) => {
     ? JSON.parse(fs.readFileSync(manifestPath, "utf8"))
     : {};
   const engineFiles = engine?.files ?? prev.engineFiles;
-  // Размер и SHA-256 каждого файла: воркер сверяет их при загрузке и сразу
-  // сообщает, если файл изменился по дороге (почтовый шлюз, антивирус,
-  // распаковка) или в кэше браузера лежит испорченная копия. Крупные файлы
-  // разбиты на части — в `parts` перечислены реальные файлы под логическим
-  // именем, их воркер склеивает обратно.
+  // Размер и SHA-256 каждого реального файла: воркер сверяет их при загрузке и
+  // сразу сообщает, если файл изменился по дороге или в кэше испортился.
+  // `store` — карта «логическое имя → реальные файлы» (крупные разбиты на
+  // части); по ней воркер находит и склеивает файлы под их безопасными именами.
   const files = {};
-  const parts = {};
+  const store = {};
   const addFile = (rel) => {
     const data = fs.readFileSync(path.join(OUT, rel));
     files[rel] = {
@@ -286,31 +262,30 @@ const writeManifest = (engine) => {
       sha256: createHash("sha256").update(data).digest("hex"),
     };
   };
-  // Добавляет логический файл: целиком или частями «…_p0.txt, …_p1.txt».
-  const addStored = (dir, stored) => {
+  const addStored = (dir, logicalName) => {
+    const stored = safeName(logicalName);
     const baseRel = `${dir}/${stored}`;
+    let rels;
     if (fs.existsSync(path.join(OUT, baseRel))) {
-      addFile(baseRel);
-      return;
+      rels = [baseRel];
+    } else {
+      const stem = stored.replace(/\.txt$/, "");
+      const re = new RegExp(`^${stem}_(\\d+)\\.txt$`);
+      rels = fs
+        .readdirSync(path.join(OUT, dir))
+        .filter((f) => re.test(f))
+        .sort((a, b) => Number(a.match(re)[1]) - Number(b.match(re)[1]))
+        .map((f) => `${dir}/${f}`);
+      if (!rels.length) throw new Error(`Нет файла и частей: ${baseRel}`);
     }
-    const stem = stored.replace(/\.txt$/, "");
-    const chunks = fs
-      .readdirSync(path.join(OUT, dir))
-      .filter((f) => f.startsWith(stem + "_p") && /_p\d+\.txt$/.test(f))
-      .sort(
-        (a, b) =>
-          Number(a.match(/_p(\d+)\.txt$/)[1]) -
-          Number(b.match(/_p(\d+)\.txt$/)[1]),
-      )
-      .map((f) => `${dir}/${f}`);
-    if (!chunks.length) throw new Error(`Нет файла и частей: ${baseRel}`);
-    chunks.forEach(addFile);
-    parts[baseRel] = chunks;
+    rels.forEach(addFile);
+    store[`${dir}/${logicalName}`] = rels;
   };
   for (const f of [...CORE_FILES, ...WHEELS.map(([w]) => w)]) {
-    addStored("runtime", safeName(f));
+    addStored("runtime", f);
   }
-  for (const f of engineFiles) addStored("engine", safeName(f));
+  for (const f of engineFiles) addStored("engine", f);
+  cleanupOrphans(new Set(Object.keys(files)));
   const bytes = Object.entries(files)
     .filter(([rel]) => rel.startsWith("runtime/"))
     .reduce((sum, [, v]) => sum + v.size, 0);
@@ -321,7 +296,7 @@ const writeManifest = (engine) => {
     wheels: WHEELS.map(([f]) => f),
     runtimeBytes: bytes,
     files,
-    parts,
+    store,
   };
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   console.log(

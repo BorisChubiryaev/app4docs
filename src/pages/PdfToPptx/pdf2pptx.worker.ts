@@ -12,7 +12,6 @@ import {
   dropOldCaches,
   loadManifest,
   makeCachedFetch,
-  storedUrl,
   LOADER_FILE,
 } from "./engineAssets";
 
@@ -38,75 +37,22 @@ interface PyodideAPI {
 const post = (msg: WorkerResponse, transfer: Transferable[] = []) =>
   self.postMessage(msg, transfer);
 
-// Все запросы Pyodide идут через self.fetch, поэтому подменяем его:
-// 1) файлы с «непривычными» для Qlik типами лежат под безопасным именем без
-//    архивных расширений в адресе (иначе 415 от сервера типов и 403 от
-//    файрвола), zip-архивы — ещё и перемешаны XOR; запрос к исходному имени
-//    подменяется на реальный файл (storedUrl), архивы восстанавливаются;
-// 2) файлы движка берутся из постоянного кэша (см. engineAssets.ts);
-// 3) хостинг (например, Qlik Sense) может отдавать .wasm не как
-//    application/wasm — тогда WebAssembly.instantiateStreaming падает, а
-//    Pyodide не переходит на запасной путь и зависает. Проставляем тип сами.
-// 4) двоичные файлы проверяются по первым байтам: если сервер вернул вместо
-//    файла что-то другое (страницу входа, ошибку прокси), Pyodide зависает
-//    без сообщения — поэтому сообщаем об этом сами, с тем, что пришло.
-const MAGIC: [RegExp, number[]][] = [
-  [/\.wasm$/, [0x00, 0x61, 0x73, 0x6d]], // \0asm
-  [/\.(whl|zip)$/, [0x50, 0x4b]], // PK — zip-архив
-];
-
-const describeBadFile = (url: string, res: Response, bytes: Uint8Array) => {
-  const preview = new TextDecoder("utf-8", { fatal: false })
-    .decode(bytes.subarray(0, 160))
-    .replace(/\s+/g, " ")
-    .replace(/[^\x20-\x7eЀ-ӿ]/g, "·");
-  return new Error(
-    `Сервер вернул не тот файл: ${url.split("/").slice(-2).join("/")} — ` +
-      `${bytes.length} байт, тип «${res.headers.get("content-type") ?? "?"}», ` +
-      `начало: «${preview}»`,
-  );
-};
-
+// Все запросы Pyodide идут через self.fetch, поэтому подменяем его: файлы движка
+// лежат под безопасными для Qlik именами (без архивных расширений и опасных слов
+// в адресе, крупные — частями, zip-архивы перемешаны XOR). makeCachedFetch
+// (engineAssets.ts) находит их по карте store, качает из постоянного кэша,
+// сверяет с манифестом, склеивает части, восстанавливает архивы и проставляет
+// нужный content-type. Ошибки загрузки Pyodide глотает (например, не скачав
+// python_stdlib — падает с «No module named 'encodings'»), поэтому сообщаем сами.
 const nativeFetch = self.fetch.bind(self);
 let engineFetch: typeof fetch = nativeFetch;
 self.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-  const url = String(input instanceof Request ? input.url : input);
-  const stored = storedUrl(url);
-  let res: Response;
   try {
-    res = await engineFetch(stored === url ? input : stored, init);
+    return await engineFetch(input, init);
   } catch (err) {
-    // Pyodide глотает ошибки загрузки некоторых файлов (например,
-    // python_stdlib.zip — тогда Python падает с «No module named
-    // 'encodings'»), поэтому сообщаем настоящую причину сами.
     reportUnhandled(err);
     throw err;
   }
-  const path = url.split("?")[0];
-  const magic = MAGIC.find(([re]) => re.test(path))?.[1];
-  if (!magic) return res;
-
-  if (!res.ok) {
-    reportUnhandled(
-      new Error(`Сервер не отдал ${path.split("/").pop()}: HTTP ${res.status}`),
-    );
-    return res;
-  }
-  const bytes = new Uint8Array(await res.arrayBuffer());
-  if (!magic.every((b, i) => bytes[i] === b)) {
-    const err = describeBadFile(path, res, bytes);
-    reportUnhandled(err);
-    throw err;
-  }
-  const isWasm = path.endsWith(".wasm");
-  return new Response(bytes, {
-    status: res.status,
-    headers: {
-      "content-type": isWasm
-        ? "application/wasm"
-        : (res.headers.get("content-type") ?? "application/octet-stream"),
-    },
-  });
 };
 
 // 5) при сбое запуска WebAssembly (например, его запрещает

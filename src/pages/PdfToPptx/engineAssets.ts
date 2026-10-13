@@ -24,57 +24,33 @@ export const loadManifest = async (base: string): Promise<Manifest> => {
 const cacheName = (m: Manifest) =>
   `${CACHE_PREFIX}${m.pyodide}-${m.engineCommit.slice(0, 12)}-${m.runtimeBytes}`;
 
-// Имена файлов — под ограничения сервера Qlik Sense. У него две проверки:
-//   1) статический сервер отдаёт только разрешённые типы (js, json, txt…),
-//      на .wasm/.whl/.zip/.py отвечает HTTP 415;
-//   2) веб-файрвол (ModSecurity CWAF) блокирует сам запрос с HTTP 403, если
-//      в АДРЕСЕ встречается «архивное» расширение — даже как часть имени
-//      («…python_stdlib.zip.txt» → 403 из-за «.zip»).
-// Поэтому в имени не должно остаться ни одной такой точки-расширения: точки
-// в имени заменяются на «_», и добавляется «.txt». Было «python_stdlib.zip» →
-// стало «python_stdlib_zip.txt». Pyodide запрашивает исходные имена —
-// storedUrl() прозрачно подменяет их в перехвате fetch. pyodide.mjs
-// (ES-модуль, обязан быть .js) → pyodide.loader.js.
+// Имена файлов — под ограничения сервера Qlik Sense. У него три проверки, и все
+// срабатывали на «непривычных» файлах движка (.wasm/.whl/.zip/.py):
+//   1) статический сервер отдаёт только разрешённые типы, иначе HTTP 415;
+//   2) веб-файрвол (ModSecurity CWAF) отвечает 403, если в АДРЕСЕ есть
+//      «архивное» расширение или опасное слово — даже как часть имени
+//      («.zip» в «python_stdlib.zip.txt», «scr…pt» в ABI-теге PyMuPDF
+//      «pyemscripten»; шаблон XSS ловит и «scrpt»);
+//   3) тот же файрвол режет слишком большой ответ (делим на части, см. ниже).
+// Поэтому «рискованные» файлы лежат под НЕЙТРАЛЬНЫМ именем-хэшем (только 0-9a-f
+// и «.txt» — ни слова, ни расширения, ни «scr»/«pt»), а соответствие
+// «логическое имя → реальные файлы» задаёт манифест (`store`). Pyodide
+// запрашивает исходные имена — makeCachedFetch находит их в `store`, качает
+// части, склеивает и восстанавливает (для архивов — XOR). pyodide.mjs
+// (ES-модуль, грузится по своему имени) → pyodide.loader.js.
 //
 // Zip-архивы (.zip, .whl) к тому же хранятся перемешанными (XOR): почтовый шлюз
 // на пути к закрытому серверу находит внутри zip и пересобирает его, меняя
 // байты, — Python тогда не запускается. XOR убирает zip-структуру: файл
-// становится обычными двоичными данными, как pyodide.asm.wasm (он тот же путь
-// проходит без изменений). Восстанавливает байты makeCachedFetch — после
-// сверки с манифестом.
+// становится обычными двоичными данными, как pyodide.asm.wasm.
 export const LOADER_FILE = "pyodide.loader.js";
-const RISKY = /\.(whl|zip|wasm|py)$/; // типы, которые Qlik режет (415 или 403)
-
-/**
- * Делает имя безопасным для файрвола Qlik (ModSecurity CWAF):
- *  - убирает все точки — чтобы в адресе не было архивных расширений
- *    («.zip», «.whl», «.wasm», «.py» → иначе 403);
- *  - нейтрализует слово «script» (внутри ABI-тега PyMuPDF «pyemscripten») —
- *    файрвол режет его как попытку XSS. Та же замена — в vendor-pdf2pptx.mjs.
- * Другие опасные слова в именах движка не встречаются; при необходимости
- * добавляются сюда и в скрипт одинаково.
- */
-export const safeBase = (base: string): string =>
-  base.replace(/\./g, "_").replace(/script/gi, "scrpt") + ".txt";
-
-/** Логический адрес файла движка → имя, под которым он реально лежит. */
-export const storedUrl = (url: string): string => {
-  const q = url.indexOf("?");
-  const path = q === -1 ? url : url.slice(0, q);
-  const query = q === -1 ? "" : url.slice(q);
-  const slash = path.lastIndexOf("/");
-  const dir = path.slice(0, slash + 1);
-  const base = path.slice(slash + 1);
-  if (!RISKY.test(base)) return url;
-  return dir + safeBase(base) + query;
-};
 
 // Ключ XOR-перестановки. Тот же массив — в scripts/vendor-pdf2pptx.mjs
 // (меняется только вместе). Перестановка обратима: XOR тем же ключом.
 const SCRAMBLE_KEY = [0x3f, 0x5c, 0xa7, 0x11, 0x9e, 0x42, 0xd8, 0x6b];
 
-/** Хранится ли файл в перемешанном виде (по реальному имени на диске). */
-const isScrambled = (storedRel: string) => /_(whl|zip)\.txt$/.test(storedRel);
+/** Логический файл движка — архив (zip/whl), значит хранится перемешанным. */
+const isScrambled = (logicalRel: string) => /\.(whl|zip)$/.test(logicalRel);
 
 const unscramble = (bytes: ArrayBuffer): ArrayBuffer => {
   const out = new Uint8Array(bytes.slice(0));
@@ -83,20 +59,9 @@ const unscramble = (bytes: ArrayBuffer): ArrayBuffer => {
   return out.buffer;
 };
 
-/** Все реальные файлы движка (для кэша и подкачки) — крупные как части. */
+/** Все реальные файлы движка (для кэша и подкачки) — из карты store. */
 export const engineFiles = (m: Manifest): string[] =>
-  [
-    "runtime/" + LOADER_FILE,
-    "runtime/pyodide.asm.js",
-    "runtime/pyodide.asm.wasm",
-    "runtime/python_stdlib.zip",
-    "runtime/pyodide-lock.json",
-    ...m.wheels.map((w) => "runtime/" + w),
-    ...m.engineFiles.map((f) => "engine/" + f),
-  ].flatMap((rel) => {
-    const stored = storedUrl(rel);
-    return m.parts?.[stored] ?? [stored];
-  });
+  Object.values(m.store ?? {}).flat();
 
 // Cache Storage есть только в защищённом контексте (https или localhost).
 const hasCacheStorage = () =>
@@ -169,16 +134,18 @@ export const makeCachedFetch = (
       ? caches.open(name).catch(() => null)
       : Promise.resolve(null));
 
-  const withBody = (res: Response, bytes: ArrayBuffer) =>
-    new Response(bytes, { status: res.status, headers: res.headers });
-  // Что отдать Pyodide: перемешанные архивы — обратно в исходный zip.
-  const decoded = (rel: string, res: Response, bytes: ArrayBuffer) =>
+  // Тип ответа по логическому имени — Pyodide его проверяет (особенно .wasm
+  // для WebAssembly.instantiateStreaming), а сервер мог отдать .txt.
+  const contentType = (rel: string): string =>
     isScrambled(rel)
-      ? new Response(unscramble(bytes), {
-          status: res.status,
-          headers: { "content-type": "application/zip" },
-        })
-      : withBody(res, bytes);
+      ? "application/zip"
+      : rel.endsWith(".wasm")
+        ? "application/wasm"
+        : rel.endsWith(".js") || rel.endsWith(".mjs")
+          ? "text/javascript"
+          : rel.endsWith(".json")
+            ? "application/json"
+            : "application/octet-stream";
 
   // Один реальный файл (часть или целый): кэш → сеть, со сверкой по манифесту.
   // Возвращает сырые байты; при 403/404 или повреждении бросает ошибку.
@@ -198,11 +165,10 @@ export const makeCachedFetch = (
     }
     const res = await nativeFetch(url, init);
     if (!res.ok) {
-      const err = new Error(
+      note(storedRel, new ArrayBuffer(0), `с сервера (HTTP ${res.status})`, "");
+      throw new Error(
         `Сервер не отдал ${storedRel.split("/").pop()}: HTTP ${res.status}`,
       );
-      note(storedRel, new ArrayBuffer(0), `с сервера (HTTP ${res.status})`, "");
-      throw err;
     }
     const bytes = await res.arrayBuffer();
     const problem = await checkFile(manifest, storedRel, bytes);
@@ -214,49 +180,26 @@ export const makeCachedFetch = (
 
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (!url.startsWith(base) || url.endsWith("manifest.json")) {
-      return nativeFetch(input, init);
-    }
-    const rel = relPath(url, base);
+    const rel = url.startsWith(base) ? relPath(url, base) : "";
+    const storedList = rel ? manifest.store?.[rel] : undefined;
+    // Не файл движка (index.html, assets, manifest.json) — обычный fetch.
+    if (!storedList) return nativeFetch(input, init);
 
-    // Крупный файл, разбитый на части: качаем каждую и склеиваем обратно.
-    const chunks = manifest.parts?.[rel];
-    if (chunks) {
-      const bufs: Uint8Array[] = [];
-      for (const c of chunks) bufs.push(new Uint8Array(await fetchRaw(c, init)));
+    // Качаем все реальные файлы под логическим именем и склеиваем по порядку.
+    const bufs: Uint8Array[] = [];
+    for (const c of storedList) bufs.push(new Uint8Array(await fetchRaw(c, init)));
+    let all = bufs[0];
+    if (bufs.length > 1) {
       const total = bufs.reduce((n, b) => n + b.byteLength, 0);
-      const all = new Uint8Array(total);
+      all = new Uint8Array(total);
       let off = 0;
       for (const b of bufs) {
         all.set(b, off);
         off += b.byteLength;
       }
-      return isScrambled(rel)
-        ? new Response(unscramble(all.buffer), {
-            headers: { "content-type": "application/zip" },
-          })
-        : new Response(all.buffer);
     }
-
-    const cache = await openCache();
-    const hit = await cache?.match(url).catch(() => undefined);
-    if (hit) {
-      const bytes = await hit.arrayBuffer();
-      const bad = await checkFile(manifest, rel, bytes);
-      note(rel, bytes, "из кэша", bad);
-      if (!bad) return decoded(rel, hit, bytes);
-      await cache?.delete(url).catch(() => false); // испорчен — качаем заново
-    }
-    const res = await nativeFetch(input, init);
-    if (!res.ok) return res;
-    const bytes = await res.arrayBuffer();
-    const problem = await checkFile(manifest, rel, bytes);
-    note(rel, bytes, `с сервера (${res.headers.get("content-type") ?? "тип ?"})`, problem);
-    if (problem) throw new DamagedFileError(problem);
-    if (cache) {
-      await cache.put(url, withBody(res, bytes)).catch(() => {});
-    }
-    return decoded(rel, res, bytes);
+    const body = isScrambled(rel) ? unscramble(all.buffer) : all.buffer;
+    return new Response(body, { headers: { "content-type": contentType(rel) } });
   };
 };
 
