@@ -21,7 +21,7 @@
     "xlsxwriter-3.2.9-py3-none-any.whl",
     "python_pptx-1.0.2-py3-none-any.whl"
   ],
-  "runtimeBytes": 34191489,
+  "runtimeBytes": 67183866,
   "files": {
     "runtime/pyodide.loader.js": {
       "size": 16347,
@@ -33,91 +33,107 @@
     },
     "runtime/2adb7ea4_0.txt": {
       "size": 6291456,
-      "sha256": "ba187499f4aedfe9ed70bc93dbb31dbe054c618c78ffa025dc91b20e21a95cee"
+      "sha256": "0204f297e190c6c6eb68559a027c010a489de7e126cf6615d6246e1aa24ce4e6"
     },
     "runtime/2adb7ea4_1.txt": {
-      "size": 2354511,
-      "sha256": "09281591a2b3f23195d5f56f042ccd8f783ec5ba601596038250ec9e1e6c7976"
+      "size": 6291456,
+      "sha256": "2ebcc7b28e9a66ddecda2882c65acb3bf25950a0576f0bbe9db835e4246f841a"
+    },
+    "runtime/2adb7ea4_2.txt": {
+      "size": 4709022,
+      "sha256": "44d05862441b2506c52c1b9dcbe9aceaf0790a228d42a97c02ce0084e02b4800"
     },
     "runtime/a10a7489.txt": {
-      "size": 2416866,
-      "sha256": "0edae06e0f0d02983ceb9dc8b419dc72b9b944fc6caa39112b96e7514a799c66"
+      "size": 4833732,
+      "sha256": "f2fb3347146c6c2f678fe9f238e2246953a5b3f9f642daf49756e622d1599da9"
     },
     "runtime/pyodide-lock.json": {
       "size": 109732,
       "sha256": "f6e6f42f451f42affbbcddb00e8c9a3278dcbf399f57aab9f3f568839a7ff4a6"
     },
     "runtime/04823d5a.txt": {
-      "size": 1778068,
-      "sha256": "b8f6421960b4519da498c43a554c4fb2b6797020e42bc4564b52af3ccfdd33b6"
+      "size": 3556136,
+      "sha256": "2688ade98b4525d5b7e4313a68f8644bdb3641625188e664e9ff4eed8ac6a452"
     },
     "runtime/31e7a6b9.txt": {
-      "size": 1058399,
-      "sha256": "8d5228bfaf01e75f12a8ac88e838ccc79d5e67bcac875e4a5f6bc1b4438077fd"
+      "size": 2116798,
+      "sha256": "760db1c72247f025360ca273af07228283c5a3b0f76bd2736cd04342602e08b1"
     },
     "runtime/e7eec9cb_0.txt": {
       "size": 6291456,
-      "sha256": "32068446c66bb11b66093065ad46b25a605a832278cfa4b5715639e0d3c28f76"
+      "sha256": "c1ea4eef8115109996aa16e566460c31500d18643a6f4b8a7537f6a28908cb62"
     },
     "runtime/e7eec9cb_1.txt": {
       "size": 6291456,
-      "sha256": "95b37ee6c40b988fff724de09ff33610001bd418ae63f10c17b379aeba61580e"
+      "sha256": "6d7960658c056954e3787d3ab426fac0efa42cf520c8a20426d203848bc54726"
     },
     "runtime/e7eec9cb_2.txt": {
-      "size": 5816491,
-      "sha256": "a7ca4011ec61c21957a7ea5fe983bbf78e18da10b81df478f62853e0dc6d76e9"
+      "size": 6291456,
+      "sha256": "c2cbcb4002cc9bd57a2cf34fb96e3da6c986d8b4267136b25c29bf656a417006"
+    },
+    "runtime/e7eec9cb_3.txt": {
+      "size": 6291456,
+      "sha256": "bdbc77a01b8e30ec2911c61a0fcbdf91a358c197dfd8ce6092fa368fae3f752a"
+    },
+    "runtime/e7eec9cb_4.txt": {
+      "size": 6291456,
+      "sha256": "b184ccf61e191a1596b74f6fd1045fb2b6cc969b77f5eab93e59206b5b2c8833"
+    },
+    "runtime/e7eec9cb_5.txt": {
+      "size": 5341526,
+      "sha256": "c2ffebaa5920f560cc74d418bfe3d1890109212a00b5e4cd907ac60e2ad33b89"
     },
     "runtime/b2be4b03.txt": {
-      "size": 45571,
-      "sha256": "21324185cc90f14763b78815ca37847699325abc9dc03c28e4c9a162852b5b59"
+      "size": 91142,
+      "sha256": "345e10c0a4498a4333cba49802870d6f1cc850c37dd6872380c90c45e664864d"
     },
     "runtime/8be65d3e.txt": {
-      "size": 175315,
-      "sha256": "28d2452e6d3b16de7f84756a9b0d72de3a08102583e6a346c064243c859fc77b"
+      "size": 350630,
+      "sha256": "6f67bc904470490bfd275187fdfb3f704a28caad8f2cb301781e2485d4908419"
     },
     "runtime/17325806.txt": {
-      "size": 472788,
-      "sha256": "57110c58c01e9a88a0d564824ecbb6f38ab5b095845df120352f2d76da91bdb6"
+      "size": 945576,
+      "sha256": "9792cf436b1370dd36763b6901f9717558593cdebb8e7c95f47be24f485dfb1d"
     },
     "engine/f56eb49c.txt": {
       "size": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "engine/3fe1d3b4.txt": {
-      "size": 10294,
-      "sha256": "16110dd164303afa9e4d50cdd27367bc038fd9e6726cfbc7bd2407b5e8538f45"
+      "size": 20588,
+      "sha256": "c92023c18c1c778c303e50fdb2da6066c480a9f12505b75430bd06bc3ecea074"
     },
     "engine/bee40efd.txt": {
-      "size": 2878,
-      "sha256": "124b7a70dd5551efc7519a231b16eea7df022c9eb896be85e20d99ff82c38033"
+      "size": 5756,
+      "sha256": "8fead3016993009e7e1441a6fd80bde9acba8e1c0655fb4d5a98a266dbf6e55b"
     },
     "engine/ab87b3fb.txt": {
-      "size": 6431,
-      "sha256": "d0586a8c5dcfa3fa065579bf66ed1506e2b8c4d4cab27eb30ad5471c964a7d0e"
+      "size": 12862,
+      "sha256": "c7cd5fece66dafbaaeecf778f4c3acac77cd33401e6b2f6f4832aa70da958fb1"
     },
     "engine/476b3832.txt": {
-      "size": 3524,
-      "sha256": "090791d8c98d46d456506e188d88c558457e3b7c73f4aad880d448fcfb08a5c1"
+      "size": 7048,
+      "sha256": "af77af58805753aa7d4856f6eb89971f57cd8909c8068a85996f50a81f8a8ccc"
     },
     "engine/92f2176d.txt": {
-      "size": 9790,
-      "sha256": "a28cf6a2c7f45786abdba47b1c194bfb910222e3137b81128485b309eb895cb3"
+      "size": 19580,
+      "sha256": "ace5f946d05e85259c20d9faaa947d68185261a111a8aa6a36c4865405f3c4d2"
     },
     "engine/4538d230.txt": {
-      "size": 7252,
-      "sha256": "54b59f30c21aab09c5cbd3ea5f73c9ac6652090aa949b9d3be72a4df19832b6b"
+      "size": 14504,
+      "sha256": "1e3573528f386c388d5634c84e0c1a6ef54431745b906be27685d8e114592f55"
     },
     "engine/af791f47.txt": {
-      "size": 2898,
-      "sha256": "6c7b0057db741f28f54d6a2a3f703d2968459b30d4ade4118c81f705de9beae3"
+      "size": 5796,
+      "sha256": "185b0767bad4e0e00a87e856ea94c7f727b57f2102fc3a20f51b99d2f42b57b1"
     },
     "engine/0695aa3b.txt": {
-      "size": 21406,
-      "sha256": "4f92cd3d2e4cd326516d63fa416ed8dfa6378953d046a0a5b63834bb026cc5d8"
+      "size": 42812,
+      "sha256": "d10fb00b230e40ecaa9400d64b3b8766f90edd19f8f8f4158959946a01e09635"
     },
     "engine/c33b8649.txt": {
-      "size": 12111,
-      "sha256": "81b2a00fec55492c54a07e8d28771d6010fd0c20a2a91615349fbea772269352"
+      "size": 24222,
+      "sha256": "45c82daddf8fc6ec1707bceaad93fc8d902e3963f1a2ee5bc9fe0ca402a0e3c2"
     }
   },
   "store": {
@@ -129,7 +145,8 @@
     ],
     "runtime/pyodide.asm.wasm": [
       "runtime/2adb7ea4_0.txt",
-      "runtime/2adb7ea4_1.txt"
+      "runtime/2adb7ea4_1.txt",
+      "runtime/2adb7ea4_2.txt"
     ],
     "runtime/python_stdlib.zip": [
       "runtime/a10a7489.txt"
@@ -146,7 +163,10 @@
     "runtime/pymupdf-1.28.2-cp313-abi3-pyemscripten_2025_0_wasm32.whl": [
       "runtime/e7eec9cb_0.txt",
       "runtime/e7eec9cb_1.txt",
-      "runtime/e7eec9cb_2.txt"
+      "runtime/e7eec9cb_2.txt",
+      "runtime/e7eec9cb_3.txt",
+      "runtime/e7eec9cb_4.txt",
+      "runtime/e7eec9cb_5.txt"
     ],
     "runtime/typing_extensions-4.16.0-py3-none-any.whl": [
       "runtime/b2be4b03.txt"

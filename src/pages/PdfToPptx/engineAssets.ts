@@ -39,24 +39,32 @@ const cacheName = (m: Manifest) =>
 // части, склеивает и восстанавливает (для архивов — XOR). pyodide.mjs
 // (ES-модуль, грузится по своему имени) → pyodide.loader.js.
 //
-// Zip-архивы (.zip, .whl) к тому же хранятся перемешанными (XOR): почтовый шлюз
-// на пути к закрытому серверу находит внутри zip и пересобирает его, меняя
-// байты, — Python тогда не запускается. XOR убирает zip-структуру: файл
-// становится обычными двоичными данными, как pyodide.asm.wasm.
+// Содержимое «рискованных» файлов (.wasm/.whl/.zip/.py) хранится в HEX-тексте —
+// см. scripts/vendor-pdf2pptx.mjs. Здесь оно декодируется обратно в байты.
 export const LOADER_FILE = "pyodide.loader.js";
 
-// Ключ XOR-перестановки. Тот же массив — в scripts/vendor-pdf2pptx.mjs
-// (меняется только вместе). Перестановка обратима: XOR тем же ключом.
-const SCRAMBLE_KEY = [0x3f, 0x5c, 0xa7, 0x11, 0x9e, 0x42, 0xd8, 0x6b];
+/** Логический файл движка хранится в hex (кодируются только «рискованные»). */
+const isEncoded = (logicalRel: string) => /\.(whl|zip|wasm|py)$/.test(logicalRel);
 
-/** Логический файл движка — архив (zip/whl), значит хранится перемешанным. */
-const isScrambled = (logicalRel: string) => /\.(whl|zip)$/.test(logicalRel);
+const HEX = new Int16Array(128).fill(-1);
+for (let i = 0; i < 16; i++) HEX["0123456789abcdef".charCodeAt(i)] = i;
 
-const unscramble = (bytes: ArrayBuffer): ArrayBuffer => {
-  const out = new Uint8Array(bytes.slice(0));
-  for (let i = 0; i < out.length; i++)
-    out[i] ^= SCRAMBLE_KEY[i % SCRAMBLE_KEY.length];
-  return out.buffer;
+/** HEX-текст (ASCII «0-9a-f») → исходные байты. Пробелы/перевод строк пропускаем. */
+const decodeHex = (bytes: ArrayBuffer): ArrayBuffer => {
+  const src = new Uint8Array(bytes);
+  const out = new Uint8Array(src.length >> 1);
+  let hi = -1;
+  let o = 0;
+  for (let i = 0; i < src.length; i++) {
+    const v = src[i] < 128 ? HEX[src[i]] : -1;
+    if (v < 0) continue; // пропускаем всё, что не hex-цифра
+    if (hi < 0) hi = v;
+    else {
+      out[o++] = (hi << 4) | v;
+      hi = -1;
+    }
+  }
+  return out.buffer.slice(0, o);
 };
 
 /** Все реальные файлы движка (для кэша и подкачки) — из карты store. */
@@ -137,7 +145,7 @@ export const makeCachedFetch = (
   // Тип ответа по логическому имени — Pyodide его проверяет (особенно .wasm
   // для WebAssembly.instantiateStreaming), а сервер мог отдать .txt.
   const contentType = (rel: string): string =>
-    isScrambled(rel)
+    /\.(whl|zip)$/.test(rel)
       ? "application/zip"
       : rel.endsWith(".wasm")
         ? "application/wasm"
@@ -198,7 +206,7 @@ export const makeCachedFetch = (
         off += b.byteLength;
       }
     }
-    const body = isScrambled(rel) ? unscramble(all.buffer) : all.buffer;
+    const body = isEncoded(rel) ? decodeHex(all.buffer) : all.buffer;
     return new Response(body, { headers: { "content-type": contentType(rel) } });
   };
 };

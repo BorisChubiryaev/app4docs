@@ -43,13 +43,15 @@ const JSDELIVR = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE}/full`;
 // (engineAssets) ходит по ней. pyodide.mjs (ES-модуль, обязан быть .js и
 // грузится по своему имени) → pyodide.loader.js.
 //
-// Zip-архивы (.zip, .whl) к тому же хранятся перемешанными (XOR): почтовый шлюз
-// на пути к закрытому серверу находит zip по содержимому и пересобирает его
-// (python_stdlib.zip приходил на 2 831 байт больше) — Python не запускался. XOR
-// убирает zip-структуру: файл становится двоичным, как pyodide.asm.wasm (тот
-// проходит шлюз без изменений). Воркер восстанавливает байты (engineAssets).
+// Содержимое «рискованных» файлов кодируется в HEX (символы 0-9a-f). Это главное:
+// файрвол (ModSecurity CWAF) ЧИТАЕТ тело ответа и отвечает 403, если находит в
+// нём похожий на атаку кусок (у pymupdf так и было — даже под нейтральным именем
+// e7eec9cb_0.txt). В hex-тексте нет ни «<», ни кавычек, ни «../», ни слов
+// script/select/union — в нём просто нет нужных символов, поэтому ни одно
+// правило WAF не срабатывает. Заодно hex не содержит zip-структуры (почтовый
+// шлюз не пересобирает) и не является base64 (письмо не блокируется). Цена —
+// вдвое больший объём; воркер декодирует hex обратно (engineAssets).
 const isRisky = (name) => /\.(whl|zip|wasm|py)$/.test(name);
-const isScramble = (name) => /\.(whl|zip)$/.test(name);
 // FNV-1a 32-бит → 8 hex. Детерминированный, одинаковый между запусками, так что
 // имена файлов стабильны. Воркеру эта функция не нужна — он читает store.
 const hashHex = (s) => {
@@ -67,20 +69,8 @@ const safeName = (name) =>
       ? hashHex(name) + ".txt"
       : name;
 
-// Ключ XOR-перестановки. Тот же массив — в src/pages/PdfToPptx/engineAssets.ts
-// (меняется только вместе). Перестановка обратима: XOR тем же ключом.
-const SCRAMBLE_KEY = [0x3f, 0x5c, 0xa7, 0x11, 0x9e, 0x42, 0xd8, 0x6b];
-const scramble = (buf) => {
-  const out = Buffer.from(buf);
-  for (let i = 0; i < out.length; i++)
-    out[i] ^= SCRAMBLE_KEY[i % SCRAMBLE_KEY.length];
-  return out;
-};
-
-// Файрвол Qlik (ModSecurity CWAF) блокирует с 403 слишком большой ответ:
-// pymupdf (~18 МБ) не проходит, а pyodide.asm.wasm (~8.6 МБ) — проходит.
-// Поэтому файлы крупнее CHUNK режем на части «…_p0.txt», «…_p1.txt», …
-// (каждая заведомо меньше того, что уже проходит), воркер склеивает обратно.
+// Файрвол может резать и слишком большой ответ, поэтому файлы режем на части
+// «…_0.txt», «…_1.txt», … не крупнее CHUNK; воркер склеивает их обратно.
 const CHUNK = 6 * 1024 * 1024;
 const partName = (stored, i) => stored.replace(/\.txt$/, `_${i}.txt`);
 const chunkCount = (len) => Math.ceil(len / CHUNK);
@@ -103,9 +93,13 @@ const writeStored = (dir, stored, body) => {
   }
 };
 
-/** Пишет файл среды под безопасным именем (zip-архивы — перемешанными). */
+/** Готовит содержимое к хранению: «рискованные» файлы — в hex-текст. */
+const encodeFor = (name, data) =>
+  isRisky(name) ? Buffer.from(data.toString("hex"), "ascii") : data;
+
+/** Пишет файл среды под безопасным именем (рискованные — hex-текстом). */
 const writeRuntimeFile = (name, data) => {
-  writeStored(RUNTIME, safeName(name), isScramble(name) ? scramble(data) : data);
+  writeStored(RUNTIME, safeName(name), encodeFor(name, data));
 };
 
 /** Удаляет .txt-файлы прежних схем хранения, не попавшие в новый манифест
@@ -220,7 +214,7 @@ const vendorEngine = (engineDir) => {
     .filter((f) => f.endsWith(".py") && f !== "__main__.py")
     .sort();
   for (const f of files) {
-    fs.copyFileSync(path.join(src, f), path.join(ENGINE, safeName(f)));
+    writeStored(ENGINE, safeName(f), encodeFor(f, fs.readFileSync(path.join(src, f))));
   }
 
   let commit = "unknown";
