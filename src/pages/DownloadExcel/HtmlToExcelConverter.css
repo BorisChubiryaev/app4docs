@@ -2419,3 +2419,64 @@
 .dark .textarea-actions .btn-small:active {
   background-color: #4b5563;
 }
+
+/* Имя файла при скачивании */
+.download-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 4px;
+  position: relative;
+  z-index: 2;
+}
+
+.download-name label {
+  flex-shrink: 0;
+  color: #495057;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.download-name__field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(108, 117, 125, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.download-name__field:focus-within {
+  border-color: #6c757d;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 3px rgba(108, 117, 125, 0.1);
+}
+
+/* перебиваем общий стиль полей .ds-page input[type="text"] — рамка у обёртки */
+.download-name__field input.download-name__input[type="text"],
+.download-name__field input.download-name__input[type="text"]:focus {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 4px 10px 14px;
+  border: none;
+  outline: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+.download-name__input::placeholder {
+  color: #9aa1a8;
+}
+
+.download-name__ext {
+  padding: 0 14px 0 2px;
+  color: #6c757d;
+  font-size: 0.875rem;
+  font-family: "SF Mono", "Fira Code", monospace;
+}

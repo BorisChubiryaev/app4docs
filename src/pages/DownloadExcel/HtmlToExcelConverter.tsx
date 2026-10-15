@@ -111,6 +111,9 @@ const HtmlToExcelConverter: React.FC = () => {
   );
   const [jsonArrayPath, setJsonArrayPath] = useState<string>("");
 
+  // Имя файла при скачивании: пусто — используем имя по умолчанию
+  const [downloadName, setDownloadName] = useState<string>("");
+
   const [theme] = useTheme();
 
   // HTML превью: в тёмной теме убираем тёмные инлайн-цвета текста Confluence/Word,
@@ -126,6 +129,17 @@ const HtmlToExcelConverter: React.FC = () => {
   useEffect(() => {
     handleUrlExcelDownload();
   }, []);
+
+  // Имя по умолчанию (без .xlsx) — подсказка в поле «Имя файла»
+  const defaultDownloadName = useMemo(() => {
+    if (converterType === "json") return "json_данные_из_Convertix";
+    if (mode === "single") return "таблица_из_Convertix";
+    const baseFromFile = fileName.replace(".html", "").replace(".htm", "");
+    if (selectedTables.length === 1) {
+      return `${baseFromFile || "таблица"}_${selectedTables[0] + 1}`;
+    }
+    return `${baseFromFile || "таблицы"}_из_Convertix`;
+  }, [converterType, mode, fileName, selectedTables]);
 
   // Функция для поиска в таблицах (HTML)
   const searchInTables = (term: string) => {
@@ -753,7 +767,11 @@ const HtmlToExcelConverter: React.FC = () => {
   };
 
   const downloadExcelFile = (buffer: ArrayBuffer, filename: string) => {
-    const safeFilename = sanitizeFileName(filename);
+    // Пользовательское имя (если задано) заменяет имя по умолчанию
+    const customName = downloadName.trim().replace(/\.xlsx$/i, "").trim();
+    const safeFilename = sanitizeFileName(
+      customName ? `${customName}.xlsx` : filename,
+    );
     const blob = new Blob([buffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
@@ -973,6 +991,7 @@ const HtmlToExcelConverter: React.FC = () => {
   };
 
   const clearAll = () => {
+    setDownloadName("");
     setHtmlInput("");
     setJsonInput("");
     setError(null);
@@ -1785,6 +1804,23 @@ const HtmlToExcelConverter: React.FC = () => {
                     )}
                   </div>
                 )}
+
+              <div className="download-name">
+                <label htmlFor="download-name-input">Имя файла</label>
+                <div className="download-name__field">
+                  <input
+                    id="download-name-input"
+                    type="text"
+                    value={downloadName}
+                    onChange={(e) => setDownloadName(e.target.value)}
+                    placeholder={defaultDownloadName}
+                    className="download-name__input"
+                    maxLength={140}
+                    spellCheck={false}
+                  />
+                  <span className="download-name__ext">.xlsx</span>
+                </div>
+              </div>
 
               <div className="actions">
                 <button

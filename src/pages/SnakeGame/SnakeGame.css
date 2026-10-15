@@ -1,0 +1,428 @@
+/* SnakeGame.css — «Змейка». Цвета берутся из токенов (src/styles/tokens.css),
+   поэтому светлая и тёмная темы работают без отдельных переопределений. */
+
+.snake-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+/* ── Поле ── */
+.snake-board {
+  flex: 1;
+  min-width: 0;
+  max-width: 1100px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 0;
+  padding: 16px;
+}
+
+.snake-hud {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.snake-hud__item {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.snake-hud__label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.snake-hud__value {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.snake-hud__value--small {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.snake-hud__progress {
+  position: relative;
+  flex: 1;
+  min-width: 140px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.snake-hud__progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--brand-gradient);
+  transition: width 0.3s ease;
+}
+
+.snake-hud__progress-text {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink);
+  text-shadow: 0 0 6px var(--surface);
+}
+
+.snake-hud__lives {
+  display: flex;
+  gap: 2px;
+  font-size: 1.05rem;
+}
+
+.snake-hud__lives .is-off {
+  filter: grayscale(1);
+  opacity: 0.25;
+}
+
+.snake-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #0f766e;
+  background: rgba(20, 184, 166, 0.16);
+  animation: snake-chip-blink 1s ease-in-out infinite alternate;
+}
+
+@keyframes snake-chip-blink {
+  from { opacity: 1; }
+  to { opacity: 0.55; }
+}
+
+/* Сцена: занимает свободное место, холст центрируется внутри */
+.snake-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.snake-canvas-wrap {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-sm);
+}
+
+.snake-canvas {
+  display: block;
+  touch-action: none;
+}
+
+/* ── Оверлей статусов ── */
+.snake-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 12, 20, 0.28);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: snake-fade 0.2s ease-out;
+}
+
+.snake-overlay__card {
+  max-width: 360px;
+  padding: 22px 26px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+  color: var(--ink);
+  animation: snake-pop 0.25s ease-out;
+}
+
+.snake-overlay__card h2 {
+  margin: 4px 0 8px;
+  font-size: 1.35rem;
+}
+
+.snake-overlay__card p {
+  margin: 0 0 14px;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.snake-overlay__icon {
+  font-size: 2.6rem;
+  line-height: 1;
+}
+
+.snake-overlay__hint {
+  margin: 10px 0 0 !important;
+  font-size: 0.8rem;
+  color: var(--muted) !important;
+}
+
+@keyframes snake-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes snake-pop {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ── Кнопки ── */
+.snake-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 11px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, opacity 0.15s;
+}
+
+.snake-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.snake-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.snake-btn--primary {
+  border-color: transparent;
+  background: var(--brand-gradient);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(130, 83, 170, 0.3);
+}
+
+/* ── Экранный джойстик (только для сенсорных экранов) ── */
+.snake-pad {
+  display: none;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(3, 48px);
+  gap: 6px;
+  justify-content: center;
+  grid-template-areas:
+    ". up ."
+    "left mid right"
+    ". down .";
+}
+
+.snake-pad__btn {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 1.1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.snake-pad__btn:active {
+  background: var(--line);
+}
+
+.snake-pad__up { grid-area: up; }
+.snake-pad__down { grid-area: down; }
+.snake-pad__left { grid-area: left; }
+.snake-pad__right { grid-area: right; }
+.snake-pad__mid { grid-area: mid; }
+
+@media (pointer: coarse) {
+  .snake-pad {
+    display: grid;
+  }
+}
+
+/* ── Боковая панель ── */
+.snake-sidebar {
+  width: 290px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.snake-card {
+  margin-bottom: 0;
+  padding: 16px 18px;
+}
+
+.snake-card h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+.snake-card__sub {
+  margin-top: 14px !important;
+}
+
+.snake-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  border-bottom: 1px dashed var(--line);
+}
+
+.snake-stat:last-child {
+  border-bottom: none;
+}
+
+.snake-stat b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.snake-seg {
+  display: flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.snake-seg button {
+  flex: 1;
+  padding: 7px 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.snake-seg button.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.snake-seg button:disabled {
+  cursor: default;
+}
+
+.snake-seg button:disabled:not(.is-active) {
+  opacity: 0.5;
+}
+
+.snake-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.snake-muted {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.snake-legend--files {
+  display: flex;
+  gap: 8px;
+  font-size: 1.35rem;
+}
+
+.snake-legend__row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.snake-legend__row b {
+  color: var(--ink);
+}
+
+.snake-legend__icon {
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.snake-card kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 5px;
+  margin: 1px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+[data-theme="dark"] .snake-chip {
+  color: #5eead4;
+}
+
+/* ── Узкие экраны: панель уходит под поле, страница прокручивается ── */
+@media (max-width: 900px) {
+  .snake-layout {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .snake-board {
+    flex: none;
+    padding: 12px;
+  }
+
+  .snake-stage {
+    flex: none;
+    height: min(62vw, 56vh);
+  }
+
+  .snake-sidebar {
+    width: 100%;
+    overflow: visible;
+  }
+
+  .snake-hud {
+    gap: 12px;
+  }
+}

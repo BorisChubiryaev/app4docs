@@ -196,7 +196,7 @@ body {
   display: block;
 }
 
-/* ── Анимированный логотип: конвертация имени EX-EL → Convertix ── */
+/* ── Логотип-надпись Convertix ── */
 .cvx-brand {
   position: relative;
   display: inline-block;
@@ -223,28 +223,6 @@ body {
   left: 0;
   top: 50%;
   transform: translateY(-50%);
-}
-
-/* Прежнее имя — сплошной «чернильный» цвет, как старый логотип. */
-.cvx-brand--old .cvx-brand__text {
-  color: var(--lg-text-primary);
-}
-
-/* Во время конвертации — моноширинный «декодер» с фирменным градиентом. */
-.cvx-brand--converting .cvx-brand__text {
-  font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace,
-    "Cascadia Code", Consolas, monospace;
-  font-weight: 700;
-  background: linear-gradient(
-    135deg,
-    var(--brand-1) 0%,
-    var(--brand-2) 25%,
-    var(--brand-3) 65%,
-    var(--brand-4) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 /* Финальное имя — фирменный градиент + мягкий блик-свип один раз. */
@@ -2194,56 +2172,6 @@ body {
   stroke: #f5f5f7;
 }
 
-/* ╔══════════════════════════════════════════╗
-   ║         REBRANDING MODAL STEPS           ║
-   ╚══════════════════════════════════════════╝ */
-.lg-modal__rebranding-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: 12px 0 8px;
-  text-align: left;
-}
-
-/* Строка анонса нового имени: EX-EL → Convertix */
-.lg-modal__rebrand-line {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  margin: 18px 0 6px;
-  font-weight: 800;
-  font-size: clamp(1.6rem, 1.2rem + 2vw, 2.4rem);
-  line-height: 1;
-}
-
-.lg-modal__rebrand-old {
-  color: var(--lg-text-tertiary);
-  text-decoration: line-through;
-  text-decoration-thickness: 2px;
-  opacity: 0.75;
-}
-
-.lg-modal__rebrand-arrow {
-  color: var(--lg-text-secondary);
-  font-weight: 400;
-  animation: cvx-arrow-nudge 1.4s ease-in-out infinite;
-}
-
-.lg-modal__rebrand-new {
-  animation: cvx-name-pop 0.6s ease-out both;
-}
-
-@keyframes cvx-name-pop {
-  0% { transform: scale(0.9); opacity: 0; }
-  60% { transform: scale(1.04); opacity: 1; }
-  100% { transform: scale(1); }
-}
-
-@keyframes cvx-arrow-nudge {
-  0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(5px); }
-}
 
 .lg-modal__step {
   display: flex;
@@ -2344,4 +2272,45 @@ body {
   background: #6ea1ff;
   color: #0d0f16;
   box-shadow: 0 2px 8px rgba(110, 161, 255, 0.3);
+}
+
+/* ── Лейбл «Новинка» у новых инструментов ── */
+.cvx-new-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  white-space: nowrap;
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    var(--brand-1, #0087cd) 0%,
+    var(--brand-3, #8253aa) 60%,
+    var(--brand-4, #ff1c77) 100%
+  );
+  box-shadow: 0 2px 8px rgba(130, 83, 170, 0.35);
+  animation: cvx-new-badge-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes cvx-new-badge-pulse {
+  0%,
+  100% {
+    box-shadow: 0 2px 8px rgba(130, 83, 170, 0.35);
+  }
+  50% {
+    box-shadow: 0 2px 14px rgba(255, 28, 119, 0.55);
+  }
+}
+
+/* в рельсе меню лейбл прижимаем к правому краю пункта */
+.hp-menu__item .cvx-new-badge {
+  margin-left: auto;
 }
