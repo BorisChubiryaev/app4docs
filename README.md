@@ -26,6 +26,16 @@
    http://localhost:5173
    ```
 
+## Массовое добавление/удаление расширений файлов
+
+macOS - Terminal
+  find . -type f -exec mv {} {}.pdf \;
+  find . -type f -name "*.pdf" -exec sh -c 'mv "$1" "${1%.pdf}"' _ {} \;
+
+Windows - PowerShell
+  Get-ChildItem -Recurse -File | Rename-Item -NewName { $_.Name + ".pdf" }
+  Get-ChildItem -Recurse -File -Filter "*.pdf" | Rename-Item -NewName { $_.Name -replace '\.pdf$', '' }
+
 ## Запуск в режиме разработки
 
 ### Веб-версия (браузер)
