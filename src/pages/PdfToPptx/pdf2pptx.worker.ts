@@ -25,7 +25,7 @@ interface PyodideAPI {
   ): Promise<unknown>;
   runPython(code: string): unknown;
   runPythonAsync(code: string): Promise<unknown>;
-  globals: { set(name: string, value: unknown): void };
+  globals: { set(name: string, value: unknown): void; get(name: string): unknown };
   FS: {
     mkdirTree(path: string): void;
     writeFile(path: string, data: Uint8Array | string): void;
@@ -228,6 +228,16 @@ const convertPdf = async (id: number, pdf: ArrayBuffer, mode: string) => {
     await py.runPythonAsync(`
 with open("/in.pdf", "rb") as f:
     _data = f.read()
+# Есть ли в PDF текстовый слой: у скана/«сплющенного» в картинку PDF его нет,
+# поэтому редактируемого текста не получится. Считаем символы по всем страницам.
+try:
+    import pymupdf as _tppx_fitz
+    _tppx_doc = _tppx_fitz.open(stream=_data, filetype="pdf")
+    _tppx_pages = _tppx_doc.page_count
+    _tppx_chars = sum(len(_p.get_text("text")) for _p in _tppx_doc)
+    _tppx_doc.close()
+except Exception:
+    _tppx_pages, _tppx_chars = 0, -1
 _out = convert(_data, mode=pdf_mode, workers=1, progress=report)
 with open("/out.pptx", "wb") as f:
     f.write(_out)
@@ -236,7 +246,12 @@ del _data, _out
     const out = py.FS.readFile("/out.pptx");
     // Копия в собственный буфер — его и передаём без копирования.
     const bytes = out.slice().buffer;
-    post({ type: "done", id, pptx: bytes, ms: performance.now() - t0 }, [bytes]);
+    const textChars = Number(py.globals.get("_tppx_chars"));
+    const pages = Number(py.globals.get("_tppx_pages"));
+    post(
+      { type: "done", id, pptx: bytes, ms: performance.now() - t0, textChars, pages },
+      [bytes],
+    );
   } finally {
     for (const f of ["/in.pdf", "/out.pptx"]) {
       try {

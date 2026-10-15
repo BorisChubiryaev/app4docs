@@ -30,6 +30,7 @@ interface Job {
   blob?: Blob;
   error?: string;
   details?: string;
+  textChars?: number;
 }
 
 const MODES: { id: ConvertMode; title: string; text: string }[] = [
@@ -142,6 +143,7 @@ const PdfToPptx: React.FC = () => {
           ms: m.ms,
           blob,
           url: URL.createObjectURL(blob),
+          textChars: m.textChars,
         });
       } else if (m.type === "error") {
         if (m.fatal || m.id === undefined) {
@@ -355,6 +357,14 @@ const PdfToPptx: React.FC = () => {
         ))}
       </div>
 
+      <p className="p2p-note">
+        ℹ️ Редактируемыми станут только те элементы, что есть в PDF как текст,
+        картинки и фигуры. Если PDF — это скан или страницы «сплющены» в одну
+        картинку (например, после сильного сжатия), редактировать будет нечего:
+        на слайды ляжет изображение страницы. Текст в таких файлах можно
+        получить только распознаванием (OCR) — это другой инструмент.
+      </p>
+
       {/* ── Загрузка ── */}
       <div
         className={`ds-dropzone p2p-drop ${dragOver ? "ds-dropzone--over" : ""}`}
@@ -439,6 +449,14 @@ const PdfToPptx: React.FC = () => {
                     {j.status === "done" &&
                       ` → ${fmtBytes(j.blob!.size)} · ${j.total} ${plural(j.total, ["слайд", "слайда", "слайдов"])} за ${fmtSec(j.ms!)}`}
                   </div>
+                  {j.status === "done" && j.textChars === 0 && (
+                    <div className="p2p-job__hint">
+                      ⚠️ В этом PDF нет текстового слоя (похоже на скан или
+                      картинку): текст не редактируется, страницы вставлены
+                      изображениями. Для редактируемого текста нужен PDF с
+                      настоящим текстом или распознавание (OCR).
+                    </div>
+                  )}
                   {j.status === "converting" && (
                     <div className="p2p-bar">
                       <div
@@ -529,6 +547,18 @@ const PdfToPptx: React.FC = () => {
             </li>
             <li>Защищённые паролем PDF нужно сначала разблокировать.</li>
           </ul>
+        </div>
+        <div className="instructions-section">
+          <h3>Когда текст не будет редактироваться</h3>
+          <p>
+            Конвертер переносит в PowerPoint то, что есть в PDF: текст, картинки,
+            фигуры. Если PDF — это скан или страница «сплющена» в одну картинку
+            (так бывает после сильного сжатия или при экспорте «в изображение»),
+            текстового слоя внутри нет — редактировать нечего, на слайд ляжет
+            изображение страницы. Приложение предупредит о таком файле после
+            конвертации. Чтобы получить из скана редактируемый текст, нужно
+            распознавание (OCR) — это отдельная задача.
+          </p>
         </div>
       </InstructionsModalShell>
     </PageShell>

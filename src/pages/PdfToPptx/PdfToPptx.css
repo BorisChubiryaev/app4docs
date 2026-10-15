@@ -122,6 +122,29 @@
   line-height: 1.45;
 }
 
+/* Пояснение про ограничение (скан / картинка вместо текста) */
+.p2p-note {
+  margin: -6px 0 18px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+/* Предупреждение на карточке файла: в PDF нет текстового слоя */
+.p2p-job__hint {
+  margin-top: 4px;
+  color: #b4530a;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+:root[data-theme="dark"] .p2p-job__hint {
+  color: #f5b26b;
+}
+
 /* ── Загрузка ── */
 .p2p-drop {
   display: flex;

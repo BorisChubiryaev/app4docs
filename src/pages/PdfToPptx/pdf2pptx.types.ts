@@ -24,7 +24,16 @@ export type WorkerResponse =
   | { type: "stage"; text: string; step: number; steps: number }
   | { type: "ready"; ms: number; engineCommit: string; runtimeSize: string }
   | { type: "progress"; id: number; done: number; total: number }
-  | { type: "done"; id: number; pptx: ArrayBuffer; ms: number }
+  | {
+      type: "done";
+      id: number;
+      pptx: ArrayBuffer;
+      ms: number;
+      /** Символов текста в PDF (0 — текстового слоя нет, −1 — не удалось оценить). */
+      textChars?: number;
+      /** Число страниц PDF. */
+      pages?: number;
+    }
   | {
       type: "error";
       id?: number;
