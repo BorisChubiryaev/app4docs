@@ -14,6 +14,10 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     emptyOutDir: true,
+    // Шрифты встраиваем в CSS: статический сервер Qlik Sense отвечает
+    // HTTP 415 на .woff2, отдельными файлами они не загружаются.
+    assetsInlineLimit: (filePath) =>
+      filePath.endsWith('.woff2') ? true : undefined,
     rollupOptions: {
       output: {
         entryFileNames: 'assets/[name]-[hash].js',

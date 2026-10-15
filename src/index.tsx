@@ -3,7 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
 import RootRoutes from './routes';
-import '@fontsource-variable/inter';
+import './styles/fonts.css';
 import './styles/tokens.css';
 import './styles/components.css';
 import './styles/theme-dark.css';

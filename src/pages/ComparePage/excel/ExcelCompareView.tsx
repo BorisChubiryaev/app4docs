@@ -16,7 +16,7 @@ import {
   type DiffKind,
 } from "./diff";
 import { cellAddress, columnLetter, displayCell } from "./format";
-import { plural, DIFFS } from "../plural";
+import { plural, DIFFS } from "../../../utils/plural";
 import "./ExcelCompareView.css";
 
 // Фиксированные размеры нужны для виртуальной прокрутки: по ним считаем,

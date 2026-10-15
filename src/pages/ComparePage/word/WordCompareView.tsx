@@ -12,7 +12,7 @@ import {
   type RowStatus,
   type WordDocModel,
 } from "../wordCompare";
-import { plural, DIFFS } from "../plural";
+import { plural, DIFFS } from "../../../utils/plural";
 // Панель фильтров, чипы, кнопки и навигация — общие с экраном Excel.
 import "../excel/ExcelCompareView.css";
 
