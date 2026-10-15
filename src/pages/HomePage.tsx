@@ -1,5 +1,5 @@
 // HomePage.jsx
-import { useEffect, useState, useCallback, useMemo, memo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, memo } from "react";
 import {
   handleUrlExcelDownload,
   hasUrlDownloadData,
@@ -29,102 +29,19 @@ const AnimatedBackground = memo(() => (
   </div>
 ));
 
-// ─── Анимированный логотип: «конвертация» старого имени в новое ───
-// Convertix — конвертер, поэтому и само имя конвертируется на глазах:
-// шапка показывает прежнее «EX-EL», затем каждая буква перебирает случайные
-// символы (эффект «дешифровки») и фиксируется в «Convertix» слева направо.
-// Пишем прямо в DOM через ref, чтобы кадры анимации (~60/с) не гоняли
-// перерисовку React. Проигрывается один раз за сессию — при возврате на
-// главную сразу показываем финальное имя.
-const BRAND_OLD = "EX-EL";
-const BRAND_NEW = "Convertix";
-const SCRAMBLE_GLYPHS =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#%&@$◊∆<>/\\".split("");
+// ─── Логотип-надпись Convertix (фирменный градиент) ───
+const BRAND_NAME = "Convertix";
 
-const BrandWordmark = memo(() => {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    const root = rootRef.current;
-    const el = textRef.current;
-    if (!root || !el) return;
-
-    const settle = () => {
-      el.textContent = BRAND_NEW;
-      root.classList.remove("cvx-brand--old", "cvx-brand--converting");
-      root.classList.add("cvx-brand--done");
-    };
-
-    // Уже видели анимацию в этой сессии — показываем финал без проигрывания.
-    if (sessionStorage.getItem("convertixIntroPlayed")) {
-      settle();
-      return;
-    }
-
-    root.classList.add("cvx-brand--old");
-    el.textContent = BRAND_OLD;
-
-    const HOLD = 950; // держим прежнее имя, мс
-    const STEP = 85; // задержка старта каждой следующей буквы, мс
-    const LOCK = 360; // сколько буква «крутится» до фиксации, мс
-    const target = BRAND_NEW.split("");
-    const convertDuration = target.length * STEP + LOCK;
-    const start = performance.now();
-    let raf = 0;
-
-    const tick = (now: number) => {
-      const t = now - start;
-
-      if (t < HOLD) {
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
-      if (root.classList.contains("cvx-brand--old")) {
-        root.classList.replace("cvx-brand--old", "cvx-brand--converting");
-      }
-
-      const ct = t - HOLD;
-      let out = "";
-      for (let i = 0; i < target.length; i += 1) {
-        const startAt = i * STEP;
-        if (ct >= startAt + LOCK) {
-          out += target[i];
-        } else if (ct >= startAt) {
-          out += SCRAMBLE_GLYPHS[(Math.random() * SCRAMBLE_GLYPHS.length) | 0];
-        } else {
-          // Буква ещё не начала проявляться — держим пустое место.
-          out += " ";
-        }
-      }
-      el.textContent = out;
-
-      if (ct >= convertDuration) {
-        settle();
-        sessionStorage.setItem("convertixIntroPlayed", "1");
-        return;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  return (
-    <div ref={rootRef} className="cvx-brand" role="img" aria-label={BRAND_NEW}>
-      {/* Невидимый «распорка» задаёт ширину по финальному имени, чтобы
-          подзаголовок не дёргался, пока буквы перебираются. */}
-      <span className="cvx-brand__sizer" aria-hidden="true">
-        {BRAND_NEW}
-      </span>
-      <span ref={textRef} className="cvx-brand__text" aria-hidden="true">
-        {BRAND_OLD}
-      </span>
-    </div>
-  );
-});
+const BrandWordmark = memo(() => (
+  <div className="cvx-brand cvx-brand--done" role="img" aria-label={BRAND_NAME}>
+    <span className="cvx-brand__sizer" aria-hidden="true">
+      {BRAND_NAME}
+    </span>
+    <span className="cvx-brand__text" aria-hidden="true">
+      {BRAND_NAME}
+    </span>
+  </div>
+));
 
 // ─── Карточка инструмента (компактная плитка) ───
 const ToolCard = memo(({ tool, index }) => (
@@ -151,7 +68,10 @@ const ToolCard = memo(({ tool, index }) => (
         />
       </svg>
     </div>
-    <h3 className="lg-card__title">{tool.title}</h3>
+    <h3 className="lg-card__title">
+      {tool.title}
+      {tool.isNew && <span className="cvx-new-badge">Новинка</span>}
+    </h3>
     <p className="lg-card__desc">{tool.description}</p>
     <ul className="lg-card__tags">
       {tool.features.slice(0, 2).map((f, i) => (
@@ -284,57 +204,6 @@ const CsiModal = memo(({ isOpen, onClose }) => {
   );
 });
 
-// ─── Окно с предложением участвовать в ребрендинге ───
-const RebrandingModal = memo(({ isOpen, onClose, onVote }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="lg-modal-overlay" onClick={onClose}>
-      <div className="lg-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="lg-modal__glass" />
-        <div className="lg-modal__shine" />
-
-        <div className="lg-modal__content">
-          <button className="lg-modal__close" onClick={onClose}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path
-                d="M4 4l10 10M14 4L4 14"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-
-          <h2 className="lg-modal__title">У нас новое имя!</h2>
-
-          <p className="lg-modal__rebrand-line" aria-label="EX-EL теперь Convertix">
-            <span className="lg-modal__rebrand-old">EX-EL</span>
-            <span className="lg-modal__rebrand-arrow">→</span>
-            <span className="lg-gradient-text lg-modal__rebrand-new">Convertix</span>
-          </p>
-
-          <p className="lg-modal__text">
-            Мы выросли из простого «эксель-помощника» — теперь это набор
-            инструментов для документов, изображений, таблиц и графиков. Встречайте{" "}
-            <span className="lg-gradient-text">Convertix</span>: то же приложение,
-            новое имя. Все инструменты и ссылки работают как прежде.
-          </p>
-
-          <div className="lg-modal__actions">
-            <button
-              className="lg-btn lg-btn--primary lg-footer__btn"
-              onClick={onVote}
-            >
-              Отлично, продолжить
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
-
 // ─── Данные инструментов ───
 type Tool = {
   title: string;
@@ -343,19 +212,23 @@ type Tool = {
   icon: string;
   features: string[];
   note?: string;
+  /** Показывать лейбл «Новинка» */
+  isNew?: boolean;
 };
 
 const tools: Tool[] = [
   {
-    title: "Сравнение Excel-файлов по рабочим местам",
-    path: "/WorkplaceCompare",
+    title: "PDF → PowerPoint",
+    path: "/PdfToPptx",
     description:
-      "Профессиональное сравнение файлов рабочих мест с расширенными фильтрами",
-    icon: "🏢",
+      "Редактируемая презентация из PDF: текст, картинки и фигуры — как в оригинале",
+    icon: "📊",
+    isNew: true,
     features: [
-      "Гибкие фильтры по рабочим местам",
-      "Подсветка найденных изменений",
-      "Экспорт результата в Excel",
+      "Слайд того же размера на каждую страницу",
+      "Текст, картинки и графика остаются редактируемыми",
+      "Режим «точная копия» для сложных страниц",
+      "Работает в браузере — файлы не уходят на сервер",
     ],
   },
   {
@@ -457,20 +330,19 @@ const tools: Tool[] = [
       "Выделение цветом или как исправления Word"
     ],
   },
+
   {
-    title: "PDF → PowerPoint",
-    path: "/PdfToPptx",
+    title: "Сравнение Excel-файлов по рабочим местам",
+    path: "/WorkplaceCompare",
     description:
-      "Редактируемая презентация из PDF: текст, картинки и фигуры — как в оригинале",
-    icon: "📊",
+      "Профессиональное сравнение файлов рабочих мест с расширенными фильтрами",
+    icon: "🏢",
     features: [
-      "Слайд того же размера на каждую страницу",
-      "Текст, картинки и графика остаются редактируемыми",
-      "Режим «точная копия» для сложных страниц",
-      "Работает в браузере — файлы не уходят на сервер",
+      "Гибкие фильтры по рабочим местам",
+      "Подсветка найденных изменений",
+      "Экспорт результата в Excel",
     ],
-  },
-];
+  },];
 
 // ─── Переключатель вида ───
 const LAYOUTS = [
@@ -1096,6 +968,7 @@ const MenuLayout = memo(() => {
           >
             <span className="hp-menu__ico">{tool.icon}</span>
             <span className="hp-menu__name">{tool.title}</span>
+            {tool.isNew && <span className="cvx-new-badge">Новинка</span>}
           </Link>
         ))}
       </nav>
@@ -1125,7 +998,10 @@ const MenuLayout = memo(() => {
 
         <div className="hp-menu__detail-body">
           <div className="hp-menu__detail-icon">{t.icon}</div>
-          <h2 className="hp-menu__detail-title">{t.title}</h2>
+          <h2 className="hp-menu__detail-title">
+            {t.title}
+            {t.isNew && <span className="cvx-new-badge">Новинка</span>}
+          </h2>
           <TypedDescription desc={t.description} features={t.features} />
           {t.note && (
             <p className="hp-menu__detail-note">
@@ -1152,7 +1028,10 @@ const ListLayout = memo(() => (
       <Link key={tool.path} to={tool.path} className="hp-list__row">
         <span className="hp-list__ico">{tool.icon}</span>
         <span className="hp-list__text">
-          <span className="hp-list__title">{tool.title}</span>
+          <span className="hp-list__title">
+            {tool.title}
+            {tool.isNew && <span className="cvx-new-badge">Новинка</span>}
+          </span>
           <span className="hp-list__desc">{tool.description}</span>
         </span>
         <svg
@@ -1179,7 +1058,6 @@ const ListLayout = memo(() => (
 const HomePage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCsiOpen, setIsCsiOpen] = useState(false);
-  const [isRebrandingOpen, setIsRebrandingOpen] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadedFilename, setDownloadedFilename] = useState<string>("");
   const [layout, setLayout] = useState<string>(
@@ -1193,17 +1071,6 @@ const HomePage = () => {
   // Обработчики для модалок
   const closeModal = useCallback(() => setIsModalOpen(false), []);
   const closeCsi = useCallback(() => setIsCsiOpen(false), []);
-  const closeRebranding = useCallback(() => {
-    // Любое закрытие анонса запоминаем — показываем его только один раз.
-    localStorage.setItem("convertixAnnounced", "true");
-    setIsRebrandingOpen(false);
-  }, []);
-
-  const handleRebrandingVote = useCallback(() => {
-    // Анонс нового имени показываем один раз — дальше запоминаем, что видели.
-    localStorage.setItem("convertixAnnounced", "true");
-    setIsRebrandingOpen(false);
-  }, []);
 
   // Тихо подкачиваем движок PDF → PowerPoint (~33 МБ) в кэш браузера, когда
   // страница простаивает: к открытию инструмента он уже на месте. Файлы
@@ -1246,8 +1113,7 @@ const HomePage = () => {
 
   // Показ модальных окон с приоритетами:
   // 1. CSI (опрос удовлетворённости) — показывается один раз
-  // 2. Анонс нового имени Convertix — показывается один раз
-  // 3. Обратная связь — показывается один раз
+  // 2. Обратная связь — показывается один раз
   useEffect(() => {
     // Проверяем CSI
     if (!localStorage.getItem("csiSurveyShown")) {
@@ -1255,14 +1121,6 @@ const HomePage = () => {
         setIsCsiOpen(true);
         localStorage.setItem("csiSurveyShown", "true");
       }, 1500);
-      return () => clearTimeout(timer);
-    }
-
-    // Проверяем анонс нового имени
-    if (!localStorage.getItem("convertixAnnounced")) {
-      const timer = setTimeout(() => {
-        setIsRebrandingOpen(true);
-      }, 800);
       return () => clearTimeout(timer);
     }
 
@@ -1282,12 +1140,6 @@ const HomePage = () => {
 
       <FeedbackModal isOpen={isModalOpen} onClose={closeModal} />
       <CsiModal isOpen={isCsiOpen} onClose={closeCsi} />
-      <RebrandingModal
-        isOpen={isRebrandingOpen}
-        onClose={closeRebranding}
-        onVote={handleRebrandingVote}
-      />
-
       {/* ─── Header ─── */}
       <header className="lg-header">
         <div className="lg-header__glass" />
@@ -1468,6 +1320,14 @@ const HomePage = () => {
               aria-label="Открыть мини-игру Документный Три-в-Ряд"
             >
               <span className="lg-btn__game-icon">🎮</span>
+            </Link>
+            <Link
+              to="/SnakeGame"
+              className="lg-btn lg-btn--game"
+              title="Змейка 🐍 — собирай файлы и проходи уровни"
+              aria-label="Открыть игру Змейка"
+            >
+              <span className="lg-btn__game-icon">🐍</span>
             </Link>
           </div>
         </div>

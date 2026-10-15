@@ -11,6 +11,7 @@ import PdfToWord from "./pages/PdfToWord/PdfToWord";
 import DocMatchGame from "./pages/DocMatch/DocMatchGame";
 import OfferMerge from "./pages/OfferMerge/OfferMerge";
 import PdfToPptx from "./pages/PdfToPptx/PdfToPptx";
+import SnakeGame from "./pages/SnakeGame/SnakeGame";
 
 const RootRoutes = () => {
   return (
@@ -29,6 +30,7 @@ const RootRoutes = () => {
       <Route path="/JpgToPdfPage" element={<ImageConverter />} />
       <Route path="/OfferMerge" element={<OfferMerge />} />
       <Route path="/PdfToPptx" element={<PdfToPptx />} />
+      <Route path="/SnakeGame" element={<SnakeGame />} />
     </Routes>
   );
 };
