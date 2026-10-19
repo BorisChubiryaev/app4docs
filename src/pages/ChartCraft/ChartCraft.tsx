@@ -7,6 +7,7 @@ import DataPreviewTable from "./components/DataPreviewTable";
 import CanvasSettingsPanel from "./components/CanvasSettingsPanel";
 import DrawingLayer from "./components/DrawingLayer";
 import ToolBar from "./components/ToolBar";
+import { Icon } from "./components/icons";
 import type {
   ParsedData,
   ChartConfig,
@@ -44,6 +45,15 @@ interface History {
 const EMPTY_HISTORY: History = { stack: [], index: -1 };
 
 /** Ctrl+Z в поле ввода — это отмена набора текста, а не действий на холсте. */
+const TOOL_KEYS: Record<string, CanvasTool> = {
+  KeyV: "select",
+  KeyP: "draw",
+  KeyA: "arrow",
+  KeyR: "rect",
+  KeyT: "text",
+  KeyE: "eraser",
+};
+
 const isTyping = (t: EventTarget | null) => {
   const el = t as HTMLElement | null;
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
@@ -106,6 +116,9 @@ const ChartCraft: React.FC = () => {
   const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>(createDefaultCanvasSettings);
   const [showCanvasSettings, setShowCanvasSettings] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [showData, setShowData] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   const [activeTool, setActiveTool] = useState<CanvasTool>("select");
   const [drawColor, setDrawColor] = useState("#e34948");
@@ -173,10 +186,26 @@ const ChartCraft: React.FC = () => {
         e.preventDefault();
         redo();
       } else if (e.key === "Escape") setActiveTool("select");
+      else if (!mod && !e.altKey && parsedData) {
+        // Инструменты по буквам (по физической клавише — работает и в русской раскладке).
+        const tool = TOOL_KEYS[e.code];
+        if (tool) setActiveTool(tool);
+        else if (e.code === "Digit0") setZoom("fit");
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [undo, redo, editingId]);
+  }, [undo, redo, editingId, parsedData]);
+
+  // Меню «Холст» закрывается кликом мимо.
+  useEffect(() => {
+    if (!exportOpen) return;
+    const close = (e: MouseEvent) => {
+      if (!exportMenuRef.current?.contains(e.target as Node)) setExportOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [exportOpen]);
 
   // Уведомление исчезает само.
   useEffect(() => {
@@ -399,6 +428,8 @@ const ChartCraft: React.FC = () => {
 
   return (
     <PageShell
+      fill={!!parsedData}
+      width={parsedData ? "100%" : undefined}
       title="Генератор графиков"
       subtitle="Таблица → понятный график для отчёта или презентации"
       onShowInstructions={() => setShowInstructions(true)}
@@ -416,8 +447,8 @@ const ChartCraft: React.FC = () => {
                 ["Тип подберётся сам", "По датам — линия, по категориям — столбцы, по долям — кольцо. Выбранный вручную тип больше не меняется."],
                 ["Сведите данные", "Повторяющиеся категории суммируются (или среднее, количество, мин., макс.). Можно оставить топ-N, остальное сложить в «Другое», выделить нужную категорию."],
                 ["Оформите", "Стопка и 100 %, подписи значений, линия плана или среднего, тыс./млн, ₽ и %, тёмная тема. Цвета подобраны так, чтобы их различали и люди с нарушением цветовосприятия."],
-                ["Дополните холст", "Несколько графиков, стрелки, рамки, надписи. Ctrl+Z / Ctrl+Y — отмена и повтор."],
-                ["Выгрузите", "💾 на графике: копировать картинку (сразу в PowerPoint), PNG, SVG или HTML с таблицей данных. Весь холст — кнопками PNG / SVG сверху."],
+                ["Дополните холст", "Несколько графиков, стрелки, рамки, надписи. Горячие клавиши: V — выбор, P — карандаш, A — стрелка, R — рамка, T — надпись, E — ластик, 0 — вписать холст, Ctrl+Z / Ctrl+Y — отмена и повтор."],
+                ["Выгрузите", "Кнопка выгрузки на графике: копировать картинку (сразу в PowerPoint), PNG, SVG или HTML с таблицей данных. Весь холст — кнопкой «Холст» в верхней панели."],
               ].map(([t, d], i) => (
                 <div key={i} className="cc-instruction-item">
                   <span className="cc-instruction-number">{i + 1}</span>
@@ -455,14 +486,12 @@ const ChartCraft: React.FC = () => {
 
       {parsedData && (
         <>
-          <div className="cc-workspace-toolbar">
-            <div className="cc-toolbar-left">
-              <div className="cc-toolbar-file-info">
-                <span className="cc-toolbar-file-icon">📄</span>
-                <span className="cc-toolbar-file-name" title={parsedData.fileName}>
-                  {parsedData.fileName}
-                </span>
-                <span className="cc-toolbar-file-stats">
+          <div className="cc-bar">
+            <div className="cc-bar-row">
+              <div className="cc-file-chip" title={parsedData.fileName}>
+                <Icon name="file" size={16} />
+                <span className="cc-file-name">{parsedData.fileName}</span>
+                <span className="cc-file-stats">
                   {parsedData.totalRows} {plural(parsedData.totalRows, ["строка", "строки", "строк"])} ×{" "}
                   {parsedData.headers.length}
                 </span>
@@ -481,120 +510,158 @@ const ChartCraft: React.FC = () => {
                   ))}
                 </select>
               )}
-            </div>
-            <div className="cc-toolbar-right">
-              <button className="cc-button cc-button-accent" onClick={addChart}>
-                + График
+
+              <div className="cc-bar-spacer" />
+
+              <button className="cc-btn cc-btn-primary" onClick={addChart} title="Добавить график">
+                <Icon name="plus" size={16} />
+                График
               </button>
-              <div className="cc-toolbar-divider" />
-              <button
-                className={`cc-button ${showCanvasSettings ? "cc-button-primary" : "cc-button-secondary"}`}
-                onClick={() => setShowCanvasSettings(!showCanvasSettings)}
-                aria-pressed={showCanvasSettings}
-              >
-                🎨 Холст
-              </button>
-              <div className="cc-zoom" role="group" aria-label="Масштаб">
+
+              <div className="cc-iconbar">
+                <button className="cc-icon-btn" onClick={undo} disabled={!canUndo} title="Отменить (Ctrl+Z)" aria-label="Отменить">
+                  <Icon name="undo" />
+                </button>
+                <button className="cc-icon-btn" onClick={redo} disabled={!canRedo} title="Повторить (Ctrl+Y)" aria-label="Повторить">
+                  <Icon name="redo" />
+                </button>
+              </div>
+
+              <div className="cc-iconbar" role="group" aria-label="Масштаб">
                 <button
-                  className="cc-button cc-button-secondary"
+                  className="cc-icon-btn"
                   onClick={() => setZoom(Math.max(0.25, Math.round((scale - 0.1) * 10) / 10))}
                   title="Уменьшить"
+                  aria-label="Уменьшить"
                 >
-                  −
+                  <Icon name="minus" />
                 </button>
                 <button
-                  className={`cc-button ${zoom === "fit" ? "cc-button-primary" : "cc-button-secondary"} cc-zoom-value`}
-                  onClick={() => setZoom(zoom === "fit" ? 1 : "fit")}
-                  title={zoom === "fit" ? "Показать в натуральную величину" : "Вписать в экран"}
+                  className="cc-icon-btn cc-zoom-value"
+                  onClick={() => setZoom(1)}
+                  title="Натуральная величина"
                 >
                   {Math.round(scale * 100)}%
                 </button>
                 <button
-                  className="cc-button cc-button-secondary"
+                  className="cc-icon-btn"
                   onClick={() => setZoom(Math.min(2, Math.round((scale + 0.1) * 10) / 10))}
                   title="Увеличить"
+                  aria-label="Увеличить"
                 >
-                  +
+                  <Icon name="plus" />
+                </button>
+                <button
+                  className={`cc-icon-btn ${zoom === "fit" ? "active" : ""}`}
+                  onClick={() => setZoom("fit")}
+                  title="Вписать в экран (0)"
+                  aria-label="Вписать в экран"
+                >
+                  <Icon name="fit" />
                 </button>
               </div>
-              <button
-                className={`cc-button ${showMinimap ? "cc-button-primary" : "cc-button-secondary"}`}
-                onClick={() => setShowMinimap(!showMinimap)}
-                title="Мини-карта холста"
-                aria-pressed={showMinimap}
-              >
-                🗺️
-              </button>
-              <div className="cc-toolbar-divider" />
-              <button
-                className="cc-button cc-button-secondary"
-                onClick={() => handleExportAll("png")}
-                disabled={!charts.length || isProcessing}
-                title="Весь холст картинкой"
-              >
-                🖼️ PNG
-              </button>
-              <button
-                className="cc-button cc-button-secondary"
-                onClick={() => handleExportAll("svg")}
-                disabled={!charts.length || isProcessing}
-                title="Весь холст в векторе"
-              >
-                ✒️ SVG
-              </button>
-              <div className="cc-toolbar-divider" />
+
+              <div className="cc-iconbar">
+                <button
+                  className={`cc-icon-btn ${showCanvasSettings ? "active" : ""}`}
+                  onClick={() => setShowCanvasSettings(!showCanvasSettings)}
+                  aria-pressed={showCanvasSettings}
+                  title="Размер и фон холста"
+                  aria-label="Настройки холста"
+                >
+                  <Icon name="sliders" />
+                </button>
+                <button
+                  className={`cc-icon-btn ${showMinimap ? "active" : ""}`}
+                  onClick={() => setShowMinimap(!showMinimap)}
+                  aria-pressed={showMinimap}
+                  title="Мини-карта холста"
+                  aria-label="Мини-карта"
+                >
+                  <Icon name="map" />
+                </button>
+                <button
+                  className={`cc-icon-btn ${showData ? "active" : ""}`}
+                  onClick={() => setShowData(!showData)}
+                  aria-pressed={showData}
+                  title="Исходные данные"
+                  aria-label="Исходные данные"
+                >
+                  <Icon name="table" />
+                </button>
+              </div>
+
+              <div className="cc-menu-wrap" ref={exportMenuRef}>
+                <button
+                  className="cc-btn"
+                  onClick={() => setExportOpen((v) => !v)}
+                  disabled={!charts.length || isProcessing}
+                  aria-haspopup="menu"
+                  aria-expanded={exportOpen}
+                  title="Сохранить весь холст"
+                >
+                  <Icon name="download" size={16} />
+                  Холст
+                  <Icon name="chevron" size={14} />
+                </button>
+                {exportOpen && (
+                  <div className="cc-menu" role="menu">
+                    <button role="menuitem" className="cc-menu-item" onClick={() => { setExportOpen(false); handleExportAll("png"); }}>
+                      <Icon name="image" size={16} /> PNG — картинка
+                    </button>
+                    <button role="menuitem" className="cc-menu-item" onClick={() => { setExportOpen(false); handleExportAll("svg"); }}>
+                      <Icon name="pencil" size={16} /> SVG — вектор
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {confirmReset ? (
                 <span className="cc-confirm">
                   Начать заново?
-                  <button className="cc-button cc-button-danger" onClick={handleReset}>
+                  <button className="cc-btn cc-btn-danger" onClick={handleReset}>
                     Да
                   </button>
-                  <button className="cc-button cc-button-secondary" onClick={() => setConfirmReset(false)}>
+                  <button className="cc-btn" onClick={() => setConfirmReset(false)}>
                     Нет
                   </button>
                 </span>
               ) : (
-                <button
-                  className="cc-button cc-button-secondary"
-                  onClick={() => setConfirmReset(true)}
-                  title="Загрузить другие данные"
-                >
-                  🔄 Другой файл
+                <button className="cc-btn cc-btn-ghost" onClick={() => setConfirmReset(true)} title="Загрузить другие данные">
+                  <Icon name="folder" size={16} />
+                  Другой файл
                 </button>
               )}
             </div>
+
+            <ToolBar
+              activeTool={activeTool}
+              onToolChange={setActiveTool}
+              drawColor={drawColor}
+              onColorChange={setDrawColor}
+              drawWidth={drawWidth}
+              onWidthChange={setDrawWidth}
+              drawOpacity={drawOpacity}
+              onOpacityChange={setDrawOpacity}
+              hasDrawings={drawings.length > 0 || textAnnotations.length > 0}
+              onClearDrawings={() => {
+                setDrawings([]);
+                setTextAnnotations([]);
+                commit();
+              }}
+            />
+
+            {showCanvasSettings && (
+              <div className="cc-canvas-settings-bar">
+                <CanvasSettingsPanel
+                  settings={canvasSettings}
+                  onChange={(u) => setCanvasSettings((p) => ({ ...p, ...u }))}
+                />
+              </div>
+            )}
           </div>
 
-          {showCanvasSettings && (
-            <div className="cc-canvas-settings-bar">
-              <CanvasSettingsPanel
-                settings={canvasSettings}
-                onChange={(u) => setCanvasSettings((p) => ({ ...p, ...u }))}
-              />
-            </div>
-          )}
-
-          <ToolBar
-            activeTool={activeTool}
-            onToolChange={setActiveTool}
-            drawColor={drawColor}
-            onColorChange={setDrawColor}
-            drawWidth={drawWidth}
-            onWidthChange={setDrawWidth}
-            drawOpacity={drawOpacity}
-            onOpacityChange={setDrawOpacity}
-            canUndo={canUndo}
-            canRedo={canRedo}
-            onUndo={undo}
-            onRedo={redo}
-            onClearDrawings={() => {
-              if (!drawings.length && !textAnnotations.length) return;
-              setDrawings([]);
-              setTextAnnotations([]);
-              commit();
-            }}
-          />
-
+          <div className="cc-stage">
           <div className="cc-canvas-viewport" ref={viewportRef}>
             <div
               className="cc-canvas-sizer"
@@ -654,6 +721,8 @@ const ChartCraft: React.FC = () => {
               </div>
             </div>
 
+            </div>
+
             {showMinimap && (
               <div className="cc-minimap" aria-hidden="true">
                 <div
@@ -680,15 +749,14 @@ const ChartCraft: React.FC = () => {
             )}
           </div>
 
-          <details className="cc-data-details">
-            <summary className="cc-data-summary">
-              📋 Данные: {parsedData.totalRows} {plural(parsedData.totalRows, ["строка", "строки", "строк"])}
-              {parsedData.sheetName && parsedData.sheetName !== "CSV" && parsedData.sheetName !== "Вставка"
-                ? `, лист «${parsedData.sheetName}»`
-                : ""}
-            </summary>
-            <DataPreviewTable data={parsedData} maxRows={15} />
-          </details>
+          {showData && (
+            <section className="cc-data-drawer" aria-label="Исходные данные">
+              <button className="cc-icon-btn cc-data-drawer-close" onClick={() => setShowData(false)} aria-label="Скрыть данные" title="Скрыть">
+                <Icon name="close" size={16} />
+              </button>
+              <DataPreviewTable data={parsedData} maxRows={200} />
+            </section>
+          )}
         </>
       )}
 

@@ -162,9 +162,7 @@
 }
 :root[data-theme="dark"] .cc-panel-section,
 :root[data-theme="dark"] .cc-minimap,
-:root[data-theme="dark"] .cc-chart-card,
-:root[data-theme="dark"] .cc-workspace-toolbar,
-:root[data-theme="dark"] .cc-toolbar-draw {
+:root[data-theme="dark"] .cc-bar {
   background: var(--dk-panel-2) !important;
   border-color: var(--dk-border) !important;
 }
@@ -172,15 +170,9 @@
   background: var(--dk-panel) !important;
   border-color: rgba(255, 255, 255, 0.18) !important;
 }
-:root[data-theme="dark"] .cc-upload-zone:hover,
-:root[data-theme="dark"] .cc-tool-btn:hover,
-:root[data-theme="dark"] .cc-tool-btn.active {
+:root[data-theme="dark"] .cc-upload-zone:hover {
   background: var(--dk-panel-2) !important;
 }
-:root[data-theme="dark"] .cc-canvas-viewport {
-  background: #0b0c12 !important;
-}
-:root[data-theme="dark"] .cc-card-toolbar,
 :root[data-theme="dark"] .cc-format-badge {
   background: rgba(255, 255, 255, 0.06) !important;
 }
@@ -193,6 +185,15 @@
   background: var(--dk-input) !important;
   color: var(--dk-text) !important;
   border-color: var(--dk-border) !important;
+}
+
+/* карточки графиков непрозрачные — иначе наложенные графики просвечивают */
+:root[data-theme="dark"] .cc-chart-card {
+  background: #1b1e28 !important;
+}
+:root[data-theme="dark"] .cc-card-toolbar {
+  background: #242836 !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* ── ComparePage ── */

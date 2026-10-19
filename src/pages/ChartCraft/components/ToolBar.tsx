@@ -1,6 +1,7 @@
 import React from "react";
 import type { CanvasTool } from "../types";
 import { DRAW_COLORS } from "../utils/constants";
+import { Icon, type IconName } from "./icons";
 
 interface Props {
   activeTool: CanvasTool;
@@ -11,20 +12,18 @@ interface Props {
   onWidthChange: (w: number) => void;
   drawOpacity: number;
   onOpacityChange: (o: number) => void;
-  canUndo: boolean;
-  canRedo: boolean;
-  onUndo: () => void;
-  onRedo: () => void;
+  hasDrawings: boolean;
   onClearDrawings: () => void;
 }
 
-const TOOLS: { tool: CanvasTool; icon: string; label: string }[] = [
-  { tool: "select", icon: "🖱️", label: "Выбор" },
-  { tool: "draw", icon: "✏️", label: "Рисование" },
-  { tool: "arrow", icon: "➡️", label: "Стрелка" },
-  { tool: "rect", icon: "⬜", label: "Прямоугольник" },
-  { tool: "text", icon: "🔤", label: "Текст" },
-  { tool: "eraser", icon: "🧹", label: "Ластик" },
+/** Инструменты холста; буква — горячая клавиша (обрабатывается в ChartCraft). */
+const TOOLS: { tool: CanvasTool; icon: IconName; label: string; key: string }[] = [
+  { tool: "select", icon: "select", label: "Выбор и перенос", key: "V" },
+  { tool: "draw", icon: "pencil", label: "Карандаш", key: "P" },
+  { tool: "arrow", icon: "arrow", label: "Стрелка", key: "A" },
+  { tool: "rect", icon: "rect", label: "Рамка", key: "R" },
+  { tool: "text", icon: "text", label: "Надпись", key: "T" },
+  { tool: "eraser", icon: "eraser", label: "Ластик", key: "E" },
 ];
 
 const ToolBar: React.FC<Props> = ({
@@ -36,103 +35,96 @@ const ToolBar: React.FC<Props> = ({
   onWidthChange,
   drawOpacity,
   onOpacityChange,
-  canUndo,
-  canRedo,
-  onUndo,
-  onRedo,
+  hasDrawings,
   onClearDrawings,
-}) => (
-  <div className="cc-toolbar-draw">
-    {/* Tools */}
-    <div className="cc-tool-group">
-      {TOOLS.map(({ tool, icon, label }) => (
-        <button
-          key={tool}
-          className={`cc-tool-btn ${activeTool === tool ? "active" : ""}`}
-          onClick={() => onToolChange(tool)}
-          title={label}
-        >
-          <span className="cc-tool-icon">{icon}</span>
-          <span className="cc-tool-label">{label}</span>
-        </button>
-      ))}
-    </div>
+}) => {
+  const drawing = activeTool !== "select" && activeTool !== "eraser";
+  return (
+    <div className="cc-toolbar-draw" role="toolbar" aria-label="Инструменты холста">
+      <div className="cc-iconbar" role="radiogroup" aria-label="Инструмент">
+        {TOOLS.map(({ tool, icon, label, key }) => (
+          <button
+            key={tool}
+            type="button"
+            role="radio"
+            aria-checked={activeTool === tool}
+            className={`cc-icon-btn ${activeTool === tool ? "active" : ""}`}
+            onClick={() => onToolChange(tool)}
+            title={`${label} (${key})`}
+            aria-label={label}
+          >
+            <Icon name={icon} />
+          </button>
+        ))}
+      </div>
 
-    {/* Drawing options */}
-    {activeTool !== "select" && activeTool !== "eraser" && (
-      <>
-        <div className="cc-tool-divider" />
-        <div className="cc-tool-group">
-          <div className="cc-quick-colors">
+      {drawing && (
+        <>
+          <div className="cc-tool-divider" />
+          <div className="cc-quick-colors" role="radiogroup" aria-label="Цвет">
             {DRAW_COLORS.map((c) => (
               <button
                 key={c}
+                type="button"
+                role="radio"
+                aria-checked={drawColor === c}
+                aria-label={c}
                 className={`cc-quick-color ${drawColor === c ? "active" : ""}`}
-                style={{
-                  backgroundColor: c,
-                  border: c === "#ffffff" ? "1px solid #ccc" : "none",
-                }}
+                style={{ backgroundColor: c }}
                 onClick={() => onColorChange(c)}
               />
             ))}
           </div>
-        </div>
+          {activeTool !== "text" && (
+            <>
+              <div className="cc-tool-divider" />
+              <label className="cc-slider-item" title="Толщина линии">
+                <span>Толщина</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={12}
+                  value={drawWidth}
+                  onChange={(e) => onWidthChange(Number(e.target.value))}
+                  className="cc-range-mini"
+                />
+                <span className="cc-slider-value">{drawWidth}</span>
+              </label>
+              <label className="cc-slider-item" title="Прозрачность">
+                <span>Непрозр.</span>
+                <input
+                  type="range"
+                  min={10}
+                  max={100}
+                  value={Math.round(drawOpacity * 100)}
+                  onChange={(e) => onOpacityChange(Number(e.target.value) / 100)}
+                  className="cc-range-mini"
+                />
+                <span className="cc-slider-value">{Math.round(drawOpacity * 100)}%</span>
+              </label>
+            </>
+          )}
+        </>
+      )}
 
-        <div className="cc-tool-divider" />
-        <div className="cc-tool-group cc-tool-sliders">
-          <div className="cc-slider-item">
-            <span>{drawWidth}px</span>
-            <input
-              type="range"
-              min={1}
-              max={12}
-              value={drawWidth}
-              onChange={(e) => onWidthChange(Number(e.target.value))}
-              className="cc-range-mini"
-            />
-          </div>
-          <div className="cc-slider-item">
-            <span>{Math.round(drawOpacity * 100)}%</span>
-            <input
-              type="range"
-              min={10}
-              max={100}
-              value={Math.round(drawOpacity * 100)}
-              onChange={(e) => onOpacityChange(Number(e.target.value) / 100)}
-              className="cc-range-mini"
-            />
-          </div>
-        </div>
-      </>
-    )}
+      <span className="cc-tool-hint">
+        {activeTool === "select"
+          ? "Тяните график за шапку · двойной клик — настроить"
+          : activeTool === "text"
+            ? "Кликните на холст и введите текст · двойной клик — изменить"
+            : activeTool === "eraser"
+              ? "Кликните по рисунку или надписи, чтобы удалить"
+              : "Рисуйте мышью на холсте · Esc — выбор"}
+      </span>
 
-    <div className="cc-tool-divider" />
-    <div className="cc-tool-group">
-      <button
-        className="cc-tool-btn"
-        onClick={onUndo}
-        disabled={!canUndo}
-        title="Отменить (Ctrl+Z)"
-      >
-        ↩️
-      </button>
-      <button
-        className="cc-tool-btn"
-        onClick={onRedo}
-        disabled={!canRedo}
-        title="Повторить (Ctrl+Y)"
-      >
-        ↪️
-      </button>
-      <button
-        className="cc-tool-btn cc-tool-btn-danger"
-        onClick={onClearDrawings}
-        title="Очистить рисунки"
-      >
-        🗑️
-      </button>
+      {hasDrawings && (
+        <button type="button" className="cc-text-btn" onClick={onClearDrawings} title="Удалить все рисунки и надписи">
+          <Icon name="trash" size={16} />
+          Стереть рисунки
+        </button>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 export default ToolBar;

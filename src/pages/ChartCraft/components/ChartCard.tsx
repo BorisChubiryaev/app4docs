@@ -4,6 +4,7 @@ import ChartPreview from "./ChartPreview";
 import type { ChartInstance, ColumnInfo, ParsedData } from "../types";
 import { copyNodePng, exportChartHtml, exportNodePng, exportNodeSvg } from "../utils/exportUtils";
 import { CHROME } from "../utils/palettes";
+import { Icon } from "./icons";
 
 interface Props {
   instance: ChartInstance;
@@ -117,54 +118,56 @@ const ChartCard: React.FC<Props> = ({
       >
         <div className="cc-card-toolbar cc-card-drag-handle cc-no-export">
           <div className="cc-card-toolbar-left">
-            <span className="cc-card-grip" aria-hidden="true">⋮⋮</span>
+            <span className="cc-card-grip" aria-hidden="true"><Icon name="grip" size={14} /></span>
             <span className="cc-card-label">{config.title || "График"}</span>
-            {instance.isLocked && <span className="cc-lock-icon" title="Закреплён">🔒</span>}
+            {instance.isLocked && <span className="cc-lock-icon" title="Закреплён"><Icon name="pin" size={13} /></span>}
           </div>
           <div className="cc-card-toolbar-right">
-            <button className="cc-card-btn" onClick={stop(() => onEdit(instance.id))} title="Настроить (или двойной клик по графику)">
-              ✏️
+            <button className="cc-icon-btn cc-icon-btn-sm" onClick={stop(() => onEdit(instance.id))} title="Настроить (или двойной клик по графику)" aria-label="Настроить">
+              <Icon name="pencil" size={16} />
             </button>
             <button
-              className="cc-card-btn"
+              className={`cc-icon-btn cc-icon-btn-sm ${instance.isLocked ? "active" : ""}`}
               onClick={stop(() => onUpdate(instance.id, { isLocked: !instance.isLocked }))}
               title={instance.isLocked ? "Открепить" : "Закрепить на месте"}
+              aria-label={instance.isLocked ? "Открепить" : "Закрепить"}
+              aria-pressed={instance.isLocked}
             >
-              {instance.isLocked ? "🔓" : "📌"}
+              <Icon name="pin" size={16} />
             </button>
             <div className="cc-card-export-wrapper" ref={menuRef}>
               <button
-                className="cc-card-btn"
+                className="cc-icon-btn cc-icon-btn-sm"
                 disabled={!hasChart || !!exporting}
                 onClick={stop(() => setShowExport((v) => !v))}
                 title="Скачать или скопировать"
                 aria-haspopup="menu"
                 aria-expanded={showExport}
               >
-                {exporting ? "⏳" : "💾"}
+                {exporting ? <span className="cc-spinner-mini" /> : <Icon name="download" size={16} />}
               </button>
               {showExport && (
-                <div className="cc-card-export-menu" role="menu">
-                  <button role="menuitem" className="cc-card-export-option" onClick={stop(() => handleExport("copy"))}>
-                    📋 Копировать картинку
+                <div className="cc-menu" role="menu">
+                  <button role="menuitem" className="cc-menu-item" onClick={stop(() => handleExport("copy"))}>
+                    <Icon name="clipboard" size={16} /> Копировать картинку
                   </button>
-                  <button role="menuitem" className="cc-card-export-option" onClick={stop(() => handleExport("png"))}>
-                    🖼️ PNG — для презентаций
+                  <button role="menuitem" className="cc-menu-item" onClick={stop(() => handleExport("png"))}>
+                    <Icon name="image" size={16} /> PNG — для презентаций
                   </button>
-                  <button role="menuitem" className="cc-card-export-option" onClick={stop(() => handleExport("svg"))}>
-                    ✒️ SVG — вектор
+                  <button role="menuitem" className="cc-menu-item" onClick={stop(() => handleExport("svg"))}>
+                    <Icon name="pencil" size={16} /> SVG — вектор
                   </button>
-                  <button role="menuitem" className="cc-card-export-option" onClick={stop(() => handleExport("html"))}>
-                    🌐 HTML — график + таблица
+                  <button role="menuitem" className="cc-menu-item" onClick={stop(() => handleExport("html"))}>
+                    <Icon name="globe" size={16} /> HTML — график + таблица
                   </button>
                 </div>
               )}
             </div>
-            <button className="cc-card-btn" onClick={stop(() => onDuplicate(instance.id))} title="Дублировать">
-              ⧉
+            <button className="cc-icon-btn cc-icon-btn-sm" onClick={stop(() => onDuplicate(instance.id))} title="Дублировать" aria-label="Дублировать">
+              <Icon name="copy" size={16} />
             </button>
-            <button className="cc-card-btn cc-card-btn-danger" onClick={stop(() => onDelete(instance.id))} title="Удалить">
-              ✕
+            <button className="cc-icon-btn cc-icon-btn-sm cc-card-btn-danger" onClick={stop(() => onDelete(instance.id))} title="Удалить" aria-label="Удалить">
+              <Icon name="trash" size={16} />
             </button>
           </div>
         </div>
@@ -174,7 +177,7 @@ const ChartCard: React.FC<Props> = ({
             <ChartPreview ref={chartRef} data={data} columns={columns} config={config} />
           ) : (
             <button type="button" className="cc-card-empty" onClick={() => onEdit(instance.id)}>
-              <span aria-hidden="true">📊</span>
+              <Icon name="chart" size={40} />
               <p>Выберите данные для графика</p>
             </button>
           )}

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import { Icon } from "./icons";
 
 interface Props {
   onFile: (file: File) => void;
@@ -40,7 +41,7 @@ const FileUploader: React.FC<Props> = ({ onFile, onPaste, onDemo, isProcessing }
         onClick={() => !isProcessing && inputRef.current?.click()}
         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && inputRef.current?.click()}
       >
-        <div className="cc-upload-icon">{isProcessing ? "⏳" : "📁"}</div>
+        <div className="cc-upload-icon">{isProcessing ? <span className="cc-spinner-mini" /> : <Icon name="folder" size={44} />}</div>
         <p className="cc-upload-title">{isProcessing ? "Читаем файл…" : "Перетащите таблицу сюда"}</p>
         <p className="cc-upload-subtitle">или нажмите, чтобы выбрать файл</p>
         <div className="cc-upload-formats">
@@ -68,10 +69,12 @@ const FileUploader: React.FC<Props> = ({ onFile, onPaste, onDemo, isProcessing }
           aria-expanded={pasteOpen}
           disabled={isProcessing}
         >
-          📋 Вставить из Excel
+          <Icon name="clipboard" size={16} />
+          Вставить из Excel
         </button>
         <button type="button" className="cc-button cc-button-secondary" onClick={onDemo} disabled={isProcessing}>
-          ✨ Попробовать на примере
+          <Icon name="chart" size={16} />
+          Попробовать на примере
         </button>
       </div>
 
