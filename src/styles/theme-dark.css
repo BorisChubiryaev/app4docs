@@ -133,7 +133,8 @@
 :root[data-theme="dark"] .chartcraft-container {
   color: var(--dk-text) !important;
 }
-:root[data-theme="dark"] .ds-page__body :is(h1, h2, h3, h4, h5, p, label, li, strong, dt, dd, th, td, figcaption),
+/* внутри графика генератора цвета задаёт тема самого графика — не трогаем */
+:root[data-theme="dark"] .ds-page__body :is(h1, h2, h3, h4, h5, p, label, li, strong, dt, dd, th, td, figcaption):not(.cc-chart-preview-inner *),
 :root[data-theme="dark"] .compare-page :is(h1, h2, h3, h4, p, label, li, strong, th, td),
 :root[data-theme="dark"] .workplace-compare-page :is(h1, h2, h3, h4, p, label, li, strong, th, td),
 :root[data-theme="dark"] .html-excel-converter :is(h1, h2, h3, h4, p, label, li, strong, th, td) {

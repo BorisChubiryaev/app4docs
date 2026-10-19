@@ -1,166 +1,141 @@
 import type {
-  ExportFormat,
-  ChartConfig,
-  CanvasSettings,
   CanvasPreset,
+  CanvasSettings,
+  ChartConfig,
+  ChartType,
+  ColumnInfo,
 } from "../types";
+import { CHROME } from "./palettes";
 
-export const DEFAULT_COLORS = [
-  "#3498db",
-  "#e74c3c",
-  "#2ecc71",
-  "#f39c12",
-  "#9b59b6",
-  "#1abc9c",
-  "#e67e22",
-  "#34495e",
-  "#e91e63",
-  "#00bcd4",
-  "#8bc34a",
-  "#ff5722",
-];
+export interface ChartTypeInfo {
+  type: ChartType;
+  label: string;
+  description: string;
+  /** Причина, почему тип сейчас недоступен (или null). */
+  unavailable: (x: ColumnInfo | undefined, ySeries: number) => string | null;
+}
 
-export const CHART_TYPE_INFO = [
+export const CHART_TYPES: ChartTypeInfo[] = [
   {
-    type: "bar" as const,
-    label: "Столбчатый",
-    icon: "📊",
+    type: "bar",
+    label: "Столбцы",
     description: "Сравнение категорий",
+    unavailable: () => null,
   },
   {
-    type: "line" as const,
-    label: "Линейный",
-    icon: "📈",
-    description: "Тренды и динамика",
+    type: "barH",
+    label: "Полосы",
+    description: "Длинные названия, рейтинги",
+    unavailable: () => null,
   },
   {
-    type: "area" as const,
-    label: "Площадной",
-    icon: "📉",
-    description: "Объём с трендом",
+    type: "line",
+    label: "Линия",
+    description: "Динамика во времени",
+    unavailable: () => null,
   },
   {
-    type: "pie" as const,
-    label: "Круговой",
-    icon: "🥧",
-    description: "Доли и проценты",
+    type: "area",
+    label: "Области",
+    description: "Объём и тренд",
+    unavailable: () => null,
   },
   {
-    type: "radar" as const,
-    label: "Радарный",
-    icon: "🕸️",
-    description: "Многомерное сравнение",
+    type: "pie",
+    label: "Круговая",
+    description: "Доли целого",
+    unavailable: (_x, n) => (n > 1 ? "Круговая показывает один ряд — оставьте одно значение" : null),
   },
   {
-    type: "scatter" as const,
-    label: "Точечный",
-    icon: "🔵",
-    description: "Корреляция данных",
+    type: "donut",
+    label: "Кольцевая",
+    description: "Доли + итог в центре",
+    unavailable: (_x, n) => (n > 1 ? "Кольцевая показывает один ряд — оставьте одно значение" : null),
   },
   {
-    type: "composed" as const,
-    label: "Комбинированный",
-    icon: "📊📈",
-    description: "Линии + столбцы",
+    type: "radar",
+    label: "Радар",
+    description: "Профиль по нескольким осям",
+    unavailable: (x) =>
+      x && x.uniqueCount < 3 ? "Нужно хотя бы 3 категории по оси X" : null,
+  },
+  {
+    type: "scatter",
+    label: "Точечная",
+    description: "Связь двух чисел",
+    unavailable: (x) =>
+      x && x.type !== "numeric" ? "Ось X должна быть числовой (например, «Рост» и «Вес»)" : null,
+  },
+  {
+    type: "composed",
+    label: "Столбцы + линия",
+    description: "Первый ряд — столбцы, остальные — линии",
+    unavailable: (_x, n) => (n < 2 ? "Нужно хотя бы два ряда значений" : null),
   },
 ];
 
 export const CANVAS_PRESETS: CanvasPreset[] = [
-  {
-    name: "ppt-16-9",
-    label: "PowerPoint 16:9",
-    width: 1920,
-    height: 1080,
-    icon: "🖥️",
-  },
-  {
-    name: "ppt-4-3",
-    label: "PowerPoint 4:3",
-    width: 1440,
-    height: 1080,
-    icon: "🖥️",
-  },
-  {
-    name: "a4-landscape",
-    label: "A4 альбом",
-    width: 1684,
-    height: 1190,
-    icon: "📄",
-  },
-  {
-    name: "a4-portrait",
-    label: "A4 портрет",
-    width: 1190,
-    height: 1684,
-    icon: "📄",
-  },
-  { name: "hd-1080", label: "Full HD", width: 1920, height: 1080, icon: "📺" },
+  { name: "ppt-16-9", label: "Слайд 16:9", width: 1920, height: 1080, icon: "🖥️" },
+  { name: "ppt-4-3", label: "Слайд 4:3", width: 1440, height: 1080, icon: "🖥️" },
+  { name: "a4-landscape", label: "A4 альбом", width: 1684, height: 1190, icon: "📄" },
+  { name: "a4-portrait", label: "A4 портрет", width: 1190, height: 1684, icon: "📄" },
   { name: "4k", label: "4K", width: 3840, height: 2160, icon: "📺" },
-  {
-    name: "instagram",
-    label: "Instagram",
-    width: 1080,
-    height: 1080,
-    icon: "📱",
-  },
-  { name: "twitter", label: "Twitter/X", width: 1600, height: 900, icon: "📱" },
-  {
-    name: "custom",
-    label: "Свой размер",
-    width: 1400,
-    height: 900,
-    icon: "✏️",
-  },
-];
-
-export const EXPORT_FORMATS: ExportFormat[] = [
-  {
-    type: "png",
-    label: "PNG",
-    icon: "🖼️",
-    description: "Растровое изображение",
-  },
-  { type: "svg", label: "SVG", icon: "✏️", description: "Векторный формат" },
-  {
-    type: "html",
-    label: "HTML",
-    icon: "🌐",
-    description: "Интерактивный виджет",
-  },
+  { name: "square", label: "Квадрат", width: 1080, height: 1080, icon: "⬛" },
+  { name: "custom", label: "Свой размер", width: 1400, height: 900, icon: "✏️" },
 ];
 
 export const DRAW_COLORS = [
-  "#e74c3c",
-  "#e67e22",
-  "#f1c40f",
-  "#2ecc71",
-  "#3498db",
-  "#9b59b6",
-  "#1abc9c",
-  "#34495e",
-  "#000000",
+  "#e34948",
+  "#eb6834",
+  "#eda100",
+  "#1baf7a",
+  "#2a78d6",
+  "#6250d6",
+  "#0b0b0b",
   "#ffffff",
 ];
 
 export function createDefaultConfig(): ChartConfig {
   return {
     chartType: "bar",
+    autoType: true,
     xColumn: "",
     yColumns: [],
+    aggregation: "sum",
+    sort: "none",
+    topN: 0,
+    otherBucket: true,
+    highlight: null,
     title: "",
     subtitle: "",
-    colors: [...DEFAULT_COLORS],
+    theme: "light",
+    backgroundColor: CHROME.light.surface,
+    colors: [],
+    stack: "none",
+    smooth: false,
+    showDots: true,
+    showTrend: false,
     showLegend: true,
-    showGrid: true,
-    showValues: false,
-    showTooltip: true,
     legendPosition: "bottom",
-    animationDuration: 800,
+    showGrid: true,
+    showTooltip: true,
+    valueLabels: "none",
+    showBrush: false,
     borderRadius: 4,
-    fillOpacity: 0.8,
+    barSize: 32,
     strokeWidth: 2,
     fontSize: 12,
-    backgroundColor: "#ffffff",
+    xAxisLabel: "",
+    yAxisLabel: "",
+    yMin: null,
+    yMax: null,
+    unit: "auto",
+    decimals: -1,
+    prefix: "",
+    suffix: "",
+    referenceLine: "none",
+    referenceValue: null,
+    referenceLabel: "",
   };
 }
 
@@ -168,10 +143,13 @@ export function createDefaultCanvasSettings(): CanvasSettings {
   return {
     backgroundColor: "#f5f6fa",
     backgroundPattern: "dots",
-    patternColor: "#e0e0e0",
+    patternColor: "#d9dbe3",
     patternSize: 20,
     canvasWidth: 1920,
     canvasHeight: 1080,
     presetName: "ppt-16-9",
   };
 }
+
+/** Можно ли сложить ряды стопкой для этого типа. */
+export const canStack = (t: ChartType) => t === "bar" || t === "barH" || t === "area";

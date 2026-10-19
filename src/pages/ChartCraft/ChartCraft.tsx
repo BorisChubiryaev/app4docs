@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useRef,
-  useCallback,
-  useMemo,
-  useEffect,
-} from "react";
+import React, { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import PageShell from "../../components/PageShell";
 import FileUploader from "./components/FileUploader";
 import ChartCard from "./components/ChartCard";
@@ -17,129 +11,200 @@ import type {
   ParsedData,
   ChartConfig,
   ChartInstance,
-  ColumnInfo,
   CanvasSettings,
   CanvasTool,
   DrawingPath,
   TextAnnotation,
-  HistoryEntry,
+  Snapshot,
 } from "./types";
 import {
-  parseFile,
+  readWorkbook,
+  readPastedText,
+  workbookSheet,
   detectColumnTypes,
+  defaultColumns,
   suggestChartType,
+  type Workbook,
 } from "./utils/dataParser";
-import {
-  createDefaultConfig,
-  createDefaultCanvasSettings,
-} from "./utils/constants";
-import { exportCanvasToPng, exportCanvasToSvg } from "./utils/exportUtils";
+import { createDefaultConfig, createDefaultCanvasSettings } from "./utils/constants";
+import { exportCanvasPng, exportCanvasSvg } from "./utils/exportUtils";
+import { demoTable } from "./utils/demoData";
+import { plural } from "../../utils/plural";
 import "./ChartCraft.css";
 
 let idCounter = 0;
 const newId = () => `chart-${++idCounter}-${Date.now()}`;
-const MAX_HISTORY = 30;
+const MAX_HISTORY = 50;
+const CARD_SIZE = { width: 880, height: 540 };
+
+interface History {
+  stack: Snapshot[];
+  index: number;
+}
+const EMPTY_HISTORY: History = { stack: [], index: -1 };
+
+/** Ctrl+Z в поле ввода — это отмена набора текста, а не действий на холсте. */
+const isTyping = (t: EventTarget | null) => {
+  const el = t as HTMLElement | null;
+  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+};
+
+const fileTitle = (data: ParsedData) =>
+  data.sheetNames && data.sheetNames.length > 1
+    ? data.sheetName
+    : data.fileName.replace(/\.[^/.]+$/, "");
+
+/** Первый график по данным: подходящие столбцы и тип. */
+function firstChart(data: ParsedData, demo = false): ChartInstance {
+  const cols = detectColumnTypes(data);
+  const { x, y } = defaultColumns(cols);
+  const config: ChartConfig = {
+    ...createDefaultConfig(),
+    xColumn: x,
+    yColumns: y,
+    title: fileTitle(data),
+  };
+  if (demo) {
+    // Пример показывает возможности: стопка, линия плана, подписи осей.
+    Object.assign(config, {
+      yColumns: ["Офлайн", "Онлайн", "Партнёры"],
+      chartType: "bar",
+      autoType: false,
+      stack: "stacked",
+      title: "Продажи по каналам",
+      subtitle: "2025 год, тыс. ₽",
+      referenceLine: "value",
+      referenceValue: 1400,
+      referenceLabel: "План",
+    } satisfies Partial<ChartConfig>);
+  } else {
+    config.chartType = suggestChartType(
+      cols.find((c) => c.name === x),
+      cols.filter((c) => y.includes(c.name)),
+    );
+  }
+  return {
+    id: newId(),
+    config,
+    position: { x: 40, y: 32 },
+    size: CARD_SIZE,
+    zIndex: 1,
+    isLocked: false,
+  };
+}
 
 const ChartCraft: React.FC = () => {
   const [showInstructions, setShowInstructions] = useState(false);
+  const [workbook, setWorkbook] = useState<Workbook | null>(null);
   const [parsedData, setParsedData] = useState<ParsedData | null>(null);
-  const [columns, setColumns] = useState<ColumnInfo[]>([]);
   const [charts, setCharts] = useState<ChartInstance[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [maxZ, setMaxZ] = useState(1);
-  const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>(
-    createDefaultCanvasSettings(),
-  );
+  const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>(createDefaultCanvasSettings);
   const [showCanvasSettings, setShowCanvasSettings] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const [activeTool, setActiveTool] = useState<CanvasTool>("select");
-  const [drawColor, setDrawColor] = useState("#e74c3c");
+  const [drawColor, setDrawColor] = useState("#e34948");
   const [drawWidth, setDrawWidth] = useState(3);
   const [drawOpacity, setDrawOpacity] = useState(1);
   const [drawings, setDrawings] = useState<DrawingPath[]>([]);
   const [textAnnotations, setTextAnnotations] = useState<TextAnnotation[]>([]);
 
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const skipHistoryRef = useRef(false);
-
   const [showMinimap, setShowMinimap] = useState(true);
+  const [zoom, setZoom] = useState<number | "fit">("fit");
+  const [viewportWidth, setViewportWidth] = useState(0);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
-  const pushHistory = useCallback(
-    (ch: ChartInstance[], dr: DrawingPath[], tx: TextAnnotation[]) => {
-      if (skipHistoryRef.current) {
-        skipHistoryRef.current = false;
-        return;
-      }
-      setHistory((prev) => {
-        const h = prev.slice(0, historyIndex + 1);
-        h.push({
-          charts: JSON.parse(JSON.stringify(ch)),
-          drawings: JSON.parse(JSON.stringify(dr)),
-          texts: JSON.parse(JSON.stringify(tx)),
-        });
-        if (h.length > MAX_HISTORY) h.shift();
-        return h;
-      });
-      setHistoryIndex((p) => Math.min(p + 1, MAX_HISTORY - 1));
-    },
-    [historyIndex],
-  );
+  // ── История: снимок после каждого завершённого действия ──
+  const [history, setHistory] = useState<History>(EMPTY_HISTORY);
+  const [commitTick, setCommitTick] = useState(0);
+  const latest = useRef<Snapshot>({ charts, drawings, texts: textAnnotations });
+  latest.current = { charts, drawings, texts: textAnnotations };
+
+  /** Запомнить состояние после обновления (снимок делается уже по новому state). */
+  const commit = useCallback(() => setCommitTick((t) => t + 1), []);
+
+  useEffect(() => {
+    if (!commitTick) return;
+    setHistory((h) => {
+      const stack = [...h.stack.slice(0, h.index + 1), latest.current].slice(-MAX_HISTORY);
+      return { stack, index: stack.length - 1 };
+    });
+  }, [commitTick]);
+
+  const restore = useCallback((s: Snapshot) => {
+    setCharts(s.charts);
+    setDrawings(s.drawings);
+    setTextAnnotations(s.texts);
+    setEditingId(null);
+  }, []);
+
+  const canUndo = history.index > 0;
+  const canRedo = history.index < history.stack.length - 1;
 
   const undo = useCallback(() => {
-    if (historyIndex <= 0) return;
-    const e = history[historyIndex - 1];
-    skipHistoryRef.current = true;
-    setCharts(e.charts);
-    setDrawings(e.drawings);
-    setTextAnnotations(e.texts);
-    setHistoryIndex((p) => p - 1);
-  }, [history, historyIndex]);
+    if (history.index <= 0) return;
+    restore(history.stack[history.index - 1]);
+    setHistory((h) => ({ ...h, index: h.index - 1 }));
+  }, [history, restore]);
 
   const redo = useCallback(() => {
-    if (historyIndex >= history.length - 1) return;
-    const e = history[historyIndex + 1];
-    skipHistoryRef.current = true;
-    setCharts(e.charts);
-    setDrawings(e.drawings);
-    setTextAnnotations(e.texts);
-    setHistoryIndex((p) => p + 1);
-  }, [history, historyIndex]);
+    if (history.index >= history.stack.length - 1) return;
+    restore(history.stack[history.index + 1]);
+    setHistory((h) => ({ ...h, index: h.index + 1 }));
+  }, [history, restore]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+      if (editingId || isTyping(e.target)) return;
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      // «я»/«н» — те же клавиши в русской раскладке.
+      if (mod && (key === "z" || key === "я") && !e.shiftKey) {
         e.preventDefault();
         undo();
-      }
-      if (
-        (e.ctrlKey || e.metaKey) &&
-        (e.key === "y" || (e.key === "z" && e.shiftKey))
-      ) {
+      } else if (mod && (key === "y" || key === "н" || ((key === "z" || key === "я") && e.shiftKey))) {
         e.preventDefault();
         redo();
-      }
-      if (e.key === "Escape") setActiveTool("select");
+      } else if (e.key === "Escape") setActiveTool("select");
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [undo, redo]);
+  }, [undo, redo, editingId]);
 
+  // Уведомление исчезает само.
   useEffect(() => {
-    pushHistory(charts, drawings, textAnnotations);
-  }, [drawings, textAnnotations]);
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // ── Масштаб холста: по умолчанию вписываем в ширину экрана ──
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setViewportWidth(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [parsedData]);
+
+  const scale =
+    zoom === "fit"
+      ? viewportWidth
+        ? Math.min(1, (viewportWidth - 32) / canvasSettings.canvasWidth)
+        : 1
+      : zoom;
+
+  const columns = useMemo(() => (parsedData ? detectColumnTypes(parsedData) : []), [parsedData]);
 
   const canvasStyle = useMemo(() => {
-    const {
-      backgroundColor: bg,
-      patternColor: pc,
-      patternSize: ps,
-      backgroundPattern,
-    } = canvasSettings;
+    const { backgroundColor: bg, patternColor: pc, patternSize: ps, backgroundPattern } = canvasSettings;
     switch (backgroundPattern) {
       case "dots":
         return {
@@ -162,136 +227,134 @@ const ChartCraft: React.FC = () => {
     }
   }, [canvasSettings]);
 
-  const handleFileLoaded = useCallback(async (file: File) => {
+  /** Новые данные: один стартовый график, история с чистого листа. */
+  const startWith = useCallback((wb: Workbook, sheet?: string, demo = false) => {
+    const data = workbookSheet(wb, sheet);
+    if (!data.headers.length || !data.rows.length)
+      throw new Error(`На листе «${data.sheetName}» нет данных — нужна таблица с заголовками.`);
+    const first = firstChart(data, demo);
+    setWorkbook(wb);
+    setParsedData(data);
+    setCharts([first]);
+    setDrawings([]);
+    setTextAnnotations([]);
+    setMaxZ(1);
+    setHistory({ stack: [{ charts: [first], drawings: [], texts: [] }], index: 0 });
+    // Если столбцы не подобрались — сразу открываем редактор.
+    setEditingId(first.config.yColumns.length ? null : first.id);
+  }, []);
+
+  const run = useCallback(async (fn: () => Promise<void> | void) => {
     setIsProcessing(true);
     setError(null);
     try {
-      const data = await parseFile(file);
-      setParsedData(data);
-      const colInfos = detectColumnTypes(data);
-      setColumns(colInfos);
-      const cat = colInfos.find((c) => c.type === "category");
-      const nums = colInfos.filter((c) => c.type === "numeric");
-      const sug = suggestChartType(colInfos, data.rows.length);
-      const first: ChartInstance = {
-        id: newId(),
-        config: {
-          ...createDefaultConfig(),
-          chartType: sug,
-          xColumn: cat?.name || colInfos[0]?.name || "",
-          yColumns:
-            nums.length > 0
-              ? [nums[0].name]
-              : colInfos.length > 1
-                ? [colInfos[1].name]
-                : [],
-          title: file.name.replace(/\.[^/.]+$/, ""),
-        },
-        position: { x: 40, y: 20 },
-        size: { width: 600, height: 450 },
-        zIndex: 1,
-        isEditing: false,
-        isMinimized: false,
-        isLocked: false,
-      };
-      setCharts([first]);
-      setEditingId(first.id);
-      setMaxZ(1);
-      setDrawings([]);
-      setTextAnnotations([]);
-      setHistory([]);
-      setHistoryIndex(-1);
-    } catch (err: any) {
-      setError(err.message || "Ошибка");
+      await fn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось прочитать данные.");
     } finally {
       setIsProcessing(false);
     }
   }, []);
 
+  const handleFile = (file: File) => run(async () => startWith(await readWorkbook(file)));
+  const handlePaste = (text: string) => run(() => startWith(readPastedText(text)));
+  const handleDemo = () =>
+    run(() => startWith({ ...readPastedText(demoTable()), fileName: "Пример" }, undefined, true));
+
+  /** Другой лист той же книги: графики остаются, столбцы которых там есть. */
+  const switchSheet = (name: string) =>
+    run(() => {
+      if (!workbook) return;
+      const data = workbookSheet(workbook, name);
+      const cols = new Set(data.headers);
+      const keep = charts.filter((c) => cols.has(c.config.xColumn) && c.config.yColumns.every((y) => cols.has(y)));
+      setParsedData(data);
+      if (keep.length) {
+        setCharts(keep);
+        commit();
+      } else {
+        const first = firstChart(data);
+        setCharts([first]);
+        commit();
+      }
+    });
+
   const addChart = useCallback(() => {
     if (!parsedData) return;
-    const off = charts.length * 30;
+    const off = (charts.length % 8) * 32;
+    const { x, y } = defaultColumns(columns);
     const nc: ChartInstance = {
       id: newId(),
-      config: {
-        ...createDefaultConfig(),
-        title: `График ${charts.length + 1}`,
-      },
-      position: { x: 60 + off, y: 40 + off },
-      size: { width: 600, height: 450 },
+      config: { ...createDefaultConfig(), xColumn: x, yColumns: y, title: `График ${charts.length + 1}` },
+      position: { x: 60 + off, y: 48 + off },
+      size: CARD_SIZE,
       zIndex: maxZ + 1,
-      isEditing: false,
-      isMinimized: false,
       isLocked: false,
     };
     setMaxZ((p) => p + 1);
-    setCharts((prev) => {
-      const n = [...prev, nc];
-      pushHistory(n, drawings, textAnnotations);
-      return n;
-    });
+    setCharts((prev) => [...prev, nc]);
+    commit();
     setEditingId(nc.id);
-  }, [parsedData, charts.length, maxZ, drawings, textAnnotations, pushHistory]);
+  }, [parsedData, charts.length, columns, maxZ, commit]);
 
-  const updateChart = useCallback((id: string, u: Partial<ChartInstance>) => {
-    setCharts((prev) => prev.map((c) => (c.id === id ? { ...c, ...u } : c)));
-  }, []);
+  /** Изменение карточки по завершённому действию (перенос, размер, замок). */
+  const updateChart = useCallback(
+    (id: string, u: Partial<ChartInstance>) => {
+      setCharts((prev) => prev.map((c) => (c.id === id ? { ...c, ...u } : c)));
+      commit();
+    },
+    [commit],
+  );
 
   const deleteChart = useCallback(
     (id: string) => {
-      setCharts((prev) => {
-        const n = prev.filter((c) => c.id !== id);
-        pushHistory(n, drawings, textAnnotations);
-        return n;
-      });
+      setCharts((prev) => prev.filter((c) => c.id !== id));
+      commit();
       setEditingId((p) => (p === id ? null : p));
     },
-    [drawings, textAnnotations, pushHistory],
+    [commit],
   );
 
   const duplicateChart = useCallback(
     (id: string) => {
-      setCharts((prev) => {
-        const src = prev.find((c) => c.id === id);
-        if (!src) return prev;
-        const cl: ChartInstance = {
-          ...src,
-          id: newId(),
-          config: { ...src.config, title: `${src.config.title} (копия)` },
-          position: { x: src.position.x + 40, y: src.position.y + 40 },
-          zIndex: maxZ + 1,
-          isLocked: false,
-        };
-        setMaxZ((p) => p + 1);
-        const n = [...prev, cl];
-        pushHistory(n, drawings, textAnnotations);
-        return n;
-      });
+      const src = charts.find((c) => c.id === id);
+      if (!src) return;
+      const cl: ChartInstance = {
+        ...src,
+        id: newId(),
+        config: { ...src.config, title: src.config.title ? `${src.config.title} (копия)` : "" },
+        position: {
+          x: Math.min(src.position.x + 40, Math.max(0, canvasSettings.canvasWidth - src.size.width)),
+          y: Math.min(src.position.y + 40, Math.max(0, canvasSettings.canvasHeight - src.size.height)),
+        },
+        zIndex: maxZ + 1,
+        isLocked: false,
+      };
+      setMaxZ((p) => p + 1);
+      setCharts((prev) => [...prev, cl]);
+      commit();
     },
-    [maxZ, drawings, textAnnotations, pushHistory],
+    [charts, maxZ, canvasSettings.canvasWidth, canvasSettings.canvasHeight, commit],
   );
 
   const bringToFront = useCallback(
     (id: string) => {
+      const top = charts.find((c) => c.id === id);
+      if (!top || top.zIndex === maxZ) return;
       const nz = maxZ + 1;
       setMaxZ(nz);
-      setCharts((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, zIndex: nz } : c)),
-      );
+      setCharts((prev) => prev.map((c) => (c.id === id ? { ...c, zIndex: nz } : c)));
     },
-    [maxZ],
+    [charts, maxZ],
   );
 
   const handleEditSave = useCallback(
     (id: string, config: ChartConfig) => {
-      setCharts((prev) => {
-        const n = prev.map((c) => (c.id === id ? { ...c, config } : c));
-        pushHistory(n, drawings, textAnnotations);
-        return n;
-      });
+      setCharts((prev) => prev.map((c) => (c.id === id ? { ...c, config } : c)));
+      commit();
       setEditingId(null);
     },
-    [drawings, textAnnotations, pushHistory],
+    [commit],
   );
 
   const handleExportAll = useCallback(
@@ -299,31 +362,21 @@ const ChartCraft: React.FC = () => {
       if (!canvasRef.current) return;
       setIsProcessing(true);
       try {
-        const name = `charts-${Date.now()}`;
-        if (fmt === "png")
-          await exportCanvasToPng(
-            canvasRef.current,
-            name,
-            canvasSettings.backgroundColor,
-          );
-        else
-          await exportCanvasToSvg(
-            canvasRef.current,
-            name,
-            canvasSettings.backgroundColor,
-          );
-      } catch (e: any) {
-        setError(e.message);
+        const name = parsedData ? fileTitle(parsedData) : "Графики";
+        if (fmt === "png") await exportCanvasPng(canvasRef.current, name, canvasSettings.backgroundColor);
+        else await exportCanvasSvg(canvasRef.current, name, canvasSettings.backgroundColor);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Не удалось сохранить холст.");
       } finally {
         setIsProcessing(false);
       }
     },
-    [canvasSettings.backgroundColor],
+    [canvasSettings.backgroundColor, parsedData],
   );
 
   const handleReset = useCallback(() => {
+    setWorkbook(null);
     setParsedData(null);
-    setColumns([]);
     setCharts([]);
     setEditingId(null);
     setError(null);
@@ -331,48 +384,40 @@ const ChartCraft: React.FC = () => {
     setCanvasSettings(createDefaultCanvasSettings());
     setDrawings([]);
     setTextAnnotations([]);
-    setHistory([]);
-    setHistoryIndex(-1);
+    setHistory(EMPTY_HISTORY);
     setActiveTool("select");
+    setConfirmReset(false);
   }, []);
 
-  const editingInstance = editingId
-    ? charts.find((c) => c.id === editingId)
-    : null;
+  const notify = useCallback((msg: string, kind: "ok" | "error" = "ok") => {
+    if (kind === "error") setError(msg);
+    else setToast(msg);
+  }, []);
+
+  const editingInstance = editingId ? charts.find((c) => c.id === editingId) : null;
+  const sheetNames = parsedData?.sheetNames ?? [];
 
   return (
     <PageShell
       title="Генератор графиков"
-      subtitle="Превращайте таблицы в красивые графики"
+      subtitle="Таблица → понятный график для отчёта или презентации"
       onShowInstructions={() => setShowInstructions(true)}
     >
-
       {showInstructions && (
-        <div
-          className="cc-modal-overlay"
-          onClick={() => setShowInstructions(false)}
-        >
-          <div
-            className="cc-modal-content"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="cc-modal-close"
-              onClick={() => setShowInstructions(false)}
-            >
+        <div className="cc-modal-overlay" onClick={() => setShowInstructions(false)}>
+          <div className="cc-modal-content" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <button className="cc-modal-close" onClick={() => setShowInstructions(false)} aria-label="Закрыть">
               ✕
             </button>
             <h2 className="cc-modal-title">📊 Генератор графиков</h2>
             <div className="cc-instructions-list">
               {[
-                ["Загрузите файл", "CSV, XLSX или XLS"],
-                ["Создайте графики", "Несколько графиков на одном холсте"],
-                ["Рисуйте", "Стрелки, фигуры, текст прямо на холсте"],
-                ["Настройте", "Тип, цвета, размер холста"],
-                [
-                  "Экспортируйте",
-                  "Каждый график или весь холст — PNG, SVG, HTML",
-                ],
+                ["Загрузите данные", "Файл XLSX или CSV, вставка из Excel (Ctrl+V) или готовый пример. В книге с несколькими листами можно переключать лист."],
+                ["Тип подберётся сам", "По датам — линия, по категориям — столбцы, по долям — кольцо. Выбранный вручную тип больше не меняется."],
+                ["Сведите данные", "Повторяющиеся категории суммируются (или среднее, количество, мин., макс.). Можно оставить топ-N, остальное сложить в «Другое», выделить нужную категорию."],
+                ["Оформите", "Стопка и 100 %, подписи значений, линия плана или среднего, тыс./млн, ₽ и %, тёмная тема. Цвета подобраны так, чтобы их различали и люди с нарушением цветовосприятия."],
+                ["Дополните холст", "Несколько графиков, стрелки, рамки, надписи. Ctrl+Z / Ctrl+Y — отмена и повтор."],
+                ["Выгрузите", "💾 на графике: копировать картинку (сразу в PowerPoint), PNG, SVG или HTML с таблицей данных. Весь холст — кнопками PNG / SVG сверху."],
               ].map(([t, d], i) => (
                 <div key={i} className="cc-instruction-item">
                   <span className="cc-instruction-number">{i + 1}</span>
@@ -388,21 +433,23 @@ const ChartCraft: React.FC = () => {
       )}
 
       {error && (
-        <div className="cc-error-banner">
+        <div className="cc-error-banner" role="alert">
           <span>⚠️</span>
           <span>{error}</span>
-          <button className="cc-error-close" onClick={() => setError(null)}>
+          <button className="cc-error-close" onClick={() => setError(null)} aria-label="Закрыть">
             ✕
           </button>
+        </div>
+      )}
+      {toast && (
+        <div className="cc-toast" role="status">
+          ✓ {toast}
         </div>
       )}
 
       {!parsedData && (
         <div className="cc-upload-wrapper">
-          <FileUploader
-            onFileLoaded={handleFileLoaded}
-            isProcessing={isProcessing}
-          />
+          <FileUploader onFile={handleFile} onPaste={handlePaste} onDemo={handleDemo} isProcessing={isProcessing} />
         </div>
       )}
 
@@ -412,15 +459,28 @@ const ChartCraft: React.FC = () => {
             <div className="cc-toolbar-left">
               <div className="cc-toolbar-file-info">
                 <span className="cc-toolbar-file-icon">📄</span>
-                <span className="cc-toolbar-file-name">
+                <span className="cc-toolbar-file-name" title={parsedData.fileName}>
                   {parsedData.fileName}
                 </span>
                 <span className="cc-toolbar-file-stats">
-                  {parsedData.totalRows}×{parsedData.headers.length}
+                  {parsedData.totalRows} {plural(parsedData.totalRows, ["строка", "строки", "строк"])} ×{" "}
+                  {parsedData.headers.length}
                 </span>
               </div>
-              <div className="cc-toolbar-divider" />
-              <span className="cc-toolbar-chart-count">📊 {charts.length}</span>
+              {sheetNames.length > 1 && (
+                <select
+                  className="cc-select cc-sheet-select"
+                  value={parsedData.sheetName}
+                  onChange={(e) => switchSheet(e.target.value)}
+                  aria-label="Лист книги"
+                >
+                  {sheetNames.map((n) => (
+                    <option key={n} value={n}>
+                      Лист: {n}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="cc-toolbar-right">
               <button className="cc-button cc-button-accent" onClick={addChart}>
@@ -430,12 +490,38 @@ const ChartCraft: React.FC = () => {
               <button
                 className={`cc-button ${showCanvasSettings ? "cc-button-primary" : "cc-button-secondary"}`}
                 onClick={() => setShowCanvasSettings(!showCanvasSettings)}
+                aria-pressed={showCanvasSettings}
               >
                 🎨 Холст
               </button>
+              <div className="cc-zoom" role="group" aria-label="Масштаб">
+                <button
+                  className="cc-button cc-button-secondary"
+                  onClick={() => setZoom(Math.max(0.25, Math.round((scale - 0.1) * 10) / 10))}
+                  title="Уменьшить"
+                >
+                  −
+                </button>
+                <button
+                  className={`cc-button ${zoom === "fit" ? "cc-button-primary" : "cc-button-secondary"} cc-zoom-value`}
+                  onClick={() => setZoom(zoom === "fit" ? 1 : "fit")}
+                  title={zoom === "fit" ? "Показать в натуральную величину" : "Вписать в экран"}
+                >
+                  {Math.round(scale * 100)}%
+                </button>
+                <button
+                  className="cc-button cc-button-secondary"
+                  onClick={() => setZoom(Math.min(2, Math.round((scale + 0.1) * 10) / 10))}
+                  title="Увеличить"
+                >
+                  +
+                </button>
+              </div>
               <button
                 className={`cc-button ${showMinimap ? "cc-button-primary" : "cc-button-secondary"}`}
                 onClick={() => setShowMinimap(!showMinimap)}
+                title="Мини-карта холста"
+                aria-pressed={showMinimap}
               >
                 🗺️
               </button>
@@ -444,6 +530,7 @@ const ChartCraft: React.FC = () => {
                 className="cc-button cc-button-secondary"
                 onClick={() => handleExportAll("png")}
                 disabled={!charts.length || isProcessing}
+                title="Весь холст картинкой"
               >
                 🖼️ PNG
               </button>
@@ -451,16 +538,30 @@ const ChartCraft: React.FC = () => {
                 className="cc-button cc-button-secondary"
                 onClick={() => handleExportAll("svg")}
                 disabled={!charts.length || isProcessing}
+                title="Весь холст в векторе"
               >
-                ✏️ SVG
+                ✒️ SVG
               </button>
               <div className="cc-toolbar-divider" />
-              <button
-                className="cc-button cc-button-danger"
-                onClick={handleReset}
-              >
-                🔄
-              </button>
+              {confirmReset ? (
+                <span className="cc-confirm">
+                  Начать заново?
+                  <button className="cc-button cc-button-danger" onClick={handleReset}>
+                    Да
+                  </button>
+                  <button className="cc-button cc-button-secondary" onClick={() => setConfirmReset(false)}>
+                    Нет
+                  </button>
+                </span>
+              ) : (
+                <button
+                  className="cc-button cc-button-secondary"
+                  onClick={() => setConfirmReset(true)}
+                  title="Загрузить другие данные"
+                >
+                  🔄 Другой файл
+                </button>
+              )}
             </div>
           </div>
 
@@ -482,66 +583,79 @@ const ChartCraft: React.FC = () => {
             onWidthChange={setDrawWidth}
             drawOpacity={drawOpacity}
             onOpacityChange={setDrawOpacity}
-            canUndo={historyIndex > 0}
-            canRedo={historyIndex < history.length - 1}
+            canUndo={canUndo}
+            canRedo={canRedo}
             onUndo={undo}
             onRedo={redo}
             onClearDrawings={() => {
+              if (!drawings.length && !textAnnotations.length) return;
               setDrawings([]);
               setTextAnnotations([]);
+              commit();
             }}
           />
 
-          <div className="cc-canvas-viewport">
+          <div className="cc-canvas-viewport" ref={viewportRef}>
             <div
-              className="cc-canvas"
-              ref={canvasRef}
+              className="cc-canvas-sizer"
               style={{
-                ...canvasStyle,
-                width: canvasSettings.canvasWidth,
-                height: canvasSettings.canvasHeight,
+                width: canvasSettings.canvasWidth * scale,
+                height: canvasSettings.canvasHeight * scale,
               }}
             >
-              {charts.length === 0 &&
-                drawings.length === 0 &&
-                textAnnotations.length === 0 && (
+              <div
+                className="cc-canvas"
+                ref={canvasRef}
+                style={{
+                  ...canvasStyle,
+                  width: canvasSettings.canvasWidth,
+                  height: canvasSettings.canvasHeight,
+                  transform: `scale(${scale})`,
+                }}
+              >
+                {charts.length === 0 && drawings.length === 0 && textAnnotations.length === 0 && (
                   <div className="cc-canvas-empty">
                     <span className="cc-canvas-empty-icon">📊</span>
                     <h3>Холст пуст</h3>
-                    <p>Добавьте графики или рисуйте</p>
+                    <p>Нажмите «+ График» или нарисуйте что-нибудь</p>
                   </div>
                 )}
 
-              {charts.map((ch) => (
-                <ChartCard
-                  key={ch.id}
-                  instance={ch}
-                  data={parsedData}
-                  activeTool={activeTool}
-                  onUpdate={updateChart}
-                  onDelete={deleteChart}
-                  onDuplicate={duplicateChart}
-                  onEdit={setEditingId}
-                  onBringToFront={bringToFront}
-                />
-              ))}
+                {charts.map((ch) => (
+                  <ChartCard
+                    key={ch.id}
+                    instance={ch}
+                    data={parsedData}
+                    columns={columns}
+                    activeTool={activeTool}
+                    scale={scale}
+                    onUpdate={updateChart}
+                    onDelete={deleteChart}
+                    onDuplicate={duplicateChart}
+                    onEdit={setEditingId}
+                    onBringToFront={bringToFront}
+                    onNotify={notify}
+                  />
+                ))}
 
-              <DrawingLayer
-                tool={activeTool}
-                drawColor={drawColor}
-                drawWidth={drawWidth}
-                drawOpacity={drawOpacity}
-                paths={drawings}
-                texts={textAnnotations}
-                onPathsChange={setDrawings}
-                onTextsChange={setTextAnnotations}
-                canvasWidth={canvasSettings.canvasWidth}
-                canvasHeight={canvasSettings.canvasHeight}
-              />
+                <DrawingLayer
+                  tool={activeTool}
+                  drawColor={drawColor}
+                  drawWidth={drawWidth}
+                  drawOpacity={drawOpacity}
+                  paths={drawings}
+                  texts={textAnnotations}
+                  onPathsChange={setDrawings}
+                  onTextsChange={setTextAnnotations}
+                  onCommit={commit}
+                  canvasWidth={canvasSettings.canvasWidth}
+                  canvasHeight={canvasSettings.canvasHeight}
+                />
+              </div>
             </div>
 
             {showMinimap && (
-              <div className="cc-minimap">
+              <div className="cc-minimap" aria-hidden="true">
                 <div
                   className="cc-minimap-content"
                   style={{
@@ -568,7 +682,10 @@ const ChartCraft: React.FC = () => {
 
           <details className="cc-data-details">
             <summary className="cc-data-summary">
-              📋 Данные ({parsedData.totalRows} строк)
+              📋 Данные: {parsedData.totalRows} {plural(parsedData.totalRows, ["строка", "строки", "строк"])}
+              {parsedData.sheetName && parsedData.sheetName !== "CSV" && parsedData.sheetName !== "Вставка"
+                ? `, лист «${parsedData.sheetName}»`
+                : ""}
             </summary>
             <DataPreviewTable data={parsedData} maxRows={15} />
           </details>
@@ -577,6 +694,7 @@ const ChartCraft: React.FC = () => {
 
       {editingInstance && parsedData && (
         <ChartEditor
+          key={editingInstance.id}
           instance={editingInstance}
           data={parsedData}
           columns={columns}
@@ -589,7 +707,7 @@ const ChartCraft: React.FC = () => {
         <div className="cc-loading-overlay">
           <div className="cc-loading-content">
             <div className="cc-loading-spinner" />
-            <p>Обработка...</p>
+            <p>Обработка…</p>
           </div>
         </div>
       )}

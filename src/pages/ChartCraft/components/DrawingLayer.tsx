@@ -10,6 +10,8 @@ interface Props {
   texts: TextAnnotation[];
   onPathsChange: (p: DrawingPath[]) => void;
   onTextsChange: (t: TextAnnotation[]) => void;
+  /** Действие завершено (штрих, перенос, правка текста) — запомнить в истории. */
+  onCommit: () => void;
   canvasWidth: number;
   canvasHeight: number;
 }
@@ -23,6 +25,7 @@ const DrawingLayer: React.FC<Props> = ({
   texts,
   onPathsChange,
   onTextsChange,
+  onCommit,
   canvasWidth,
   canvasHeight,
 }) => {
@@ -36,6 +39,7 @@ const DrawingLayer: React.FC<Props> = ({
     id: string;
     offsetX: number;
     offsetY: number;
+    moved?: boolean;
   } | null>(null);
 
   // Ключевое исправление: правильный расчёт координат
@@ -80,12 +84,11 @@ const DrawingLayer: React.FC<Props> = ({
           id,
           x: pos.x,
           y: pos.y,
-          text: "Текст",
+          text: "",
           fontSize: 16,
           fontWeight: "normal",
           color: drawColor,
           backgroundColor: "transparent",
-          isEditing: true,
           rotation: 0,
           width: 200,
         };
@@ -96,14 +99,18 @@ const DrawingLayer: React.FC<Props> = ({
 
       if (tool === "eraser") {
         const hitPath = findPathAtPoint(pos.x, pos.y);
-        if (hitPath) onPathsChange(paths.filter((p) => p.id !== hitPath));
+        if (hitPath) {
+          onPathsChange(paths.filter((p) => p.id !== hitPath));
+          onCommit();
+        }
         return;
       }
 
       setDrawing(true);
       setCurrentPoints([pos]);
     },
-    [tool, getPos, drawColor, texts, paths, onPathsChange, onTextsChange],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tool, getPos, drawColor, texts, paths, onPathsChange, onTextsChange, onCommit],
   );
 
   const handleMouseMove = useCallback(
@@ -121,6 +128,7 @@ const DrawingLayer: React.FC<Props> = ({
               : t,
           ),
         );
+        if (!dragText.moved) setDragText({ ...dragText, moved: true });
         return;
       }
       if (!drawing) return;
@@ -132,6 +140,7 @@ const DrawingLayer: React.FC<Props> = ({
 
   const handleMouseUp = useCallback(() => {
     if (dragText) {
+      if (dragText.moved) onCommit();
       setDragText(null);
       return;
     }
@@ -158,6 +167,7 @@ const DrawingLayer: React.FC<Props> = ({
     };
 
     onPathsChange([...paths, newPath]);
+    onCommit();
     setDrawing(false);
     setCurrentPoints([]);
   }, [
@@ -169,6 +179,7 @@ const DrawingLayer: React.FC<Props> = ({
     drawOpacity,
     paths,
     onPathsChange,
+    onCommit,
     dragText,
   ]);
 
@@ -277,16 +288,19 @@ const DrawingLayer: React.FC<Props> = ({
   };
 
   const handleTextBlur = (id: string) => {
+    if (editingTextId !== id) return;
     setEditingTextId(null);
-    onTextsChange(
-      texts.map((t) => (t.id === id ? { ...t, isEditing: false } : t)),
-    );
+    // Пустую надпись не оставляем на холсте.
+    const t = texts.find((x) => x.id === id);
+    if (t && !t.text.trim()) onTextsChange(texts.filter((x) => x.id !== id));
+    onCommit();
   };
 
   const handleTextMouseDown = (e: React.MouseEvent, t: TextAnnotation) => {
     if (tool === "eraser") {
       e.stopPropagation();
       onTextsChange(texts.filter((tx) => tx.id !== t.id));
+      onCommit();
       return;
     }
     if (tool === "select" || tool === "text") {
@@ -342,7 +356,11 @@ const DrawingLayer: React.FC<Props> = ({
               autoFocus
               onChange={(e) => handleTextChange(t.id, e.target.value)}
               onBlur={() => handleTextBlur(t.id)}
-              onKeyDown={(e) => e.key === "Enter" && handleTextBlur(t.id)}
+              placeholder="Текст"
+              onKeyDown={(e) => {
+                e.stopPropagation(); // Ctrl+Z внутри поля — отмена набора, а не холста
+                if (e.key === "Enter" || e.key === "Escape") handleTextBlur(t.id);
+              }}
               style={{
                 fontSize: t.fontSize,
                 fontWeight: t.fontWeight,
@@ -351,7 +369,7 @@ const DrawingLayer: React.FC<Props> = ({
                   t.backgroundColor === "transparent"
                     ? "rgba(255,255,255,0.9)"
                     : t.backgroundColor,
-                border: "2px solid #667eea",
+                border: "2px solid #2a78d6",
                 borderRadius: 4,
                 padding: "4px 8px",
                 outline: "none",

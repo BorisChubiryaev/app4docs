@@ -11,7 +11,7 @@ const DataPreviewTable: React.FC<Props> = ({ data, maxRows = 10 }) => {
   return (
     <div className="cc-data-preview">
       <h3 className="cc-data-preview-title">
-        📋 Предпросмотр
+        Исходные данные
         <span className="cc-data-preview-count">
           {data.totalRows}×{data.headers.length}
         </span>
@@ -28,9 +28,16 @@ const DataPreviewTable: React.FC<Props> = ({ data, maxRows = 10 }) => {
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
-                {data.headers.map((h) => (
-                  <td key={h}>{r[h] != null ? String(r[h]) : "—"}</td>
-                ))}
+                {data.headers.map((h) => {
+                  const v = r[h];
+                  return typeof v === "number" ? (
+                    <td key={h} className="num">
+                      {v.toLocaleString("ru-RU", { maximumFractionDigits: 6 })}
+                    </td>
+                  ) : (
+                    <td key={h}>{v != null && v !== "" ? String(v) : "—"}</td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
