@@ -1329,6 +1329,22 @@ const HomePage = () => {
             >
               <span className="lg-btn__game-icon">🐍</span>
             </Link>
+            <Link
+              to="/Chess"
+              className="lg-btn lg-btn--game"
+              title="Шахматы ♟ — партия с компьютером, 6 уровней"
+              aria-label="Открыть шахматы"
+            >
+              <span className="lg-btn__game-icon">♟️</span>
+            </Link>
+            <Link
+              to="/Checkers"
+              className="lg-btn lg-btn--game"
+              title="Шашки ⛀ — русские шашки с компьютером, 6 уровней"
+              aria-label="Открыть шашки"
+            >
+              <span className="lg-btn__game-icon">⛀</span>
+            </Link>
           </div>
         </div>
       </footer>

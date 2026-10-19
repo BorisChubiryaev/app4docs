@@ -12,6 +12,8 @@ import DocMatchGame from "./pages/DocMatch/DocMatchGame";
 import OfferMerge from "./pages/OfferMerge/OfferMerge";
 import PdfToPptx from "./pages/PdfToPptx/PdfToPptx";
 import SnakeGame from "./pages/SnakeGame/SnakeGame";
+import ChessGame from "./pages/Chess/ChessGame";
+import CheckersGame from "./pages/Checkers/CheckersGame";
 
 const RootRoutes = () => {
   return (
@@ -31,6 +33,8 @@ const RootRoutes = () => {
       <Route path="/OfferMerge" element={<OfferMerge />} />
       <Route path="/PdfToPptx" element={<PdfToPptx />} />
       <Route path="/SnakeGame" element={<SnakeGame />} />
+      <Route path="/Chess" element={<ChessGame />} />
+      <Route path="/Checkers" element={<CheckersGame />} />
     </Routes>
   );
 };

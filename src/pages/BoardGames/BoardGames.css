@@ -1,0 +1,541 @@
+/* Общие стили настольных игр (шахматы, шашки). Цвета интерфейса — токены,
+   поэтому светлая и тёмная темы работают без отдельных правил. */
+
+.bg-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+/* ── Доска ── */
+.bg-board-col {
+  flex: 1;
+  min-width: 0;
+  max-width: 860px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bg-board-area {
+  flex: 1;
+  min-height: 0;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bg-board {
+  --sq-light: #f0d9b5;
+  --sq-dark: #b58863;
+  position: relative;
+  width: min(100cqw, 100cqh);
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 6px #6e4c32,
+    0 14px 40px rgba(0, 0, 0, 0.28);
+  user-select: none;
+  touch-action: none;
+}
+.bg-board.checkers {
+  --sq-light: #f3e6cf;
+  --sq-dark: #6f8f5a;
+  box-shadow:
+    0 0 0 6px #4e3a28,
+    0 14px 40px rgba(0, 0, 0, 0.28);
+}
+
+.bg-sq {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bg-sq.light {
+  background: var(--sq-light);
+}
+.bg-sq.dark {
+  background: var(--sq-dark);
+}
+.bg-sq.movable {
+  cursor: grab;
+}
+.bg-sq.last::before,
+.bg-sq.selected::before,
+.bg-sq.hint::before,
+.bg-sq.check::before,
+.bg-sq.must::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.bg-sq.last::before {
+  background: rgba(255, 214, 0, 0.38);
+}
+.bg-sq.selected::before {
+  background: rgba(20, 110, 255, 0.36);
+}
+.bg-sq.hint::before {
+  box-shadow: inset 0 0 0 4px #1d8bff;
+  background: rgba(29, 139, 255, 0.18);
+}
+.bg-sq.check::before {
+  background: radial-gradient(circle, rgba(255, 30, 30, 0.85) 0%, rgba(255, 30, 30, 0.35) 45%, transparent 72%);
+}
+.bg-sq.must::before {
+  box-shadow: inset 0 0 0 3px rgba(255, 120, 0, 0.9);
+}
+
+.bg-piece {
+  position: relative;
+  width: 92%;
+  height: 92%;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 1.5px rgba(0, 0, 0, 0.25));
+}
+
+.bg-target-dot {
+  position: absolute;
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  background: rgba(20, 30, 50, 0.28);
+  pointer-events: none;
+}
+.bg-target-ring {
+  position: absolute;
+  inset: 4%;
+  border-radius: 50%;
+  border: 5px solid rgba(20, 30, 50, 0.3);
+  pointer-events: none;
+}
+.bg-sq:has(.bg-target-dot),
+.bg-sq:has(.bg-target-ring) {
+  cursor: pointer;
+}
+
+.bg-coord {
+  position: absolute;
+  font-size: clamp(9px, 1.6cqmin, 13px);
+  font-weight: 700;
+  pointer-events: none;
+  line-height: 1;
+}
+.bg-sq.light .bg-coord {
+  color: var(--sq-dark);
+}
+.bg-sq.dark .bg-coord {
+  color: var(--sq-light);
+}
+.bg-coord-rank {
+  top: 4px;
+  left: 4px;
+}
+.bg-coord-file {
+  bottom: 3px;
+  right: 5px;
+}
+
+.bg-drag-piece {
+  position: fixed;
+  z-index: 3000;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bg-drag-piece .bg-piece {
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.35));
+}
+
+/* Взятые фигуры */
+.bg-captured {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  gap: 0;
+  padding: 0 4px;
+}
+.bg-captured-piece {
+  width: 24px;
+  height: 24px;
+  margin-right: -6px;
+  display: inline-flex;
+}
+.bg-captured-piece .bg-piece {
+  width: 100%;
+  height: 100%;
+}
+.bg-adv {
+  margin-left: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* Превращение и итог партии */
+.bg-promo,
+.bg-over {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 20, 0.45);
+  backdrop-filter: blur(2px);
+}
+.bg-promo-card,
+.bg-over-card {
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 16px;
+  padding: 20px 24px;
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  max-width: 86%;
+}
+.bg-promo-card p {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.bg-promo-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.bg-promo-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bg-promo-btn:hover {
+  border-color: #2a78d6;
+  background: rgba(42, 120, 214, 0.12);
+}
+.bg-over-icon {
+  font-size: 44px;
+}
+.bg-over-card h2 {
+  margin: 6px 0 4px;
+  font-size: 1.5rem;
+}
+.bg-over-card p {
+  margin: 0 0 16px;
+  color: var(--muted);
+}
+.bg-over-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.bg-link {
+  margin-top: 12px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+/* ── Боковая панель ── */
+.bg-side {
+  width: 330px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 2px;
+}
+.bg-side .bg-card {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+}
+.bg-card h3 {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.bg-muted {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.bg-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.05rem;
+}
+.bg-status.is-over {
+  box-shadow: inset 0 0 0 2px #eda100;
+}
+.bg-turn-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #555;
+  flex-shrink: 0;
+}
+.bg-turn-dot.white {
+  background: #fff;
+}
+.bg-turn-dot.black {
+  background: #222;
+}
+.bg-turn-dot.red {
+  background: #c8322f;
+  border-color: #7a1715;
+}
+.bg-eval {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.bg-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: #2a78d6;
+  animation: bg-spin 0.8s linear infinite;
+}
+@keyframes bg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.bg-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.bg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.bg-btn:hover:not(:disabled) {
+  border-color: #2a78d6;
+}
+.bg-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.bg-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.bg-btn--primary {
+  background: #2a78d6;
+  border-color: #2a78d6;
+  color: #fff;
+}
+.bg-btn--primary:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+.bg-btn--wide {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.bg-levels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+.bg-card-sub {
+  margin-top: 16px !important;
+}
+.bg-material:not(:empty) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: -4px 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.bg-levels button,
+.bg-seg button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+  text-align: left;
+}
+.bg-levels button:hover,
+.bg-seg button:hover {
+  border-color: #2a78d6;
+}
+.bg-levels button.is-active,
+.bg-seg button.is-active {
+  border-color: #2a78d6;
+  background: rgba(42, 120, 214, 0.12);
+  font-weight: 700;
+}
+.bg-level-n {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: var(--surface-2);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.bg-levels button.is-active .bg-level-n {
+  background: #2a78d6;
+  color: #fff;
+}
+.bg-seg {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.bg-seg button {
+  justify-content: center;
+  padding: 7px 4px;
+}
+
+.bg-moves-card {
+  flex: 1 0 auto;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+}
+.bg-moves {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  max-height: 260px;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+.bg-moves li {
+  display: grid;
+  grid-template-columns: 34px 1fr 1fr;
+  padding: 3px 4px;
+  border-radius: 6px;
+}
+.bg-moves li:nth-child(odd) {
+  background: var(--surface-2);
+}
+.bg-move-n {
+  color: var(--muted);
+}
+.bg-moves .is-last {
+  font-weight: 800;
+  color: #2a78d6;
+}
+
+/* ── Узкие экраны: доска сверху, панель снизу, страница прокручивается ── */
+@media (max-width: 960px) {
+  .ds-page--fill:has(.bg-layout) {
+    height: auto;
+    overflow: visible;
+  }
+  .ds-page--fill:has(.bg-layout) .ds-page__body--fill {
+    overflow: visible;
+  }
+  .bg-layout {
+    flex-direction: column;
+    align-items: center;
+  }
+  .bg-board-col {
+    width: 100%;
+  }
+  .bg-board-area {
+    flex: none;
+    height: min(calc(100vw - 32px), 78vh);
+  }
+  .bg-side {
+    width: 100%;
+    max-width: 640px;
+    overflow: visible;
+  }
+}
+
+/* ── Шашки ── */
+.bg-piece-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.bg-board.checkers .bg-piece {
+  width: 84%;
+  height: 84%;
+}
+.bg-piece-wrap.is-taken {
+  opacity: 0.35;
+}
+.bg-piece-wrap.is-ghost {
+  opacity: 0.85;
+}
+.bg-count {
+  flex-direction: row !important;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.bg-count b {
+  color: var(--ink);
+}
+.bg-rules {
+  margin: 0;
+}
