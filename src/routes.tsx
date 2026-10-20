@@ -15,7 +15,6 @@ import SnakeGame from "./pages/SnakeGame/SnakeGame";
 import ChessGame from "./pages/Chess/ChessGame";
 import CheckersGame from "./pages/Checkers/CheckersGame";
 import ChessLessons from "./pages/ChessLessons/ChessLessons";
-import ImageEditor from "./pages/ImageEditor/ImageEditor";
 
 const RootRoutes = () => {
   return (
@@ -38,7 +37,6 @@ const RootRoutes = () => {
       <Route path="/Chess" element={<ChessGame />} />
       <Route path="/Checkers" element={<CheckersGame />} />
       <Route path="/ChessLessons" element={<ChessLessons />} />
-      <Route path="/ImageEditor" element={<ImageEditor />} />
     </Routes>
   );
 };
