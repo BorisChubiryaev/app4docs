@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import PageShell from "../../components/PageShell";
 import {
   Position,
@@ -657,6 +658,9 @@ const ChessGame = () => {
             >
               Начать заново
             </button>
+            <Link to="/ChessLessons" className="bg-btn bg-btn--wide cl-lessons-link">
+              🎓 Уроки для начинающих
+            </Link>
           </div>
         </aside>
       </div>

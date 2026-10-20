@@ -539,3 +539,10 @@
 .bg-rules {
   margin: 0;
 }
+
+a.bg-btn {
+  text-decoration: none;
+}
+.cl-lessons-link {
+  margin-top: 8px !important;
+}

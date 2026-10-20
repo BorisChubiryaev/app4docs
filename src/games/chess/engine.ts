@@ -104,6 +104,8 @@ export class Position {
   load(fen: string) {
     const [placement, side, castle, ep, half, full] = fen.trim().split(/\s+/);
     this.board.fill(0);
+    // В учебных позициях короля может не быть — тогда и шаха ему нет
+    this.kings = [-1, -1];
     let r = 7;
     let f = 0;
     for (const ch of placement) {
@@ -192,6 +194,7 @@ export class Position {
 
   /** Бьёт ли сторона `by` клетку `sq`. */
   attacked(sq: number, by: number): boolean {
+    if (sq < 0) return false;
     const b = this.board;
     // пешки
     if (by === WHITE) {

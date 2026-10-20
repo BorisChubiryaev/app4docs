@@ -5,6 +5,7 @@ import {
   hasUrlDownloadData,
 } from "../utils/urlExcelDownloader";
 import DownloadSuccessModal from "../components/DownloadSuccessModal";
+import GamesMenu from "../components/GamesMenu";
 import ThemeToggle from "../components/ThemeToggle";
 import { Link } from "react-router-dom";
 import { warmUpEngine } from "./PdfToPptx/engineAssets";
@@ -1312,39 +1313,8 @@ const HomePage = () => {
               ⭐ Опрос
             </a>
 
-            {/* ─── Кнопка игры в футере ─── */}
-            <Link
-              to="/DocMatchGame"
-              className="lg-btn lg-btn--game"
-              title="Документный Три-в-Ряд 🎮 — перерыв для ума!"
-              aria-label="Открыть мини-игру Документный Три-в-Ряд"
-            >
-              <span className="lg-btn__game-icon">🎮</span>
-            </Link>
-            <Link
-              to="/SnakeGame"
-              className="lg-btn lg-btn--game"
-              title="Змейка 🐍 — собирай файлы и проходи уровни"
-              aria-label="Открыть игру Змейка"
-            >
-              <span className="lg-btn__game-icon">🐍</span>
-            </Link>
-            <Link
-              to="/Chess"
-              className="lg-btn lg-btn--game"
-              title="Шахматы ♟ — партия с компьютером, 6 уровней"
-              aria-label="Открыть шахматы"
-            >
-              <span className="lg-btn__game-icon">♟️</span>
-            </Link>
-            <Link
-              to="/Checkers"
-              className="lg-btn lg-btn--game"
-              title="Шашки ⛀ — русские шашки с компьютером, 6 уровней"
-              aria-label="Открыть шашки"
-            >
-              <span className="lg-btn__game-icon">⛀</span>
-            </Link>
+            {/* ─── Игры: одна кнопка, список по клику ─── */}
+            <GamesMenu />
           </div>
         </div>
       </footer>
