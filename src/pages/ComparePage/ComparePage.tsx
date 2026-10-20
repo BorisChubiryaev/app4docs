@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import InstructionsModalShell from "../../components/InstructionsModal";
 import PageShell from "../../components/PageShell";
 import { parseDocx, type WordDocModel } from "./wordCompare";
+import { parsePdf } from "./pdfCompare";
 import WordCompareView from "./word/WordCompareView";
 
 import { isLegacyOfficeFile, LEGACY_XLS_MESSAGE } from "../../utils/excelCell";
@@ -43,6 +44,11 @@ interface WordDocumentData {
   model: WordDocModel;
 }
 
+/** Тип загруженного файла. Word и PDF сравниваются одним движком (как документы). */
+type FileKind = "excel" | "word" | "pdf";
+const KIND_LABEL: Record<FileKind, string> = { excel: "Excel", word: "Word", pdf: "PDF" };
+const KIND_ICON: Record<FileKind, string> = { excel: "📄", word: "📝", pdf: "📕" };
+
 interface SheetData {
   name: string;
   data: any[][];
@@ -72,8 +78,8 @@ const ComparePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [fullScreenMode, setFullScreenMode] = useState<boolean>(false);
   const [showInstructions, setShowInstructions] = useState<boolean>(false);
-  const [fileType1, setFileType1] = useState<"excel" | "word" | null>(null);
-  const [fileType2, setFileType2] = useState<"excel" | "word" | null>(null);
+  const [fileType1, setFileType1] = useState<FileKind | null>(null);
+  const [fileType2, setFileType2] = useState<FileKind | null>(null);
 
   // Результат сравнения Excel относится к конкретной паре листов —
   // при смене файла или листа он устаревает.
@@ -111,11 +117,10 @@ const ComparePage: React.FC = () => {
   );
 
   // Определяем тип файла по расширению
-  const getFileType = (fileName: string): "excel" | "word" => {
+  const getFileType = (fileName: string): FileKind => {
     const ext = fileName.toLowerCase().split(".").pop();
-    if (ext === "docx" || ext === "doc") {
-      return "word";
-    }
+    if (ext === "docx" || ext === "doc") return "word";
+    if (ext === "pdf") return "pdf";
     return "excel";
   };
 
@@ -131,16 +136,17 @@ const ComparePage: React.FC = () => {
   };
 
   // Функция для загрузки Word документа
-  const loadWordDocument = async (file: File): Promise<WordDocumentData> => {
+  const loadWordDocument = async (file: File, kind: "word" | "pdf"): Promise<WordDocumentData> => {
     const arrayBuffer = await file.arrayBuffer();
-    if (isLegacyOfficeFile(arrayBuffer)) {
+    if (kind === "word" && isLegacyOfficeFile(arrayBuffer)) {
       throw new Error(
         "файл в старом формате .doc (Word 97–2003). Откройте его в Word и сохраните как .docx.",
       );
     }
 
-    // Структурный разбор .docx: абзацы и таблицы в порядке следования.
-    const model = await parseDocx(arrayBuffer);
+    // Структурный разбор: абзацы и таблицы в порядке следования.
+    // PDF приводится к той же модели — поэтому его можно сравнить и с Word.
+    const model = kind === "pdf" ? await parsePdf(arrayBuffer) : await parseDocx(arrayBuffer);
 
     // Для обратной совместимости с параллельным просмотром строим также
     // плоские списки абзацев и таблиц.
@@ -229,14 +235,14 @@ const ComparePage: React.FC = () => {
   // Обновленная функция загрузки файлов
   const loadFileSheets = async (
     file: File,
-    fileType: "excel" | "word",
+    fileType: FileKind,
   ): Promise<SheetData[]> => {
-    if (fileType === "word") {
+    if (fileType === "word" || fileType === "pdf") {
       try {
-        const wordData = await loadWordDocument(file);
+        const wordData = await loadWordDocument(file, fileType);
         return wordToSheetData(wordData, file.name);
       } catch (err: any) {
-        throw new Error(`Ошибка при чтении Word документа: ${err.message}`);
+        throw new Error(`${fileType === "pdf" ? "PDF" : "Word-документ"}: ${err.message}`);
       }
     } else {
       const arrayBuffer = await file.arrayBuffer();
@@ -263,7 +269,7 @@ const ComparePage: React.FC = () => {
       sheetSetter: React.Dispatch<React.SetStateAction<SheetData[]>>,
       selectedSetter: React.Dispatch<React.SetStateAction<number>>,
       fileTypeSetter: React.Dispatch<
-        React.SetStateAction<"excel" | "word" | null>
+        React.SetStateAction<FileKind | null>
       >,
       setDragState: React.Dispatch<React.SetStateAction<boolean>>,
     ) => {
@@ -281,7 +287,8 @@ const ComparePage: React.FC = () => {
           fileName.endsWith(".xlsx") ||
           fileName.endsWith(".xls") ||
           fileName.endsWith(".docx") ||
-          fileName.endsWith(".doc")
+          fileName.endsWith(".doc") ||
+          fileName.endsWith(".pdf")
         ) {
           const fileType = getFileType(file.name);
           fileSetter(file);
@@ -304,7 +311,7 @@ const ComparePage: React.FC = () => {
             });
         } else {
           alert(
-            "Пожалуйста, перетащите файл Excel (.xlsx, .xls) или Word (.docx, .doc)",
+            "Пожалуйста, перетащите файл Excel (.xlsx, .xls), Word (.docx) или PDF",
           );
         }
       }
@@ -319,7 +326,7 @@ const ComparePage: React.FC = () => {
     sheetSetter: React.Dispatch<React.SetStateAction<SheetData[]>>,
     selectedSetter: React.Dispatch<React.SetStateAction<number>>,
     fileTypeSetter: React.Dispatch<
-      React.SetStateAction<"excel" | "word" | null>
+      React.SetStateAction<FileKind | null>
     >,
   ) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -366,7 +373,7 @@ const ComparePage: React.FC = () => {
 
     // Проверяем, совместимы ли типы файлов для сравнения
     if (sheetData1.type !== sheetData2.type) {
-      setError("Невозможно сравнить файлы разных типов (Excel vs Word).");
+      setError("Excel сравнивается только с Excel, а Word и PDF — между собой (Word с Word, PDF с PDF или Word с PDF).");
       return;
     }
 
@@ -522,9 +529,9 @@ const ComparePage: React.FC = () => {
       <div className="instructions-section">
         <h3>🎯 Что такое Compare Files?</h3>
         <p>
-          Compare Files - это мощный инструмент для точного сравнения Excel и
-          Word файлов. Для Word документов используется специальный режим
-          сравнения с анализом параграфов и таблиц.
+          Compare Files — инструмент для точного сравнения Excel, Word и PDF.
+          Excel сравнивается по ячейкам, Word и PDF — по абзацам и таблицам,
+          причём PDF можно сравнить и с Word-документом.
         </p>
       </div>
 
@@ -539,6 +546,23 @@ const ComparePage: React.FC = () => {
             .xls (Excel 97-2003) — пересохраните в .xlsx: Файл → Сохранить как
           </li>
           <li>Сравнение по ячейкам с подсветкой</li>
+        </ul>
+
+        <p>
+          <strong>PDF файлы:</strong>
+        </p>
+        <ul>
+          <li>.pdf с текстовым слоем (сохранённый из Word, 1С, браузера)</li>
+          <li>
+            Сравнивается с PDF или с Word-документом — например, подписанный
+            договор с исходным .docx
+          </li>
+          <li>
+            Колонтитулы и номера страниц не мешают сравнению, переносы слов
+            склеиваются; у каждого различия указана страница
+          </li>
+          <li>Таблицы с видимыми границами распознаются как таблицы</li>
+          <li>Скан без текстового слоя сравнить нельзя — нужен распознанный PDF</li>
         </ul>
 
         <p>
@@ -657,7 +681,7 @@ const ComparePage: React.FC = () => {
             <div className="full-screen-modal-title">
               <h2>Полноэкранный просмотр</h2>
               <span className="file-type-indicator">
-                {fileType1 === "word" ? "📝 Word документы" : "📄 Excel файлы"}
+                {fileType1 === "excel" ? "📄 Excel файлы" : "📝 Документы"}
               </span>
             </div>
             <button
@@ -669,14 +693,13 @@ const ComparePage: React.FC = () => {
           </div>
 
           <div className="full-screen-modal-body">
-            {fileType1 === "word" &&
-            sheetData1?.wordData &&
+            {sheetData1?.wordData &&
             sheetData2?.wordData ? (
               <div className="side-by-side full-screen">
                 <div className="word-preview full-screen-preview">
                   <div className="word-preview-header">
                     <h3 style={{ color: "#3b82f6" }}>Файл 1</h3>
-                    <span className="file-title file1">📝 {file1?.name}</span>
+                    <span className="file-title file1">{fileType1 ? KIND_ICON[fileType1] : "📝"} {file1?.name}</span>
                   </div>
                   {renderWordDocument(sheetData1.wordData, "file1")}
                 </div>
@@ -684,7 +707,7 @@ const ComparePage: React.FC = () => {
                 <div className="word-preview full-screen-preview">
                   <div className="word-preview-header">
                     <h3 style={{ color: "#10b981" }}>Файл 2</h3>
-                    <span className="file-title file2">📝 {file2?.name}</span>
+                    <span className="file-title file2">{fileType2 ? KIND_ICON[fileType2] : "📝"} {file2?.name}</span>
                   </div>
                   {renderWordDocument(sheetData2.wordData, "file2")}
                 </div>
@@ -699,7 +722,7 @@ const ComparePage: React.FC = () => {
   // Компонент для отображения загрузки файлов
   const renderFileInput = (
     file: File | null,
-    fileType: "excel" | "word" | null,
+    fileType: FileKind | null,
     sheets: SheetData[],
     selectedSheet: number,
     fileNumber: 1 | 2,
@@ -707,7 +730,7 @@ const ComparePage: React.FC = () => {
     sheetSetter: React.Dispatch<React.SetStateAction<SheetData[]>>,
     selectedSetter: React.Dispatch<React.SetStateAction<number>>,
     fileTypeSetter: React.Dispatch<
-      React.SetStateAction<"excel" | "word" | null>
+      React.SetStateAction<FileKind | null>
     >,
     dragOver: boolean,
     onDragOver: (e: React.DragEvent) => void,
@@ -715,7 +738,7 @@ const ComparePage: React.FC = () => {
     onDrop: (e: React.DragEvent) => void,
   ) => {
     const fileId = `file${fileNumber}`;
-    const acceptTypes = ".xlsx, .xls, .docx, .doc";
+    const acceptTypes = ".xlsx, .xls, .docx, .doc, .pdf";
 
     return (
       <div
@@ -724,13 +747,14 @@ const ComparePage: React.FC = () => {
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
-        <div className="upload-icon">{fileType === "word" ? "📝" : "📄"}</div>
+        <div className="upload-icon">{fileType ? KIND_ICON[fileType] : "📄"}</div>
         <h3>
           {file ? `✅ Файл ${fileNumber}` : `Файл ${fileNumber}`}
           {fileType && (
-            <span className="file-type-badge">
-              {fileType === "word" ? "Word" : "Excel"}
-            </span>
+            <>
+              {" "}
+              <span className="file-type-badge">{KIND_LABEL[fileType]}</span>
+            </>
           )}
         </h3>
 
@@ -741,7 +765,7 @@ const ComparePage: React.FC = () => {
               {(file.size / 1024 / 1024).toFixed(2)} MB
             </div>
             <div className="file-type">
-              Тип: {fileType === "word" ? "Word документ" : "Excel файл"}
+              Тип: {fileType === "word" ? "Word документ" : fileType === "pdf" ? "PDF документ" : "Excel файл"}
             </div>
           </div>
         ) : (
@@ -755,7 +779,7 @@ const ComparePage: React.FC = () => {
               </>
             )}
             <div className="file-formats">
-              Поддерживаемые форматы: .xlsx, .xls, .docx, .doc
+              Поддерживаемые форматы: .xlsx, .docx, .pdf
             </div>
           </div>
         )}
@@ -796,14 +820,14 @@ const ComparePage: React.FC = () => {
 
         {sheets.length > 0 && (
           <div className="sheet-selector">
-            <label>{fileType === "word" ? "Элемент:" : "Лист:"}</label>
+            <label>{fileType === "excel" ? "Лист:" : "Элемент:"}</label>
             <select
               value={selectedSheet}
               onChange={(e) => selectedSetter(Number(e.target.value))}
             >
               {sheets.map((sheet, idx) => (
                 <option key={idx} value={idx}>
-                  {sheet.name} ({sheet.type === "word" ? "Word" : "Excel"})
+                  {sheet.name} ({fileType ? KIND_LABEL[fileType] : sheet.type === "word" ? "Word" : "Excel"})
                 </option>
               ))}
             </select>
@@ -819,10 +843,10 @@ const ComparePage: React.FC = () => {
       <InstructionsModal />
 
       <PageShell
-        title="Сравнение Excel и Word файлов"
+        title="Сравнение Excel, Word и PDF"
         subtitle={
-          fileType1 === "word"
-            ? "Интеллектуальное сравнение Word документов по параграфам и таблицам"
+          fileType1 === "word" || fileType1 === "pdf"
+            ? "Сравнение документов по абзацам и таблицам: Word и PDF в любом сочетании"
             : "Точное сравнение Excel файлов по ячейкам с визуальной подсветкой"
         }
         onShowInstructions={() => setShowInstructions(true)}

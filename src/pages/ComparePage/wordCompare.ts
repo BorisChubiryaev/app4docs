@@ -15,6 +15,8 @@ import JSZip from "jszip";
 export interface DocParagraph {
   kind: "paragraph";
   text: string;
+  /** Страница (для PDF) — показывается в месте различия. */
+  page?: number;
 }
 export interface DocTable {
   kind: "table";
@@ -869,6 +871,13 @@ export function compareWordModels(
   }
 }
 
+/** «· стр. 3» или «· стр. 3 / 4» (страницы в первом и втором PDF). */
+function pageLabel(a?: number, b?: number): string {
+  if (a && b) return a === b ? ` · стр. ${a}` : ` · стр. ${a} / ${b}`;
+  if (a || b) return ` · стр. ${a ?? b}`;
+  return "";
+}
+
 function compareBlocks(m1: WordDocModel, m2: WordDocModel): WordCompareResult {
   const ops = diffBlocks(m1.blocks, m2.blocks);
 
@@ -888,14 +897,14 @@ function compareBlocks(m1: WordDocModel, m2: WordDocModel): WordCompareResult {
 
   // Тексты могут отличаться, если равенство дали параметры сравнения
   // (регистр, нумерация, пунктуация) — показываем каждый как есть.
-  const emitParagraphIdentical = (left: string, right: string) => {
+  const emitParagraphIdentical = (left: string, right: string, pages = "") => {
     paraNo++;
     identical++;
     rows.push({
       id: `p-${uid++}`,
       kind: "paragraph",
       status: "identical",
-      location: `Абзац ${paraNo}`,
+      location: `Абзац ${paraNo}${pages}`,
       leftText: left,
       rightText: right,
       leftTokens: [{ text: left, type: "same" }],
@@ -921,7 +930,7 @@ function compareBlocks(m1: WordDocModel, m2: WordDocModel): WordCompareResult {
     });
   };
 
-  const emitParagraphModified = (a: string, b: string) => {
+  const emitParagraphModified = (a: string, b: string, pages = "") => {
     paraNo++;
     changed++;
     const d = inlineDiff(a, b);
@@ -929,7 +938,7 @@ function compareBlocks(m1: WordDocModel, m2: WordDocModel): WordCompareResult {
       id: `p-${uid++}`,
       kind: "paragraph",
       status: "modified",
-      location: `Абзац ${paraNo}`,
+      location: `Абзац ${paraNo}${pages}`,
       leftText: a,
       rightText: b,
       leftTokens: d.left,
@@ -937,14 +946,14 @@ function compareBlocks(m1: WordDocModel, m2: WordDocModel): WordCompareResult {
     });
   };
 
-  const emitParagraphRemoved = (text: string) => {
+  const emitParagraphRemoved = (text: string, pages = "") => {
     paraNo++;
     removed++;
     rows.push({
       id: `p-${uid++}`,
       kind: "paragraph",
       status: "removed",
-      location: `Абзац ${paraNo}`,
+      location: `Абзац ${paraNo}${pages}`,
       leftText: text,
       rightText: "",
       leftTokens: [{ text, type: "del" }],
@@ -952,14 +961,14 @@ function compareBlocks(m1: WordDocModel, m2: WordDocModel): WordCompareResult {
     });
   };
 
-  const emitParagraphAdded = (text: string) => {
+  const emitParagraphAdded = (text: string, pages = "") => {
     paraNo++;
     added++;
     rows.push({
       id: `p-${uid++}`,
       kind: "paragraph",
       status: "added",
-      location: `Абзац ${paraNo}`,
+      location: `Абзац ${paraNo}${pages}`,
       leftText: "",
       rightText: text,
       leftTokens: [],
@@ -1045,22 +1054,22 @@ function compareBlocks(m1: WordDocModel, m2: WordDocModel): WordCompareResult {
           // LCS-выравнивание иногда прогоняет идентичный блок через
           // буферы del/ins — не помечаем такой абзац как изменённый.
           if (textKey(d.text) === textKey(partner.text)) {
-            emitParagraphIdentical(d.text, partner.text);
+            emitParagraphIdentical(d.text, partner.text, pageLabel(d.page, partner.page));
           } else {
-            emitParagraphModified(d.text, partner.text);
+            emitParagraphModified(d.text, partner.text, pageLabel(d.page, partner.page));
           }
         } else if (d.kind === "table" && partner.kind === "table") {
           emitTable(d, partner);
         }
       } else {
-        if (d.kind === "paragraph") emitParagraphRemoved(d.text);
+        if (d.kind === "paragraph") emitParagraphRemoved(d.text, pageLabel(d.page));
         else emitTable(d, null);
       }
     }
     for (let k = 0; k < inss.length; k++) {
       if (usedIns.has(k)) continue;
       const it = inss[k];
-      if (it.kind === "paragraph") emitParagraphAdded(it.text);
+      if (it.kind === "paragraph") emitParagraphAdded(it.text, pageLabel(it.page));
       else emitTable(null, it);
     }
   };
@@ -1069,7 +1078,7 @@ function compareBlocks(m1: WordDocModel, m2: WordDocModel): WordCompareResult {
     if (op.type === "equal") {
       flush();
       if (op.a.kind === "paragraph" && op.b.kind === "paragraph") {
-        emitParagraphIdentical(op.a.text, op.b.text);
+        emitParagraphIdentical(op.a.text, op.b.text, pageLabel(op.a.page, op.b.page));
       } else {
         emitTableIdentical(op.a as DocTable);
       }
