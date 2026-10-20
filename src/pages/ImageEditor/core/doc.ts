@@ -140,6 +140,57 @@ export function composite(
   return out;
 }
 
+/** Холст слоя изменён на месте (живой мазок) — сбросить кэш с применённой маской. */
+export function invalidatePixels(c: HTMLCanvasElement) {
+  maskedCache.delete(c);
+}
+
+/**
+ * Пересвести только прямоугольник документа (живой мазок кисти): на больших
+ * картинках полное сведение на каждое движение мыши слишком медленное.
+ */
+export function compositeRect(s: DocState, target: HTMLCanvasElement, r: { x: number; y: number; w: number; h: number }) {
+  const x0 = Math.max(0, Math.floor(r.x));
+  const y0 = Math.max(0, Math.floor(r.y));
+  const x1 = Math.min(s.width, Math.ceil(r.x + r.w));
+  const y1 = Math.min(s.height, Math.ceil(r.y + r.h));
+  if (x1 <= x0 || y1 <= y0) return;
+  const w = x1 - x0;
+  const h = y1 - y0;
+  const ctx = ctx2d(target);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x0, y0, w, h);
+  ctx.clip();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.clearRect(x0, y0, w, h);
+  let tmp: HTMLCanvasElement | null = null;
+  for (const l of s.layers) {
+    if (!l.visible || l.opacity <= 0) continue;
+    let src: HTMLCanvasElement = l.canvas;
+    let sx = x0 - l.x;
+    let sy = y0 - l.y;
+    if (l.mask && l.maskEnabled) {
+      // Маска — только на нужном кусочке
+      tmp ??= createCanvas(w, h);
+      const t = ctx2d(tmp);
+      t.globalCompositeOperation = "source-over";
+      t.clearRect(0, 0, w, h);
+      t.drawImage(l.canvas, -sx, -sy);
+      t.globalCompositeOperation = "destination-in";
+      t.drawImage(l.mask, -sx, -sy);
+      src = tmp;
+      sx = 0;
+      sy = 0;
+    }
+    ctx.globalAlpha = l.opacity;
+    ctx.globalCompositeOperation = l.blend;
+    ctx.drawImage(src, sx, sy, w, h, x0, y0, w, h);
+  }
+  ctx.restore();
+}
+
 /** Слить активный слой с нижним. */
 export function mergeDown(s: DocState, id: string): DocState {
   const i = layerIndex(s, id);

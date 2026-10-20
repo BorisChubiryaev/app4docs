@@ -4,7 +4,7 @@
 
 import JSZip from "jszip";
 import type { BlendMode, DocState, Layer, TextProps } from "./types";
-import { createCanvas, ctx2d, getImageData, loadImageFile } from "./canvas";
+import { canvasFromImageFit, createCanvas, ctx2d, getImageData, loadImageFile } from "./canvas";
 import { composite, layerPixels, makeLayer, renderText } from "./doc";
 
 const RASTER_EXT = ["png", "jpg", "jpeg", "gif", "bmp", "webp", "avif", "ico"];
@@ -217,7 +217,7 @@ export async function openAsCanvas(file: File): Promise<HTMLCanvasElement> {
   const { decodeFile } = await import("../../ImageConverter/core/decode");
   const pages = await decodeFile(file);
   if (!pages.length) throw new Error("Не удалось прочитать файл.");
-  return pages[0].canvas;
+  return canvasFromImageFit(pages[0].canvas);
 }
 
 // ── Экспорт ──

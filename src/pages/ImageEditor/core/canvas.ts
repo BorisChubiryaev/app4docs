@@ -46,6 +46,37 @@ export function canvasFromImage(img: CanvasImageSource & { width: number; height
   return c;
 }
 
+/**
+ * Предел размера изображения под память устройства. Каждый слой, шаг истории
+ * и мазок кисти — копии холста; на планшетах и слабых ПК большие фото
+ * переполняют память, и браузер перезагружает вкладку.
+ */
+export const MAX_PIXELS = (() => {
+  if (typeof navigator === "undefined") return 40_000_000;
+  const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  const small = navigator.maxTouchPoints > 1 || (mem !== undefined && mem <= 4);
+  return small ? 12_000_000 : 40_000_000;
+})();
+
+/** Размер, вписанный в MAX_PIXELS (с сохранением пропорций). */
+export function fitSize(w: number, h: number, max = MAX_PIXELS): { w: number; h: number; scaled: boolean } {
+  if (w * h <= max) return { w, h, scaled: false };
+  const k = Math.sqrt(max / (w * h));
+  return { w: Math.max(1, Math.floor(w * k)), h: Math.max(1, Math.floor(h * k)), scaled: true };
+}
+
+/** Картинка в холст, уменьшенная до MAX_PIXELS, если она больше. */
+export function canvasFromImageFit(img: CanvasImageSource & { width: number; height: number }): HTMLCanvasElement {
+  const f = fitSize(img.width, img.height);
+  if (!f.scaled) return canvasFromImage(img);
+  const c = createCanvas(f.w, f.h);
+  const ctx = ctx2d(c);
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, f.w, f.h);
+  c.dataset.scaledFrom = `${img.width} × ${img.height}`;
+  return c;
+}
+
 let uid = 0;
 export const newId = () => `l${Date.now().toString(36)}${(uid++).toString(36)}`;
 
@@ -66,7 +97,7 @@ export async function loadImageFile(file: Blob): Promise<HTMLCanvasElement> {
   if ("createImageBitmap" in window) {
     try {
       const bmp = await createImageBitmap(file);
-      const c = canvasFromImage(bmp);
+      const c = canvasFromImageFit(bmp);
       bmp.close();
       return c;
     } catch {
@@ -78,7 +109,7 @@ export async function loadImageFile(file: Blob): Promise<HTMLCanvasElement> {
     const img = new Image();
     img.src = url;
     await img.decode();
-    return canvasFromImage(img);
+    return canvasFromImageFit(img);
   } finally {
     URL.revokeObjectURL(url);
   }

@@ -25,16 +25,27 @@ export const aiLoaded = () => worker !== null;
 export function ensureAi(onProgress: (loaded: number, total: number) => void): Promise<Worker> {
   if (ready) return ready;
   ready = (async () => {
-    const { model, wasm } = await loadAiFiles(onProgress);
+    const { model, wasm, glueUrl } = await loadAiFiles(onProgress);
     const w = new Worker(new URL("./aiWorker.ts", import.meta.url), { type: "module" });
-    await new Promise<void>((resolve, reject) => {
-      w.onerror = (e) => reject(new Error(`Не удалось запустить нейросеть: ${e.message || "ошибка потока"}`));
-      w.onmessage = (e: MessageEvent<AiResponse>) => {
-        if (e.data.type === "ready") resolve();
-        else if (e.data.type === "error") reject(new Error(`Не удалось запустить нейросеть: ${e.data.message}`));
-      };
-      w.postMessage({ type: "init", model, wasm } satisfies AiRequest, [model, wasm]);
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        // Без ответа минуту — не вечное «загружаем», а понятная ошибка
+        const timer = setTimeout(() => reject(new Error("Нейросеть не запустилась за минуту (движок не ответил).")), 60000);
+        w.onerror = (e) => {
+          clearTimeout(timer);
+          reject(new Error(`Не удалось запустить нейросеть: ${e.message || "ошибка потока"}`));
+        };
+        w.onmessage = (e: MessageEvent<AiResponse>) => {
+          clearTimeout(timer);
+          if (e.data.type === "ready") resolve();
+          else if (e.data.type === "error") reject(new Error(`Не удалось запустить нейросеть: ${e.data.message}`));
+        };
+        w.postMessage({ type: "init", model, wasm, glueUrl } satisfies AiRequest, [model, wasm]);
+      });
+    } catch (err) {
+      w.terminate();
+      throw err;
+    }
     w.onerror = null;
     w.onmessage = (e: MessageEvent<AiResponse>) => {
       const m = e.data;

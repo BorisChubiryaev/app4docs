@@ -1,14 +1,12 @@
 // Нейросеть удаления фона в отдельном потоке (onnxruntime-web, WebAssembly).
 //
-// Служебный модуль движка («клей» Emscripten) встроен в сборку текстом и
-// подключается через blob-ссылку: так не нужен отдельный .mjs на сервере
-// (Qlik отдаёт не все типы файлов). Сам wasm и модель приходят байтами из
-// основного потока (aiAssets), поэтому движок ничего не скачивает сам.
+// Служебный модуль движка («клей» Emscripten) движок подключает сам через
+// import() — обычным .js-файлом из aibg/ (см. scripts/vendor-aibg.mjs). Сам
+// wasm и модель приходят байтами из основного потока (aiAssets).
 import * as ort from "onnxruntime-web/wasm";
-import glueSource from "../../../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs?raw";
 
 export type AiRequest =
-  | { type: "init"; model: ArrayBuffer; wasm: ArrayBuffer }
+  | { type: "init"; model: ArrayBuffer; wasm: ArrayBuffer; glueUrl: string }
   | { type: "run"; id: number; input: Float32Array; size: number };
 
 export type AiResponse =
@@ -25,11 +23,8 @@ self.onmessage = async (e: MessageEvent<AiRequest>) => {
   const msg = e.data;
   try {
     if (msg.type === "init") {
-      // «Клей» вычисляет адрес wasm относительно себя — у blob-ссылки его нет.
-      // wasm мы передаём байтами, поэтому адрес подменяем на любой.
-      const glue = glueSource.replace('(new URL("ort-wasm-simd-threaded.wasm",import.meta.url)).href', '"ort-wasm-simd-threaded.wasm"');
-      const glueUrl = URL.createObjectURL(new Blob([glue], { type: "text/javascript" }));
-      ort.env.wasm.wasmPaths = { mjs: glueUrl, wasm: new URL("ort.wasm", self.location.href).href };
+      // Адрес wasm движку не нужен (он передан байтами), но поле обязательно
+      ort.env.wasm.wasmPaths = { mjs: msg.glueUrl, wasm: new URL("ort.wasm", msg.glueUrl).href };
       ort.env.wasm.wasmBinary = msg.wasm;
       // Потоки WebAssembly требуют cross-origin isolation, которой у Qlik нет
       ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1;

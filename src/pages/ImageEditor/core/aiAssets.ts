@@ -12,6 +12,8 @@ export interface AiManifest {
   input: number;
   files: Record<"model" | "wasm", { parts: string[]; size: number; gz: number; sha256: string }>;
   chunks: Record<string, { size: number; sha256: string }>;
+  /** Служебный JS-модуль движка — подключается самим движком по адресу. */
+  glue: { file: string; size: number; sha256: string };
 }
 
 const CACHE_PREFIX = "aibg-";
@@ -52,7 +54,9 @@ async function gunzip(data: Uint8Array): Promise<ArrayBuffer> {
   return new Response(stream).arrayBuffer();
 }
 
-export async function loadAiFiles(onProgress: (loaded: number, total: number) => void): Promise<{ model: ArrayBuffer; wasm: ArrayBuffer; manifest: AiManifest }> {
+export async function loadAiFiles(
+  onProgress: (loaded: number, total: number) => void,
+): Promise<{ model: ArrayBuffer; wasm: ArrayBuffer; glueUrl: string; manifest: AiManifest }> {
   const base = aiBase();
   const res = await fetch(base + "manifest.json", { cache: "no-store" });
   if (!res.ok) throw new Error(`Не найдены файлы нейросети (aibg/manifest.json: HTTP ${res.status}). Проверьте, что папка aibg выложена рядом с приложением.`);
@@ -119,7 +123,17 @@ export async function loadAiFiles(onProgress: (loaded: number, total: number) =>
     return out;
   };
 
+  // Модуль движка грузит сам движок; заранее проверяем, что сервер его отдаёт
+  // целым, — иначе ошибка из глубины движка была бы непонятной
+  const glueUrl = base + manifest.glue.file;
+  const gr = await fetch(glueUrl, { cache: "no-store" });
+  if (!gr.ok) throw new Error(`Сервер не отдал файл нейросети ${manifest.glue.file}: HTTP ${gr.status}`);
+  const gbytes = await gr.arrayBuffer();
+  const gh = await sha256(gbytes);
+  if (gbytes.byteLength !== manifest.glue.size || (gh && gh !== manifest.glue.sha256))
+    throw new Error(`Файл нейросети ${manifest.glue.file} повреждён по дороге на сервер (${gbytes.byteLength} байт вместо ${manifest.glue.size}).`);
+
   const wasm = await getFile("wasm");
   const model = await getFile("model");
-  return { model, wasm, manifest };
+  return { model, wasm, glueUrl, manifest };
 }

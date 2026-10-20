@@ -7,6 +7,8 @@ import {
   composite,
   cropDoc,
   expandToDoc,
+  compositeRect,
+  invalidatePixels,
   layerPixels,
   makeLayer,
   newLayerName,
@@ -66,6 +68,10 @@ interface Stroke {
   tip: HTMLCanvasElement;
   sel: HTMLCanvasElement | null;
   last: Pt | null;
+  /** Ещё не перенесённая на холст часть мазка (координаты слоя). */
+  dirty: Rect | null;
+  raf: number;
+  opacity: number;
   kind: "brush" | "eraser" | "stamp";
   size: number;
   stampOffset: Pt;
@@ -90,13 +96,21 @@ type Drag =
   | { kind: "xform"; start: Pt; handle: string; x0: Xform }
   | { kind: "gradient"; start: Pt; cur: Pt; layer: Layer; base: HTMLCanvasElement }
   | { kind: "shape"; start: Pt; cur: Pt; canvas: HTMLCanvasElement }
-  | { kind: "stroke" };
+  | { kind: "stroke" }
+  | { kind: "pinch"; d0: number; c0: Pt; view: View };
 
 interface Rect {
   x: number;
   y: number;
   w: number;
   h: number;
+}
+
+function unionRect(a: Rect | null, b: Rect): Rect {
+  if (!a) return b;
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
 }
 
 const RATIOS: Record<string, number | null> = { free: null, "1:1": 1, "4:3": 4 / 3, "3:2": 3 / 2, "16:9": 16 / 9, original: null };
@@ -165,11 +179,16 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
   const [crop, setCrop] = useState<Rect | null>(null);
   const [xform, setXform] = useState<Xform | null>(null);
   const [textEdit, setTextEdit] = useState<{ layerId: string; isNew: boolean; before: DocState } | null>(null);
-  const [hover, setHover] = useState<Pt | null>(null);
+  // Курсор кисти — в ref, перерисовка не чаще кадра (без рендера React на каждое движение)
+  const hoverRef = useRef<Pt | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
   const drag = useRef<Drag | null>(null);
   const stroke = useRef<Stroke | null>(null);
   const stampSrc = useRef<Pt | null>(null);
+  // Пальцы на экране: второй палец — масштаб и сдвиг двумя пальцами
+  const touches = useRef(new Map<number, Pt>());
+  // Указатель, которым идёт текущее действие (касание ладонью его не прерывает)
+  const dragPointer = useRef<{ id: number; touch: boolean } | null>(null);
   const [overlayTick, setOverlayTick] = useState(0);
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 });
 
@@ -243,6 +262,9 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
   // ── Сведение (кэш) и контур выделения ──
   const compRef = useRef<{ src: DocState | null; canvas: HTMLCanvasElement | null; dirty: number }>({ src: null, canvas: null, dirty: 0 });
   const dirtyRef = useRef(0);
+  // Изменённый живым мазком прямоугольник документа — пересводится только он
+  const partialRef = useRef<Rect | null>(null);
+  const checkerRef = useRef<CanvasPattern | null>(null);
   const antsRef = useRef<{ sel: HTMLCanvasElement | null; segs: Float32Array | null }>({ sel: null, segs: null });
 
   const draw = useCallback(
@@ -258,7 +280,8 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
         cache.canvas = composite(s, undefined, cache.canvas ?? undefined);
         cache.src = s;
         cache.dirty = dirtyRef.current;
-      }
+      } else if (partialRef.current) compositeRect(s, cache.canvas, partialRef.current);
+      partialRef.current = null;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, cv.width, cv.height);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -271,15 +294,23 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
       ctx.beginPath();
       ctx.rect(x, y, w, h);
       ctx.clip();
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(x, y, w, h);
-      ctx.fillStyle = "#d9d9d9";
-      const cell = 8;
-      for (let yy = Math.max(0, Math.floor(-y / cell)); yy * cell + y < Math.min(h + y, sizeRef.current.h); yy++)
-        for (let xx = Math.max(0, Math.floor(-x / cell)) + ((yy + Math.max(0, Math.floor(-x / cell))) % 2); xx * cell + x < Math.min(w + x, sizeRef.current.w); xx += 2)
-          ctx.fillRect(x + xx * cell, y + yy * cell, cell, cell);
+      if (!checkerRef.current) {
+        const t = createCanvas(16, 16);
+        const tc = ctx2d(t);
+        tc.fillStyle = "#ffffff";
+        tc.fillRect(0, 0, 16, 16);
+        tc.fillStyle = "#d9d9d9";
+        tc.fillRect(8, 0, 8, 8);
+        tc.fillRect(0, 8, 8, 8);
+        checkerRef.current = ctx.createPattern(t, "repeat");
+      }
+      ctx.translate(x, y);
+      ctx.fillStyle = checkerRef.current ?? "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.translate(-x, -y);
       ctx.imageSmoothingEnabled = v.zoom < 2;
-      ctx.imageSmoothingQuality = "high";
+      // Во время мазка — быстрое сглаживание (кадр в 2–3 раза дешевле), после — качественное
+      ctx.imageSmoothingQuality = stroke.current ? "low" : "high";
       ctx.drawImage(cache.canvas!, x, y, w, h);
       ctx.restore();
       ctx.strokeStyle = "rgba(0,0,0,0.35)";
@@ -415,6 +446,7 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
       }
 
       // Курсор кисти
+      const hover = hoverRef.current;
       if (hover && ["brush", "eraser", "stamp"].includes(tool) && !spaceDown) {
         const p = toScreen(hover);
         ctx.save();
@@ -440,8 +472,19 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
       }
     },
      
-    [shown, crop, xform, hover, tool, options.size, spaceDown],
+    [shown, crop, xform, tool, options.size, spaceDown],
   );
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+  const rafRef = useRef(0);
+  const requestDraw = useCallback(() => {
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      drawRef.current();
+    });
+  }, []);
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
   // Перерисовка при изменениях + анимация «муравьёв»
   useEffect(() => {
@@ -609,12 +652,66 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
       tip: brushTip(options.size, options.hardness, color),
       sel: selectionForLayer(s, l),
       last: null,
+      dirty: null,
+      raf: 0,
+      opacity: options.opacity,
       kind,
       size: options.size,
       stampOffset: kind === "stamp" ? { x: stampSrc.current!.x - p.x, y: stampSrc.current!.y - p.y } : { x: 0, y: 0 },
     };
     drag.current = { kind: "stroke" };
+    // Слой в показываемом состоянии — сразу рабочий холст; дальше он меняется на месте
+    setTransient(updateLayer(s, l.id, strokePatch(stroke.current)));
     strokeTo(p, pressure);
+  };
+
+  const strokePatch = (st: Stroke): Partial<Layer> =>
+    st.target === "mask"
+      ? { mask: st.work }
+      : { canvas: st.work, x: st.layer.x, y: st.layer.y, mask: st.layer.mask, kind: "raster", text: undefined };
+
+  // Перенести накопленные отпечатки на рабочий холст — только изменённый кусок
+  const flushStroke = () => {
+    const st = stroke.current;
+    if (!st) return;
+    if (st.raf) cancelAnimationFrame(st.raf);
+    st.raf = 0;
+    const d = st.dirty;
+    st.dirty = null;
+    if (!d) return;
+    const x0 = Math.max(0, Math.floor(d.x));
+    const y0 = Math.max(0, Math.floor(d.y));
+    const x1 = Math.min(st.work.width, Math.ceil(d.x + d.w));
+    const y1 = Math.min(st.work.height, Math.ceil(d.y + d.h));
+    if (x1 <= x0 || y1 <= y0) return;
+    const w = x1 - x0;
+    const h = y1 - y0;
+    let src: HTMLCanvasElement = st.acc;
+    let sx = x0;
+    let sy = y0;
+    if (st.sel) {
+      const t = createCanvas(w, h);
+      const tc = ctx2d(t);
+      tc.drawImage(st.acc, -x0, -y0);
+      tc.globalCompositeOperation = "destination-in";
+      tc.drawImage(st.sel, -x0, -y0);
+      src = t;
+      sx = 0;
+      sy = 0;
+    }
+    const wctx = ctx2d(st.work);
+    wctx.save();
+    wctx.globalCompositeOperation = "source-over";
+    wctx.clearRect(x0, y0, w, h);
+    wctx.drawImage(st.base, x0, y0, w, h, x0, y0, w, h);
+    if (st.kind === "eraser") wctx.globalCompositeOperation = "destination-out";
+    wctx.globalAlpha = st.opacity;
+    wctx.drawImage(src, sx, sy, w, h, x0, y0, w, h);
+    wctx.restore();
+    invalidatePixels(st.target === "mask" ? st.layer.canvas : st.work);
+    const r = { x: x0 + st.layer.x, y: y0 + st.layer.y, w, h };
+    partialRef.current = unionRect(partialRef.current, r);
+    requestDraw();
   };
 
   const dab = (st: Stroke, x: number, y: number, size: number) => {
@@ -638,45 +735,39 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
   const strokeTo = (p: Pt, pressure: number) => {
     const st = stroke.current;
     if (!st) return;
+    const from = st.last;
     const size = Math.max(1, st.size * (pressure > 0 && pressure !== 0.5 ? pressure * 1.2 : 1));
     const spacing = Math.max(1, size * 0.15);
-    if (!st.last) dab(st, p.x, p.y, size);
+    let to = p;
+    if (!from) dab(st, p.x, p.y, size);
     else {
-      const dx = p.x - st.last.x;
-      const dy = p.y - st.last.y;
+      // Отсчёт — от последнего отпечатка: при медленном движении (шаг мыши
+      // меньше интервала) отпечатки не теряются, линия не рвётся
+      const dx = p.x - from.x;
+      const dy = p.y - from.y;
       const dist = Math.hypot(dx, dy);
-      for (let t = spacing; t <= dist; t += spacing) dab(st, st.last.x + (dx * t) / dist, st.last.y + (dy * t) / dist, size);
+      const n = Math.floor(dist / spacing);
+      if (!n) return;
+      for (let i = 1; i <= n; i++) dab(st, from.x + (dx * i * spacing) / dist, from.y + (dy * i * spacing) / dist, size);
+      to = { x: from.x + (dx * n * spacing) / dist, y: from.y + (dy * n * spacing) / dist };
     }
-    st.last = p;
-    // Собрать результат: основа + накопленный мазок (с учётом выделения и непрозрачности)
-    const wctx = ctx2d(st.work);
-    wctx.globalCompositeOperation = "source-over";
-    wctx.clearRect(0, 0, st.work.width, st.work.height);
-    wctx.drawImage(st.base, 0, 0);
-    if (st.kind === "eraser") wctx.globalCompositeOperation = "destination-out";
-    drawMasked(wctx, st.acc, st.sel, options.opacity);
-    wctx.globalCompositeOperation = "source-over";
-    dirtyRef.current++;
-    const s = stateRef.current;
-    const patch: Partial<Layer> =
-      st.target === "mask"
-        ? { mask: st.work }
-        : { canvas: st.work, x: st.layer.x, y: st.layer.y, mask: st.layer.mask, kind: "raster", text: undefined };
-    setTransient(updateLayer(s, st.layerId, patch));
+    st.last = to;
+    // Отметить затронутую область; на холст — раз в кадр
+    const half = size / 2 + 2;
+    for (const q of from ? [from, to] : [to])
+      st.dirty = unionRect(st.dirty, { x: q.x - st.layer.x - half, y: q.y - st.layer.y - half, w: half * 2, h: half * 2 });
+    if (!st.raf) st.raf = requestAnimationFrame(flushStroke);
   };
 
   const endStroke = () => {
     const st = stroke.current;
     if (!st) return;
+    flushStroke();
     stroke.current = null;
     const s = stateRef.current;
     const label = st.target === "mask" ? "Маска: кисть" : st.kind === "brush" ? "Кисть" : st.kind === "eraser" ? "Ластик" : "Штамп";
-    const patch: Partial<Layer> =
-      st.target === "mask"
-        ? { mask: st.work }
-        : { canvas: st.work, x: st.layer.x, y: st.layer.y, mask: st.layer.mask, kind: "raster", text: undefined };
     setTransient(null);
-    commit(updateLayer(s, st.layerId, patch), label);
+    commit(updateLayer(s, st.layerId, strokePatch(st)), label);
   };
 
   // ── Заливка, пипетка, палочка ──
@@ -786,11 +877,50 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
     else ctx.stroke();
   };
 
+  // Прервать начатое одним пальцем действие (без записи в историю)
+  const abortDrag = () => {
+    const st = stroke.current;
+    if (st?.raf) cancelAnimationFrame(st.raf);
+    stroke.current = null;
+    drag.current = null;
+    setTransient(null);
+  };
+
+  const pinchInfo = () => {
+    const [a, b] = [...touches.current.values()];
+    return { d: Math.hypot(b.x - a.x, b.y - a.y) || 1, c: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+  };
+
+  const capture = (e: React.PointerEvent) => {
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* указатель уже отпущен */
+    }
+  };
+
   // ── Указатель ──
   const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === "touch") {
+      const r = canvasRef.current!.getBoundingClientRect();
+      touches.current.set(e.pointerId, { x: e.clientX - r.left, y: e.clientY - r.top });
+      // Перо уже рисует — касание ладонью игнорируем
+      if (drag.current && dragPointer.current && !dragPointer.current.touch) return;
+      if (touches.current.size >= 2) {
+        // Второй палец: это жест, а не рисование
+        if (touches.current.size === 2) {
+          abortDrag();
+          const { d, c } = pinchInfo();
+          drag.current = { kind: "pinch", d0: d, c0: c, view: viewRef.current };
+          capture(e);
+        }
+        return;
+      }
+    }
+    dragPointer.current = { id: e.pointerId, touch: e.pointerType === "touch" };
     if (e.button === 1 || spaceDown || tool === "hand") {
       drag.current = { kind: "pan", start: { x: e.clientX, y: e.clientY }, view: viewRef.current };
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      capture(e);
       return;
     }
     if (e.button !== 0) return;
@@ -801,7 +931,7 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
     const p = toDoc(e);
     const s = stateRef.current;
     const mode: ToolOptions["selectMode"] = e.shiftKey && e.altKey ? "intersect" : e.shiftKey ? "add" : e.altKey ? "subtract" : options.selectMode;
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    capture(e);
 
     if (xform) {
       const h = hitXform(xform, p, viewRef.current.zoom);
@@ -894,9 +1024,26 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType === "touch" && touches.current.has(e.pointerId)) {
+      const r = canvasRef.current!.getBoundingClientRect();
+      touches.current.set(e.pointerId, { x: e.clientX - r.left, y: e.clientY - r.top });
+      const pd = drag.current;
+      if (pd?.kind === "pinch") {
+        if (touches.current.size < 2) return;
+        const { d, c } = pinchInfo();
+        const z = Math.min(64, Math.max(0.02, pd.view.zoom * (d / pd.d0)));
+        // Точка документа под центром жеста следует за пальцами
+        const dx = (pd.c0.x - pd.view.panX) / pd.view.zoom;
+        const dy = (pd.c0.y - pd.view.panY) / pd.view.zoom;
+        setView({ zoom: z, panX: c.x - dx * z, panY: c.y - dy * z });
+        return;
+      }
+    }
     const p = toDoc(e);
-    setHover(p);
+    hoverRef.current = p;
+    requestDraw();
     onCursor({ x: Math.floor(p.x), y: Math.floor(p.y) });
+    if (drag.current && dragPointer.current && dragPointer.current.id !== e.pointerId) return; // ладонь, второй указатель
     const d = drag.current;
     if (!d) return;
     const s = stateRef.current;
@@ -955,6 +1102,15 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
+    if (e.pointerType === "touch") {
+      touches.current.delete(e.pointerId);
+      if (drag.current?.kind === "pinch") {
+        // Жест окончен, когда подняты все пальцы; оставшийся палец не рисует
+        if (!touches.current.size) drag.current = null;
+        return;
+      }
+    }
+    if (dragPointer.current && dragPointer.current.id !== e.pointerId) return; // не тот указатель
     const d = drag.current;
     drag.current = null;
     if (!d) return;
@@ -1041,7 +1197,8 @@ const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(props, ref)
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onPointerLeave={() => {
-          setHover(null);
+          hoverRef.current = null;
+          requestDraw();
           onCursor(null);
         }}
         onWheel={onWheel}

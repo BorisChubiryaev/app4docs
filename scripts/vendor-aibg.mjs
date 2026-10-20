@@ -81,5 +81,19 @@ fs.mkdirSync(OUT, { recursive: true });
 const manifest = { version, model: "silueta (rembg, U²-Net, Apache-2.0)", ort: ortPkg.version, input: 320, files: {}, chunks: {} };
 pack("model", model, manifest, version);
 pack("wasm", wasm, manifest, version);
+
+// Служебный JS-модуль движка («клей» Emscripten). onnxruntime-web подключает
+// его через import() по адресу — обычным файлом с того же сервера (как
+// pyodide.loader.js у PDF → PPTX), а не blob-ссылкой, которую может запретить
+// политика безопасности (CSP) портала. Адрес wasm внутри него не нужен —
+// wasm передаётся байтами — поэтому вычисление адреса заменяем на имя.
+const GLUE_URL_EXPR = '(new URL("ort-wasm-simd-threaded.wasm",import.meta.url)).href';
+let glue = fs.readFileSync(path.join(ORT_DIR, "dist", "ort-wasm-simd-threaded.mjs"), "utf8");
+if (!glue.includes(GLUE_URL_EXPR)) throw new Error("ort-wasm-simd-threaded.mjs: не найдено место для правки адреса wasm (другая версия onnxruntime-web?)");
+glue = glue.replace(GLUE_URL_EXPR, '"ort-wasm-simd-threaded.wasm"');
+const glueName = `${hashHex(`aibg/${version}/glue`)}.js`;
+fs.writeFileSync(path.join(OUT, glueName), glue);
+manifest.glue = { file: glueName, size: Buffer.byteLength(glue), sha256: sha(Buffer.from(glue)) };
+console.log(`glue: ${glueName} (${(Buffer.byteLength(glue) / 1024).toFixed(0)} КБ)`);
 fs.writeFileSync(path.join(OUT, "manifest.json"), JSON.stringify(manifest, null, 1));
 console.log(`Готово: ${OUT} (версия ${version})`);

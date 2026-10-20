@@ -336,6 +336,7 @@ export function BgRemoveDialog({
   setOpts,
   busy,
   status,
+  error,
   hasResult,
   onPreview,
   onApplyMask,
@@ -346,6 +347,7 @@ export function BgRemoveDialog({
   setOpts: (o: BgOptions) => void;
   busy: boolean;
   status: string | null;
+  error: string | null;
   hasResult: boolean;
   onPreview: () => void;
   onApplyMask: () => void;
@@ -403,6 +405,11 @@ export function BgRemoveDialog({
       {status && (
         <p className="ie-note ie-note--status">
           <span className="ie-spin" /> {status}
+        </p>
+      )}
+      {error && !busy && (
+        <p className="ie-warn" role="alert">
+          {error}
         </p>
       )}
       <p className="ie-note">

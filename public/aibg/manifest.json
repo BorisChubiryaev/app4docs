@@ -70,5 +70,10 @@
    "size": 5785000,
    "sha256": "c0a40bf21b7cf9978a23ec83ed3c1198f7d68c606cbc5cd3fcce7d2f54f9ce55"
   }
+ },
+ "glue": {
+  "file": "a4e873be.js",
+  "size": 20824,
+  "sha256": "a8f738a515a44cfb31ced2aa96df722b9a2c55659b45fad8453cc28984895e68"
  }
 }

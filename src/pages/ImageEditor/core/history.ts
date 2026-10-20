@@ -4,6 +4,7 @@
 // суммарный объём уникальных canvas превышает бюджет.
 
 import type { DocState } from "./types";
+import { MAX_PIXELS } from "./canvas";
 
 export interface HistoryEntry {
   label: string;
@@ -17,8 +18,11 @@ export interface History {
 }
 
 const MAX_STEPS = 60;
-/** ~700 МБ пикселей на всю историю — дальше браузер начинает задыхаться. */
-const BUDGET_BYTES = 700 * 1024 * 1024;
+/**
+ * Пиксели всей истории: ~700 МБ на ПК, ~250 МБ на планшетах и слабых ПК —
+ * дальше браузер начинает задыхаться или перезагружает вкладку.
+ */
+const BUDGET_BYTES = (MAX_PIXELS < 40_000_000 ? 250 : 700) * 1024 * 1024;
 
 function canvasesOf(s: DocState, into: Set<HTMLCanvasElement>) {
   for (const l of s.layers) {

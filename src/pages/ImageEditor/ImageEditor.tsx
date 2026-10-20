@@ -3,7 +3,7 @@ import { saveAs } from "file-saver";
 import PageShell from "../../components/PageShell";
 import type { DocState, Layer, ToolId, ToolOptions } from "./core/types";
 import { DEFAULT_OPTIONS } from "./core/types";
-import { alphaBounds, canvasFromImageData, cloneCanvas, createCanvas, ctx2d, getImageData, loadImageFile } from "./core/canvas";
+import { alphaBounds, canvasFromImageData, cloneCanvas, createCanvas, ctx2d, fitSize, getImageData, loadImageFile } from "./core/canvas";
 import {
   activeLayer,
   addEmptyLayer,
@@ -185,10 +185,22 @@ const ImageEditor = () => {
   const [preview, setPreview] = useState<DocState | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [bgStatus, setBgStatus] = useState<string | null>(null);
+  const [bgError, setBgError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
-  const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
+  // Координаты курсора пишем прямо в строку состояния: перерисовывать весь
+  // редактор на каждое движение мыши слишком дорого (тормозит кисть)
+  const cursorRef = useRef<HTMLSpanElement>(null);
+  const docSizeRef = useRef({ w: 0, h: 0 });
+  const setCursor = useCallback((c: { x: number; y: number } | null) => {
+    const el = cursorRef.current;
+    if (!el) return;
+    const { w, h } = docSizeRef.current;
+    const inside = c && c.x >= 0 && c.y >= 0 && c.x < w && c.y < h;
+    el.textContent = inside ? `X ${c.x} · Y ${c.y}` : "";
+    el.hidden = !inside;
+  }, []);
   const [mode, setMode] = useState({ crop: false, transform: false, text: false });
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [panelTab, setPanelTab] = useState<"layers" | "history">("layers");
@@ -201,6 +213,7 @@ const ImageEditor = () => {
   const state = draft ?? hist?.present.state ?? null;
   const stateRef = useRef(state);
   stateRef.current = state;
+  docSizeRef.current = { w: state?.width ?? 0, h: state?.height ?? 0 };
   const layer = state ? activeLayer(state) : undefined;
 
   const notify = useCallback((m: string) => setToast(m), []);
@@ -250,7 +263,12 @@ const ImageEditor = () => {
   const openDoc = useCallback(async (file: File) => {
     setBusy("Открываем файл…");
     try {
-      const s = await openAsDocument(file);
+      let s = await openAsDocument(file);
+      const big = s.layers.find((l) => l.canvas.dataset.scaledFrom)?.canvas.dataset.scaledFrom;
+      const f = fitSize(s.width, s.height);
+      if (f.scaled) s = resizeDoc(s, f.w, f.h);
+      if (big || f.scaled)
+        notify(`Изображение ${big ?? `${s.width} × ${s.height}`} уменьшено до ${s.width} × ${s.height}, чтобы редактору хватило памяти этого устройства.`);
       setHist(initHistory(s, "Открытие"));
       setDraft(null);
       setDocName(baseName(file.name));
@@ -264,6 +282,8 @@ const ImageEditor = () => {
   const placeCanvas = useCallback(
     (c: HTMLCanvasElement, name: string) => {
       const s = stateRef.current;
+      if (!s && c.dataset.scaledFrom)
+        notify(`Изображение ${c.dataset.scaledFrom} уменьшено до ${c.width} × ${c.height}, чтобы редактору хватило памяти этого устройства.`);
       if (!s) {
         setHist(initHistory(docFromCanvas(c, name), "Вставка"));
         setDocName(name);
@@ -282,7 +302,7 @@ const ImageEditor = () => {
       commit(addLayer(s, l), "Поместить изображение");
       setToolState("move");
     },
-    [commit],
+    [commit, notify],
   );
 
   const placeFile = useCallback(
@@ -299,19 +319,52 @@ const ImageEditor = () => {
     [placeCanvas, notify],
   );
 
-  // Вставка картинки из системного буфера (Ctrl+V из браузера, скриншот)
+  // Вставка картинки из системного буфера (Ctrl+V из браузера, скриншот,
+  // скопированный в проводнике файл)
   useEffect(() => {
-    const onPaste = async (e: ClipboardEvent) => {
+    const onPaste = (e: ClipboardEvent) => {
       if (isTyping(e.target)) return;
-      const item = [...(e.clipboardData?.items ?? [])].find((i) => i.type.startsWith("image/"));
-      const f = item?.getAsFile();
+      const items = [...(e.clipboardData?.items ?? [])];
+      const f = items.find((i) => i.kind === "file" && i.type.startsWith("image/"))?.getAsFile();
       if (!f) return;
       e.preventDefault();
-      placeCanvas(await loadImageFile(f), "Вставленное изображение");
+      setBusy("Вставляем изображение…");
+      loadImageFile(f)
+        .then((c) => placeCanvas(c, "Вставленное изображение"))
+        .catch(() => notify("Не удалось прочитать картинку из буфера обмена."))
+        .finally(() => setBusy(null));
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [placeCanvas]);
+  }, [placeCanvas, notify]);
+
+  // Перетаскивание файла на редактор: открыть или добавить слоем. Без этого
+  // браузер сам открывает брошенную картинку вместо приложения — со стороны
+  // это выглядит как перезагрузка страницы с потерей работы.
+  useEffect(() => {
+    const over = (e: DragEvent) => {
+      if (isTyping(e.target)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = [...e.dataTransfer.types].includes("Files") ? "copy" : "none";
+    };
+    const drop = (e: DragEvent) => {
+      if (isTyping(e.target)) return;
+      e.preventDefault();
+      const f = e.dataTransfer?.files?.[0];
+      if (!f) {
+        notify("Перетащите файл с компьютера. Картинку с другой страницы скопируйте и вставьте (Ctrl+V).");
+        return;
+      }
+      if (!stateRef.current || /\.(cvxproj|psd|psb)$/i.test(f.name)) openDoc(f);
+      else placeFile(f);
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("drop", drop);
+    };
+  }, [openDoc, placeFile, notify]);
 
   // ── Действия над документом ──
   const act = useCallback(
@@ -507,6 +560,7 @@ const ImageEditor = () => {
     setDialog(null);
     setPreview(null);
     setPreviewBusy(false);
+    setBgError(null);
   };
 
   // ── Удаление фона ──
@@ -517,6 +571,7 @@ const ImageEditor = () => {
     if (!l) return;
     const o = dialog.opts;
     setPreviewBusy(true);
+    setBgError(null);
     try {
       let mask: HTMLCanvasElement;
       if (o.mode === "ai") {
@@ -537,7 +592,7 @@ const ImageEditor = () => {
       setPreview(updateLayer(s, l.id, { mask, maskEnabled: true }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Не удалось найти объект.";
-      notify(o.mode === "ai" ? `${msg} Попробуйте режим «Однотонный фон».` : msg);
+      setBgError(o.mode === "ai" ? `${msg} Пока можно воспользоваться режимом «Однотонный фон».` : msg);
     } finally {
       setPreviewBusy(false);
       setBgStatus(null);
@@ -1061,11 +1116,7 @@ const ImageEditor = () => {
           <span>
             {s.width} × {s.height} пкс
           </span>
-          {cursor && cursor.x >= 0 && cursor.y >= 0 && cursor.x < s.width && cursor.y < s.height && (
-            <span>
-              X {cursor.x} · Y {cursor.y}
-            </span>
-          )}
+          <span ref={cursorRef} hidden />
           <span className="ie-status-target" title="Куда применяются действия">
             {targetText}
           </span>
@@ -1113,6 +1164,7 @@ const ImageEditor = () => {
           setOpts={(o) => setDialog({ ...dialog, opts: o })}
           busy={previewBusy}
           status={bgStatus}
+          error={bgError}
           hasResult={!!dialog.mask}
           onPreview={runBgRemoval}
           onClose={closeDialog}
