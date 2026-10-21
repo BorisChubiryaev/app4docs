@@ -1853,3 +1853,44 @@
   .file-row-arrow { display: none; }
   .files-summary { flex-direction: column; gap: 6px; }
 }
+
+/* Режим переноса страниц PDF → Word */
+.p2w-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.p2w-mode-title {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+.p2w-mode-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.p2w-mode-btn strong {
+  font-size: 14px;
+}
+.p2w-mode-btn span {
+  font-size: 12px;
+  opacity: 0.75;
+}
+.p2w-mode-btn.active {
+  border-color: #2a78d6;
+  background: rgba(42, 120, 214, 0.1);
+  box-shadow: inset 0 0 0 1px #2a78d6;
+}
+.p2w-mode-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

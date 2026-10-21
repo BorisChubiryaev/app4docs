@@ -39,4 +39,20 @@ if (typeof proto.getOrInsert !== "function") {
   });
 }
 
+// Math.sumPrecise (TC39) — тоже нужен pdfjs-dist 5.x
+const MathEx = Math as Math & { sumPrecise?: (values: Iterable<number>) => number };
+if (typeof MathEx.sumPrecise !== "function") {
+  MathEx.sumPrecise = (values: Iterable<number>) => {
+    let sum = 0;
+    let c = 0;
+    for (const v of values) {
+      const y = v - c;
+      const t = sum + y;
+      c = t - sum - y;
+      sum = t;
+    }
+    return sum;
+  };
+}
+
 export {};

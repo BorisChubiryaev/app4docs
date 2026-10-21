@@ -9,13 +9,10 @@
 //   • PSD (Adobe Photoshop) — через ag-psd (сведённое изображение)
 
 import * as pdfjs from "pdfjs-dist";
-import pdfWorkerContent from "pdfjs-dist/build/pdf.worker.mjs?raw";
+import { pdfWorkerUrl } from "../../../utils/pdfWorker";
 
 // Инициализация воркера pdfjs так же, как в остальных инструментах проекта.
-const workerBlob = new Blob([pdfWorkerContent], {
-  type: "application/javascript",
-});
-pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl();
 
 export interface DecodedRaster {
   /** Растр исходного изображения (в оригинальном разрешении). */

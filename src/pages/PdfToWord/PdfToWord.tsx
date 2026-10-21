@@ -4,40 +4,20 @@ import * as pdfjs from "pdfjs-dist";
 import mammoth from "mammoth";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-import {
-  Document,
-  Packer,
-  Paragraph,
-  TextRun,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  BorderStyle,
-  AlignmentType,
-  HeadingLevel,
-  ImageRun,
-  PageBreak,
-  convertInchesToTwip,
-} from "docx";
 import { saveAs } from "file-saver";
 
 import { PdfToWordInstructionsModal } from "./components/PdfToWordInstructionsModal";
-import { detectTables, type DetectedTable } from "./tableDetect";
+import { convertPdfToDocx, PdfPasswordError, type LayoutMode } from "./engine";
 
 import PageShell from "../../components/PageShell";
 import "./PdfToWord.css";
 
-import pdfWorkerContent from "pdfjs-dist/build/pdf.worker.mjs?raw";
-const workerBlob = new Blob([pdfWorkerContent], {
-  type: "application/javascript",
-});
-pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(workerBlob);
+import { pdfWorkerUrl } from "../../utils/pdfWorker";
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl();
 
 // ==================== ТИПЫ ====================
 
 type ConvertMode = "pdf-to-word" | "word-to-pdf";
-type ImageMode = "extract" | "render" | "none";
 type FileStatus = "pending" | "converting" | "done" | "error";
 
 interface FileItem {
@@ -51,57 +31,6 @@ interface FileItem {
   errorMessage: string;
   pageCount: number;
   extraInfo: string;
-}
-
-interface TextItem {
-  str: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize: number;
-  fontName: string;
-  isBold: boolean;
-  isItalic: boolean;
-}
-interface TextLine {
-  y: number;
-  items: TextItem[];
-  fontSize: number;
-  minX: number;
-  maxX: number;
-}
-interface TextParagraph {
-  lines: TextLine[];
-  fontSize: number;
-  isBold: boolean;
-  isItalic: boolean;
-  alignment: (typeof AlignmentType)[keyof typeof AlignmentType];
-  isListItem: boolean;
-  listMarker: string;
-  indentLevel: number;
-}
-interface ExtractedImage {
-  data: Uint8Array;
-  width: number;
-  height: number;
-  x: number;
-  y: number;
-  displayWidth: number;
-  displayHeight: number;
-}
-interface PageDimensions {
-  width: number;
-  height: number;
-  marginLeft: number;
-  marginRight: number;
-  contentWidth: number;
-}
-interface PageContent {
-  paragraphs: TextParagraph[];
-  images: ExtractedImage[];
-  tables: DetectedTable[];
-  pageDims: PageDimensions;
 }
 
 // ==================== ОБЩИЕ УТИЛИТЫ ====================
@@ -119,713 +48,6 @@ function pluralFiles(n: number): string {
   if (n === 1) return "файл";
   if (n >= 2 && n <= 4) return "файла";
   return "файлов";
-}
-
-// ==================== PDF → WORD УТИЛИТЫ ====================
-
-function detectBold(fn: string): boolean {
-  const l = fn.toLowerCase();
-  return l.includes("bold") || l.includes("black") || l.includes("heavy");
-}
-function detectItalic(fn: string): boolean {
-  const l = fn.toLowerCase();
-  return l.includes("italic") || l.includes("oblique");
-}
-function getFontSize(t: number[], h: number): number {
-  let s = Math.max(Math.abs(t[3]), Math.abs(t[0]));
-  if (s < 1 && h > 0) s = h;
-  if (s < 4) s = 12;
-  return Math.round(s * 10) / 10;
-}
-
-async function extractTextItems(page: pdfjs.PDFPageProxy): Promise<TextItem[]> {
-  const tc = await page.getTextContent();
-  return (tc.items as any[])
-    .filter((i) => i.str || i.str === " ")
-    .map((i) => ({
-      str: i.str,
-      x: Math.round(i.transform[4] * 100) / 100,
-      y: Math.round(i.transform[5] * 100) / 100,
-      width: Math.round((i.width || 0) * 100) / 100,
-      height: i.height || getFontSize(i.transform, i.height),
-      fontSize: getFontSize(i.transform, i.height),
-      fontName: i.fontName || "",
-      isBold: detectBold(i.fontName || ""),
-      isItalic: detectItalic(i.fontName || ""),
-    }));
-}
-
-function groupIntoLines(items: TextItem[]): TextLine[] {
-  if (!items.length) return [];
-  const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
-  const lines: TextLine[] = [];
-  for (const item of sorted) {
-    const tol = Math.max(item.fontSize * 0.4, 2);
-    const m = lines.find((l) => Math.abs(l.y - item.y) < tol);
-    if (m) {
-      m.items.push(item);
-      m.y = m.items.reduce((s, i) => s + i.y, 0) / m.items.length;
-    } else
-      lines.push({
-        y: item.y,
-        items: [item],
-        fontSize: item.fontSize,
-        minX: item.x,
-        maxX: item.x + item.width,
-      });
-  }
-  for (const l of lines) {
-    l.items.sort((a, b) => a.x - b.x);
-    l.minX = Math.min(...l.items.map((i) => i.x));
-    l.maxX = Math.max(...l.items.map((i) => i.x + i.width));
-    l.fontSize = modeNum(l.items.map((i) => i.fontSize));
-  }
-  lines.sort((a, b) => b.y - a.y);
-  return lines;
-}
-
-function buildLineText(line: TextLine): { runs: TextItem[]; text: string } {
-  if (!line.items.length) return { runs: [], text: "" };
-  const result: TextItem[] = [];
-  for (let i = 0; i < line.items.length; i++) {
-    const cur = line.items[i];
-    if (i > 0) {
-      const prev = line.items[i - 1];
-      const gap = cur.x - (prev.x + prev.width);
-      const sw = cur.fontSize * 0.25;
-      if (gap > sw) {
-        const n = Math.max(1, Math.round(gap / (sw * 1.5)));
-        result.push({
-          ...cur,
-          str: n > 3 ? "\t" : " ".repeat(n),
-          isBold: false,
-          isItalic: false,
-        });
-      } else if (
-        gap > 0.5 &&
-        !cur.str.startsWith(" ") &&
-        !prev.str.endsWith(" ")
-      ) {
-        result.push({ ...cur, str: " ", isBold: false, isItalic: false });
-      }
-    }
-    result.push(cur);
-  }
-  return { runs: result, text: result.map((r) => r.str).join("") };
-}
-
-function detectPageDims(
-  lines: TextLine[],
-  vp: { width: number; height: number },
-): PageDimensions {
-  if (!lines.length)
-    return {
-      width: vp.width,
-      height: vp.height,
-      marginLeft: 72,
-      marginRight: 72,
-      contentWidth: vp.width - 144,
-    };
-  const minX = Math.min(...lines.map((l) => l.minX));
-  const maxX = Math.max(...lines.map((l) => l.maxX));
-  return {
-    width: vp.width,
-    height: vp.height,
-    marginLeft: Math.max(0, minX),
-    marginRight: Math.max(0, vp.width - maxX),
-    contentWidth: maxX - minX,
-  };
-}
-
-function detectAlignment(
-  line: TextLine,
-  pd: PageDimensions,
-): (typeof AlignmentType)[keyof typeof AlignmentType] {
-  const lc = (line.minX + line.maxX) / 2,
-    pc = pd.width / 2;
-  const lm = line.minX - pd.marginLeft,
-    rm = pd.width - pd.marginRight - line.maxX;
-  if (Math.abs(lc - pc) < pd.contentWidth * 0.05 && lm > 20 && rm > 20)
-    return AlignmentType.CENTER;
-  if (rm < 10 && lm > 50) return AlignmentType.RIGHT;
-  if ((line.maxX - line.minX) / pd.contentWidth > 0.9)
-    return AlignmentType.JUSTIFIED;
-  return AlignmentType.LEFT;
-}
-
-function detectListItem(text: string) {
-  for (const p of [/^[\s]*([•●○◦▪▫–—-])\s+/, /^[\s]*([*+])\s+/]) {
-    const m = text.match(p);
-    if (m) return { isListItem: true, marker: m[1] };
-  }
-  for (const p of [/^[\s]*(\d{1,3})[.)]\s+/, /^[\s]*([a-zа-яё])[.)]\s+/i]) {
-    const m = text.match(p);
-    if (m) return { isListItem: true, marker: m[1] };
-  }
-  return { isListItem: false, marker: "" };
-}
-
-function detectIndent(line: TextLine, pd: PageDimensions): number {
-  const indent = line.minX - pd.marginLeft;
-  return indent < 15 ? 0 : Math.min(Math.floor(indent / 36), 5);
-}
-
-function modeNum(arr: number[]): number {
-  if (!arr.length) return 12;
-  const c = new Map<number, number>();
-  let mc = 0,
-    mv = arr[0];
-  for (const v of arr) {
-    const r = Math.round(v),
-      n = (c.get(r) || 0) + 1;
-    c.set(r, n);
-    if (n > mc) {
-      mc = n;
-      mv = r;
-    }
-  }
-  return mv;
-}
-
-function medianNum(arr: number[]): number {
-  if (!arr.length) return 12;
-  const s = [...arr].sort((a, b) => a - b),
-    m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
-
-function groupIntoParagraphs(
-  lines: TextLine[],
-  pd: PageDimensions,
-): TextParagraph[] {
-  if (!lines.length) return [];
-  const paras: TextParagraph[] = [],
-    bodyFS = modeNum(lines.map((l) => l.fontSize));
-  const gaps: number[] = [];
-  for (let i = 0; i < lines.length - 1; i++) {
-    const g = lines[i].y - lines[i + 1].y;
-    if (g > 0 && g < 100) gaps.push(g);
-  }
-  const typGap = gaps.length > 0 ? medianNum(gaps) : bodyFS * 1.5;
-  let cur: TextParagraph | null = null;
-  for (const line of lines) {
-    const { text } = buildLineText(line);
-    if (!text.trim()) {
-      if (cur) {
-        paras.push(cur);
-        cur = null;
-      }
-      continue;
-    }
-    const al = detectAlignment(line, pd),
-      { isListItem, marker } = detectListItem(text);
-    const il = detectIndent(line, pd);
-    const isH =
-      line.fontSize > bodyFS * 1.15 ||
-      (line.items.every((i) => i.isBold) && line.items.length > 0);
-    let startNew = !cur;
-    if (cur && !startNew) {
-      const prev = cur.lines[cur.lines.length - 1],
-        vg = prev.y - line.y;
-      if (
-        vg > typGap * 1.8 ||
-        Math.abs(line.fontSize - cur.fontSize) > 1.5 ||
-        al !== cur.alignment ||
-        isListItem ||
-        cur.isListItem ||
-        isH ||
-        cur.fontSize > bodyFS * 1.15 ||
-        cur.isBold ||
-        (il > 0 && cur.indentLevel === 0 && line.minX - pd.marginLeft > 20)
-      )
-        startNew = true;
-    }
-    if (startNew) {
-      if (cur) paras.push(cur);
-      cur = {
-        lines: [line],
-        fontSize: line.fontSize,
-        isBold: line.items.every((i) => i.isBold),
-        isItalic: line.items.every((i) => i.isItalic),
-        alignment: al,
-        isListItem,
-        listMarker: marker,
-        indentLevel: il,
-      };
-    } else cur!.lines.push(line);
-  }
-  if (cur) paras.push(cur);
-  return paras;
-}
-
-function getHeadingLevel(
-  fs: number,
-  bodyFS: number,
-  bold: boolean,
-): HeadingLevel | null {
-  const r = fs / bodyFS;
-  if (r >= 2.0) return HeadingLevel.HEADING_1;
-  if (r >= 1.6) return HeadingLevel.HEADING_2;
-  if (r >= 1.3) return HeadingLevel.HEADING_3;
-  if (r >= 1.15 && bold) return HeadingLevel.HEADING_4;
-  if (bold && r >= 1.05) return HeadingLevel.HEADING_5;
-  return null;
-}
-
-function createTextRuns(para: TextParagraph, bodyFS: number): TextRun[] {
-  const runs: TextRun[] = [],
-    isH = getHeadingLevel(para.fontSize, bodyFS, para.isBold);
-  for (let li = 0; li < para.lines.length; li++) {
-    const { runs: lr } = buildLineText(para.lines[li]);
-    if (li > 0)
-      runs.push(
-        new TextRun({
-          text: " ",
-          size: Math.round(para.fontSize * 2),
-          font: "Calibri",
-        }),
-      );
-    let grp: {
-      text: string;
-      isBold: boolean;
-      isItalic: boolean;
-      fontSize: number;
-    } | null = null;
-    for (const item of lr) {
-      if (item.str === " " || item.str === "\t") {
-        if (grp) grp.text += item.str;
-        else
-          grp = {
-            text: item.str,
-            isBold: item.isBold,
-            isItalic: item.isItalic,
-            fontSize: item.fontSize,
-          };
-        continue;
-      }
-      if (
-        grp &&
-        grp.isBold === item.isBold &&
-        grp.isItalic === item.isItalic &&
-        Math.abs(grp.fontSize - item.fontSize) < 1
-      ) {
-        grp.text += item.str;
-      } else {
-        if (grp?.text)
-          runs.push(
-            new TextRun({
-              text: grp.text,
-              bold: grp.isBold || undefined,
-              italics: grp.isItalic || undefined,
-              size: isH ? undefined : Math.round(grp.fontSize * 2),
-              font: "Calibri",
-            }),
-          );
-        grp = {
-          text: item.str,
-          isBold: item.isBold,
-          isItalic: item.isItalic,
-          fontSize: item.fontSize,
-        };
-      }
-    }
-    if (grp?.text)
-      runs.push(
-        new TextRun({
-          text: grp.text,
-          bold: grp.isBold || undefined,
-          italics: grp.isItalic || undefined,
-          size: isH ? undefined : Math.round(grp.fontSize * 2),
-          font: "Calibri",
-        }),
-      );
-  }
-  return runs;
-}
-
-// ========== Изображения из PDF ==========
-
-function mulT(m1: number[], m2: number[]): number[] {
-  return [
-    m1[0] * m2[0] + m1[2] * m2[1],
-    m1[1] * m2[0] + m1[3] * m2[1],
-    m1[0] * m2[2] + m1[2] * m2[3],
-    m1[1] * m2[2] + m1[3] * m2[3],
-    m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
-    m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
-  ];
-}
-
-// Рендер страницы PDF в canvas. В pdfjs v5 render() требует поле `canvas`.
-async function renderPageToCanvas(
-  page: pdfjs.PDFPageProxy,
-  scale: number,
-): Promise<{ canvas: HTMLCanvasElement; viewport: any } | null> {
-  const viewport = page.getViewport({ scale });
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.ceil(viewport.width));
-  canvas.height = Math.max(1, Math.ceil(viewport.height));
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await page.render({
-    canvas,
-    canvasContext: ctx,
-    viewport,
-  } as any).promise;
-  return { canvas, viewport };
-}
-
-/**
- * Извлечение изображений: раньше данные брались через page.objs.get, но в
- * pdfjs v5 объекты не декодированы без рендера — картинки терялись. Теперь
- * страница рендерится один раз, а области изображений вырезаются из готового
- * растра по матрицам трансформации операторов рисования. Работает с любым
- * кодеком (JPEG/сжатые/маски).
- */
-async function extractImagesFromPage(
-  page: pdfjs.PDFPageProxy,
-  operatorList?: { fnArray: number[]; argsArray: unknown[] },
-): Promise<ExtractedImage[]> {
-  const out: ExtractedImage[] = [];
-  try {
-    const scale = 2.0;
-    const rendered = await renderPageToCanvas(page, scale);
-    if (!rendered) return out;
-    const { canvas, viewport } = rendered;
-
-    const ol = operatorList ?? (await page.getOperatorList());
-    const stack: number[][] = [];
-    let ct = [1, 0, 0, 1, 0, 0];
-    const ops: number[][] = [];
-    for (let i = 0; i < ol.fnArray.length; i++) {
-      const fn = ol.fnArray[i];
-      const args = ol.argsArray[i];
-      if (fn === pdfjs.OPS.save) stack.push([...ct]);
-      else if (fn === pdfjs.OPS.restore && stack.length) ct = stack.pop()!;
-      else if (fn === pdfjs.OPS.transform) ct = mulT(ct, args as number[]);
-      else if (
-        fn === pdfjs.OPS.paintImageXObject ||
-        fn === pdfjs.OPS.paintImageXObjectRepeat
-      ) {
-        // Игнорируем крошечные изображения (иконки/линии).
-        if (Math.abs(ct[0]) >= 10 || Math.abs(ct[3]) >= 10) {
-          ops.push([...ct]);
-        }
-      }
-    }
-
-    for (const ctm of ops.slice(0, 50)) {
-      // Углы единичного квадрата изображения в пользовательском пространстве.
-      const corners = [
-        [0, 0],
-        [1, 0],
-        [0, 1],
-        [1, 1],
-      ].map(([u, v]) => [
-        ctm[0] * u + ctm[2] * v + ctm[4],
-        ctm[1] * u + ctm[3] * v + ctm[5],
-      ]);
-      // Переводим в координаты отрисованного растра.
-      const dev = corners.map(([x, y]) => viewport.convertToViewportPoint(x, y));
-      const xs = dev.map((p: number[]) => p[0]);
-      const ys = dev.map((p: number[]) => p[1]);
-      const minX = Math.max(0, Math.floor(Math.min(...xs)));
-      const maxX = Math.min(canvas.width, Math.ceil(Math.max(...xs)));
-      const minY = Math.max(0, Math.floor(Math.min(...ys)));
-      const maxY = Math.min(canvas.height, Math.ceil(Math.max(...ys)));
-      const w = maxX - minX;
-      const h = maxY - minY;
-      if (w < 8 || h < 8) continue;
-
-      const crop = document.createElement("canvas");
-      crop.width = w;
-      crop.height = h;
-      const cctx = crop.getContext("2d");
-      if (!cctx) continue;
-      cctx.drawImage(canvas, minX, minY, w, h, 0, 0, w, h);
-      const blob = await new Promise<Blob | null>((r) =>
-        crop.toBlob((b) => r(b), "image/png"),
-      );
-      if (!blob) continue;
-
-      const pdfXs = corners.map((p) => p[0]);
-      const pdfYs = corners.map((p) => p[1]);
-      out.push({
-        data: new Uint8Array(await blob.arrayBuffer()),
-        width: w,
-        height: h,
-        x: Math.min(...pdfXs),
-        y: Math.max(...pdfYs),
-        displayWidth: Math.abs(ctm[0]) || w / scale,
-        displayHeight: Math.abs(ctm[3]) || h / scale,
-      });
-    }
-  } catch (e) {
-    console.warn("Img extract err:", e);
-  }
-  return out;
-}
-
-async function renderPageAsImage(
-  page: pdfjs.PDFPageProxy,
-  scale = 2.0,
-): Promise<ExtractedImage | null> {
-  try {
-    const rendered = await renderPageToCanvas(page, scale);
-    if (!rendered) return null;
-    const blob = await new Promise<Blob | null>((r) =>
-      rendered.canvas.toBlob((b) => r(b), "image/png", 0.92),
-    );
-    if (!blob) return null;
-    const ovp = page.getViewport({ scale: 1.0 });
-    return {
-      data: new Uint8Array(await blob.arrayBuffer()),
-      width: rendered.canvas.width,
-      height: rendered.canvas.height,
-      x: 0,
-      y: ovp.height,
-      displayWidth: ovp.width,
-      displayHeight: ovp.height,
-    };
-  } catch {
-    return null;
-  }
-}
-
-// ========== Сборка DOCX ==========
-
-function createImgParagraph(img: ExtractedImage, maxW: number): Paragraph {
-  let w = img.displayWidth,
-    h = img.displayHeight;
-  if (w > maxW) {
-    h = h * (maxW / w);
-    w = maxW;
-  }
-  w = Math.max(Math.min(w, 750), 20);
-  h = Math.max(Math.min(h, 750), 20);
-  if (h > 750) {
-    w = w * (750 / h);
-    h = 750;
-  }
-  return new Paragraph({
-    children: [
-      new ImageRun({
-        data: img.data,
-        transformation: { width: Math.round(w), height: Math.round(h) },
-        type: "png",
-      }),
-    ],
-    alignment: AlignmentType.CENTER,
-    spacing: { before: 120, after: 120 },
-  });
-}
-
-const TABLE_BORDER = {
-  style: BorderStyle.SINGLE,
-  size: 2,
-  color: "999999",
-};
-
-function buildDocxTable(t: DetectedTable): Table {
-  const colWidths = t.colXs
-    .slice(0, -1)
-    .map((x, i) => Math.max(1, Math.round((t.colXs[i + 1] - x) * 20)));
-  const rows = t.cells.map(
-    (row) =>
-      new TableRow({
-        children: row.map(
-          (text, ci) =>
-            new TableCell({
-              width: { size: colWidths[ci] ?? 1000, type: WidthType.DXA },
-              margins: { top: 40, bottom: 40, left: 80, right: 80 },
-              borders: {
-                top: TABLE_BORDER,
-                bottom: TABLE_BORDER,
-                left: TABLE_BORDER,
-                right: TABLE_BORDER,
-              },
-              children: text.split("\n").map(
-                (line) =>
-                  new Paragraph({
-                    children: [new TextRun({ text: line, size: 20, font: "Calibri" })],
-                  }),
-              ),
-            }),
-        ),
-      }),
-  );
-  return new Table({
-    rows,
-    width: { size: colWidths.reduce((a, b) => a + b, 0) || 5000, type: WidthType.DXA },
-  });
-}
-
-function mergeContent(
-  paras: TextParagraph[],
-  images: ExtractedImage[],
-  tables: DetectedTable[],
-  bodyFS: number,
-  pd: PageDimensions,
-): (Paragraph | Table)[] {
-  const items: {
-    y: number;
-    type: "t" | "i" | "tb";
-    tp?: TextParagraph;
-    img?: ExtractedImage;
-    tbl?: DetectedTable;
-  }[] = [];
-  for (const p of paras)
-    items.push({ y: p.lines.length > 0 ? p.lines[0].y : 0, type: "t", tp: p });
-  for (const img of images)
-    items.push({ y: img.y + img.displayHeight, type: "i", img });
-  for (const tbl of tables) items.push({ y: tbl.y1, type: "tb", tbl });
-  items.sort((a, b) => b.y - a.y);
-  const result: (Paragraph | Table)[] = [],
-    maxW = pd.contentWidth || 500;
-  for (const item of items) {
-    if (item.type === "t" && item.tp) {
-      const tr = createTextRuns(item.tp, bodyFS);
-      if (!tr.length) continue;
-      if (item.tp.isListItem && item.tp.listMarker)
-        tr.unshift(
-          new TextRun({
-            text: item.tp.listMarker + "  ",
-            size: Math.round(item.tp.fontSize * 2),
-            font: "Calibri",
-          }),
-        );
-      const hl = getHeadingLevel(item.tp.fontSize, bodyFS, item.tp.isBold);
-      const ind = item.tp.indentLevel * convertInchesToTwip(0.5);
-      const opts: any = {
-        children: tr,
-        alignment: item.tp.alignment,
-        spacing: { after: hl ? 200 : 120, before: hl ? 240 : 0, line: 276 },
-      };
-      if (hl) opts.heading = hl;
-      if (ind > 0) opts.indent = { left: ind };
-      result.push(new Paragraph(opts));
-    } else if (item.type === "i" && item.img)
-      result.push(createImgParagraph(item.img, maxW));
-    else if (item.type === "tb" && item.tbl) {
-      result.push(buildDocxTable(item.tbl));
-      result.push(new Paragraph({ children: [], spacing: { after: 120 } }));
-    }
-  }
-  return result;
-}
-
-// ========== Конвертация одного PDF в Word ==========
-
-async function convertOnePdfToWord(
-  file: File,
-  imgMode: ImageMode,
-  onProgress: (current: number, total: number, stage: string) => void,
-): Promise<{ blob: Blob; pages: number; paragraphs: number; images: number }> {
-  const ab = await file.arrayBuffer();
-  const doc = await pdfjs.getDocument({ data: ab }).promise;
-  const total = doc.numPages;
-  const allFS: number[] = [],
-    pagesData: PageContent[] = [];
-  let totalImgs = 0;
-
-  for (let i = 1; i <= total; i++) {
-    onProgress(i, total, `Страница ${i}/${total}`);
-    // Одна проблемная страница не должна ронять всю конвертацию.
-    try {
-      const page = await doc.getPage(i);
-      const vp = page.getViewport({ scale: 1.0 });
-      const ol = await page.getOperatorList();
-      const ti = await extractTextItems(page);
-      const { tables, usedItemIndexes } = detectTables(ol, ti);
-      const flowItems = usedItemIndexes.size
-        ? ti.filter((_, idx) => !usedItemIndexes.has(idx))
-        : ti;
-      const lines = groupIntoLines(flowItems);
-      const pd = detectPageDims(lines, { width: vp.width, height: vp.height });
-      const paras = groupIntoParagraphs(lines, pd);
-      for (const p of paras) for (const l of p.lines) allFS.push(l.fontSize);
-      let images: ExtractedImage[] = [];
-      if (imgMode === "extract") {
-        try {
-          images = await extractImagesFromPage(page, ol);
-          totalImgs += images.length;
-        } catch {}
-      } else if (imgMode === "render") {
-        const r = await renderPageAsImage(page, 2.0);
-        if (r) {
-          images = [r];
-          totalImgs++;
-        }
-      }
-      pagesData.push({ paragraphs: paras, images, tables, pageDims: pd });
-    } catch (e) {
-      console.warn(`Ошибка на странице ${i}:`, e);
-      pagesData.push({
-        paragraphs: [],
-        images: [],
-        tables: [],
-        pageDims: {
-          width: 612,
-          height: 792,
-          marginLeft: 72,
-          marginRight: 72,
-          contentWidth: 468,
-        },
-      });
-    }
-    await new Promise((r) => setTimeout(r, 0));
-  }
-
-  const bodyFS = allFS.length > 0 ? modeNum(allFS) : 12;
-  onProgress(total, total, "Сборка Word...");
-
-  const allP: (Paragraph | Table)[] = [];
-  let totalP = 0;
-  for (let i = 0; i < pagesData.length; i++) {
-    const { paragraphs, images, tables, pageDims } = pagesData[i];
-    const dp = mergeContent(paragraphs, images, tables, bodyFS, pageDims);
-    allP.push(...dp);
-    totalP += dp.length;
-    if (i < pagesData.length - 1 && dp.length > 0)
-      allP.push(new Paragraph({ children: [new PageBreak()] }));
-  }
-  if (!allP.length)
-    allP.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: "(Пустой документ)",
-            italics: true,
-            color: "999999",
-          }),
-        ],
-      }),
-    );
-
-  const wordDoc = new Document({
-    styles: {
-      default: { document: { run: { font: "Calibri", size: bodyFS * 2 } } },
-    },
-    sections: [
-      {
-        properties: {
-          page: {
-            margin: {
-              top: convertInchesToTwip(1),
-              bottom: convertInchesToTwip(1),
-              left: convertInchesToTwip(1),
-              right: convertInchesToTwip(1),
-            },
-          },
-        },
-        children: allP,
-      },
-    ],
-  });
-  const blob = await Packer.toBlob(wordDoc);
-  return { blob, pages: total, paragraphs: totalP, images: totalImgs };
 }
 
 // ==================== WORD → PDF УТИЛИТЫ (ИСПРАВЛЕННЫЕ) ====================
@@ -1106,6 +328,7 @@ const PdfToWord: React.FC = () => {
   const [isConverting, setIsConverting] = useState(false);
   const [error, setError] = useState("");
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("auto");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1197,13 +420,32 @@ const PdfToWord: React.FC = () => {
 
     try {
       if (mode === "pdf-to-word") {
-        const result = await convertOnePdfToWord(
-          item.file,
-          "extract",
-          (cur, total, stage) => {
-            updateFile(item.id, { progress: (cur / total) * 100, stage });
-          },
-        );
+        const data = await item.file.arrayBuffer();
+        const run = (password?: string) =>
+          convertPdfToDocx(data.slice(0), item.file.name.replace(/\.pdf$/i, ""), {
+            layout: layoutMode,
+            password,
+            onProgress: (cur, total, stage) => {
+              updateFile(item.id, { progress: (cur / total) * 100, stage });
+            },
+          });
+        let result: Awaited<ReturnType<typeof convertPdfToDocx>> | null = null;
+        let password: string | undefined;
+        while (!result) {
+          try {
+            result = await run(password);
+          } catch (e) {
+            if (!(e instanceof PdfPasswordError)) throw e;
+            const p = window.prompt(`${e.message}\nВведите пароль к файлу «${item.file.name}»:`, "");
+            if (p === null) throw new Error("PDF защищён паролем — пароль не введён.");
+            password = p;
+          }
+        }
+        const parts = [`${result.paragraphs} абз.`];
+        if (result.tables) parts.push(`${result.tables} табл.`);
+        if (result.images) parts.push(`${result.images} изобр.`);
+        if (result.scannedPages) parts.push(`${result.scannedPages} стр. — скан`);
+        if (result.designPages) parts.push(`${result.designPages} стр. — макетом`);
         updateFile(item.id, {
           status: "done",
           progress: 100,
@@ -1211,7 +453,7 @@ const PdfToWord: React.FC = () => {
           resultBlob: result.blob,
           resultSize: result.blob.size,
           pageCount: result.pages,
-          extraInfo: `${result.paragraphs} абз., ${result.images} изобр.`,
+          extraInfo: parts.join(", "),
         });
       } else {
         const result = await convertOneWordToPdf(item.file, (p, stage) => {
@@ -1227,12 +469,12 @@ const PdfToWord: React.FC = () => {
           extraInfo: "",
         });
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(`Error converting ${item.file.name}:`, err);
       updateFile(item.id, {
         status: "error",
         progress: 0,
-        errorMessage: err.message || "Ошибка",
+        errorMessage: (err instanceof Error && err.message) || "Ошибка",
       });
     }
   };
@@ -1537,25 +779,48 @@ const PdfToWord: React.FC = () => {
               <div className="info-content">
                 {mode === "pdf-to-word" ? (
                   <>
+                    <div className="p2w-mode" role="radiogroup" aria-label="Как переносить страницы">
+                      <span className="p2w-mode-title">Как переносить страницы</span>
+                      {(
+                        [
+                          ["auto", "Авто", "Документы — редактируемым текстом, презентации и буклеты — как в PDF"],
+                          ["flow", "Текстом", "Всё потоком: удобно править, оформление упрощается"],
+                          ["exact", "Как в PDF", "Фон страницы и текст в рамках на своих местах"],
+                        ] as [LayoutMode, string, string][]
+                      ).map(([id, label, hint]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          role="radio"
+                          aria-checked={layoutMode === id}
+                          className={`p2w-mode-btn ${layoutMode === id ? "active" : ""}`}
+                          onClick={() => setLayoutMode(id)}
+                          disabled={isConverting}
+                        >
+                          <strong>{label}</strong>
+                          <span>{hint}</span>
+                        </button>
+                      ))}
+                    </div>
                     <div className="info-item">
                       <span className="info-icon">✅</span>
                       <div className="info-text">
-                        <strong>Текст с форматированием</strong>
-                        <p>Жирный, курсив, заголовки, списки, отступы</p>
+                        <strong>Оформление как в PDF</strong>
+                        <p>Шрифты, жирный, курсив, подчёркивание, цвет, выравнивание, отступы, интервалы, колонтитулы с номерами страниц</p>
+                      </div>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-icon">📊</span>
+                      <div className="info-text">
+                        <strong>Таблицы, списки, колонки</strong>
+                        <p>Объединённые ячейки и заливка, таблицы без рамок, таблица через несколько страниц — одной таблицей; две-три колонки текста</p>
                       </div>
                     </div>
                     <div className="info-item">
                       <span className="info-icon">🖼️</span>
                       <div className="info-text">
-                        <strong>Изображения и таблицы</strong>
-                        <p>Картинки и таблицы с рамками распознаются автоматически</p>
-                      </div>
-                    </div>
-                    <div className="info-item">
-                      <span className="info-icon">📦</span>
-                      <div className="info-text">
-                        <strong>Пакетная обработка</strong>
-                        <p>Загрузите несколько PDF файлов сразу</p>
+                        <strong>Картинки и графики</strong>
+                        <p>Фото и векторные схемы, диаграммы — картинками на своих местах</p>
                       </div>
                     </div>
                   </>

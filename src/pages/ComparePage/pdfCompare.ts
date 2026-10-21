@@ -13,14 +13,11 @@
 // Скан без текстового слоя распознать нельзя — сообщаем об этом прямо.
 
 import * as pdfjs from "pdfjs-dist";
-import pdfWorkerContent from "pdfjs-dist/build/pdf.worker.mjs?raw";
+import { pdfWorkerUrl } from "../../utils/pdfWorker";
 import { detectTables, type TableTextItem } from "../PdfToWord/tableDetect";
 import type { DocBlock, WordDocModel } from "./wordCompare";
 
-if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-  const blob = new Blob([pdfWorkerContent], { type: "text/javascript" });
-  pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
-}
+if (!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl();
 
 interface Line {
   text: string;

@@ -9,13 +9,9 @@ import PageAnnotator, { type Annotation } from "./components/PageAnnotator";
 import "./PdfEditor.css";
 
 import * as pdfjs from "pdfjs-dist";
-import pdfWorkerContent from "pdfjs-dist/build/pdf.worker.mjs?raw";
+import { pdfWorkerUrl } from "../../utils/pdfWorker";
 
-const workerBlob = new Blob([pdfWorkerContent], {
-  type: "application/javascript",
-});
-const workerBlobUrl = URL.createObjectURL(workerBlob);
-pdfjs.GlobalWorkerOptions.workerSrc = workerBlobUrl;
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl();
 
 type LoadedFile = {
   file: File;
