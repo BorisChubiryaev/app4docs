@@ -267,7 +267,7 @@ function buildPara(lines: Line[], f: Flow, page: number): ParaBlock {
   let align: Align = "left";
   if (lines.every((l) => isCentered(l, f))) align = "center";
   else if (lines.every((l) => l.x1 > f.right - 2) && first.x0 > f.left + w * 0.25) align = "right";
-  else if (lines.length >= 2 && lines.slice(0, -1).every((l) => l.x1 > f.right - Math.max(2, l.size * 0.4))) align = "justify";
+  else if (lines.length >= 2 && lines.slice(0, -1).every((l) => l.x1 > f.right - Math.max(2, l.size * 0.5))) align = "justify";
 
   // Номер или маркер — список, только если текст после него выровнен
   // отдельно (выступ) или отбит заметным промежутком; «1.1. Текст…» с

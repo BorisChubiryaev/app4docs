@@ -444,7 +444,12 @@ const PdfToWord: React.FC = () => {
         const parts = [`${result.paragraphs} абз.`];
         if (result.tables) parts.push(`${result.tables} табл.`);
         if (result.images) parts.push(`${result.images} изобр.`);
-        if (result.scannedPages) parts.push(`${result.scannedPages} стр. — скан`);
+        if (result.scannedPages)
+          parts.push(
+            result.ocrError
+              ? `${result.scannedPages} стр. — скан картинкой (распознавание недоступно: ${result.ocrError})`
+              : `${result.scannedPages} стр. распознано`,
+          );
         if (result.designPages) parts.push(`${result.designPages} стр. — макетом`);
         updateFile(item.id, {
           status: "done",

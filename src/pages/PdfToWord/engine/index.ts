@@ -23,6 +23,8 @@ export interface ConvertResult {
   scannedPages: number;
   /** Страницы, перенесённые макетом (фон + текст в рамках). */
   designPages: number;
+  /** Почему не удалось распознать сканы (страницы тогда — картинками). */
+  ocrError: string | null;
 }
 
 /**
@@ -32,8 +34,8 @@ export interface ConvertResult {
 export type LayoutMode = "auto" | "flow" | "exact";
 
 export interface ConvertOptions {
-  /** Распознавание текста на сканах; без него скан вставляется картинкой. */
-  ocr?: (canvas: HTMLCanvasElement, page: number, onProgress: (p: number) => void) => Promise<PageRaw["items"] | null>;
+  /** Распознавать текст на сканах (по умолчанию да); иначе скан — картинкой. */
+  ocr?: boolean;
   onProgress: (done: number, total: number, stage: string) => void;
   layout?: LayoutMode;
   password?: string;
@@ -51,6 +53,92 @@ export class PdfPasswordError extends Error {
 async function blobBytes(c: HTMLCanvasElement, type: string, q?: number): Promise<Uint8Array | null> {
   const blob = await new Promise<Blob | null>((r) => c.toBlob(r, type, q));
   return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
+}
+
+/**
+ * Печати, подписи, логотипы и фото на скане: «чернила» вне распознанного
+ * текста, собранные в связные области. Тонкие длинные линии (рамки,
+ * подчёркивания) и мелкий мусор отбрасываются.
+ */
+function inkRegions(canvas: HTMLCanvasElement, scale: number, items: Item[], pageH: number): Box[] {
+  const cell = 4; // пт
+  const W = canvas.width;
+  const H = canvas.height;
+  const gw = Math.ceil(W / (cell * scale));
+  const gh = Math.ceil(H / (cell * scale));
+  const px = canvas.getContext("2d", { willReadFrequently: true })!.getImageData(0, 0, W, H).data;
+  const ink = new Uint8Array(gw * gh);
+  const step = Math.max(1, Math.floor(scale));
+  for (let gy = 0; gy < gh; gy++)
+    for (let gx = 0; gx < gw; gx++) {
+      let dark = 0;
+      let n = 0;
+      const x0 = Math.floor(gx * cell * scale);
+      const y0 = Math.floor(gy * cell * scale);
+      for (let y = y0; y < Math.min(H, y0 + cell * scale); y += step)
+        for (let x = x0; x < Math.min(W, x0 + cell * scale); x += step) {
+          const o = (y * W + x) * 4;
+          const r = px[o];
+          const g = px[o + 1];
+          const b = px[o + 2];
+          // Тёмное или цветное (синяя печать) — «чернила»
+          if (r + g + b < 560 || Math.max(r, g, b) - Math.min(r, g, b) > 60) dark++;
+          n++;
+        }
+      if (dark > n * 0.06) ink[gy * gw + gx] = 1;
+    }
+  // Текст не трогаем
+  for (const it of items) {
+    const x0 = Math.floor((it.x - 2) / cell);
+    const x1 = Math.ceil((it.x + it.width + 2) / cell);
+    const y0 = Math.floor((pageH - it.y - it.size * 0.85) / cell);
+    const y1 = Math.ceil((pageH - it.y + it.size * 0.3) / cell);
+    for (let y = Math.max(0, y0); y < Math.min(gh, y1); y++) for (let x = Math.max(0, x0); x < Math.min(gw, x1); x++) ink[y * gw + x] = 0;
+  }
+  // Связные области (с допуском в одну клетку)
+  const seen = new Uint8Array(gw * gh);
+  const out: Box[] = [];
+  for (let i = 0; i < ink.length; i++) {
+    if (!ink[i] || seen[i]) continue;
+    const stack = [i];
+    seen[i] = 1;
+    let minX = gw,
+      maxX = 0,
+      minY = gh,
+      maxY = 0,
+      count = 0;
+    while (stack.length) {
+      const k = stack.pop()!;
+      const x = k % gw;
+      const y = (k - x) / gw;
+      count++;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      for (let dy = -2; dy <= 2; dy++)
+        for (let dx = -2; dx <= 2; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+          const j = ny * gw + nx;
+          if (ink[j] && !seen[j]) {
+            seen[j] = 1;
+            stack.push(j);
+          }
+        }
+    }
+    const w = (maxX - minX + 1) * cell;
+    const h = (maxY - minY + 1) * cell;
+    // Мелочь, линии и почти пустые рамки — не картинки
+    if (w < 28 || h < 20 || count < 12 || count < ((maxX - minX + 1) * (maxY - minY + 1)) * 0.08) continue;
+    const box = { x0: minX * cell, x1: (maxX + 1) * cell, y1: pageH - minY * cell, y0: pageH - (maxY + 1) * cell };
+    // Внутри есть распознанный текст — это таблица или рамка, а не рисунок
+    const words = items.filter((it) => it.x + it.width / 2 > box.x0 && it.x + it.width / 2 < box.x1 && it.y > box.y0 && it.y < box.y1).length;
+    if (words > 2) continue;
+    out.push(box);
+  }
+  return out;
 }
 
 /** Вырезать область отрисованной страницы как картинку для Word. */
@@ -177,6 +265,8 @@ export async function convertPdfToDocx(data: ArrayBuffer, title: string, opts: C
     const fontChars = new Map<string, number>();
     const sizeChars = new Map<number, number>();
     let scanned = 0;
+    let ocrError: string | null = null;
+    const ocrPages = new Set<number>();
     let designed = 0;
     for (let i = 1; i <= total; i++) {
       opts.onProgress(total + i - 1, total * 2, `Страница ${i} из ${total}`);
@@ -184,9 +274,36 @@ export async function convertPdfToDocx(data: ArrayBuffer, title: string, opts: C
       let raw = await extractPage(page, i - 1);
       if (textless.has(i - 1) || (raw.items.length === 0 && raw.images.some((im) => im.fullPage))) {
         scanned++;
-        const ocrItems = opts.ocr ? await opts.ocr(raw.canvas, i, () => undefined) : null;
-        if (ocrItems && ocrItems.length) {
-          raw = { ...raw, items: ocrItems, images: raw.images.filter((im) => !im.fullPage) };
+        let ocr: import("./ocr").OcrPage | null = null;
+        if (opts.ocr !== false) {
+          const stage = (s: string) => opts.onProgress(total + i - 1, total * 2, `Страница ${i} из ${total}: ${s}`);
+          try {
+            const { recognizePage } = await import("./ocr");
+            // Для распознавания — около 300 точек на дюйм
+            const ocrScale = Math.min(4.2, 3000 / Math.max(raw.width, raw.height));
+            const big = await renderPage(page, ocrScale);
+            ocr = await recognizePage(big, ocrScale, raw.height, (s) => stage(s));
+            if (ocr.canvas !== big) big.width = 0;
+          } catch (e) {
+            ocrError ??= e instanceof Error ? e.message : String(e);
+          }
+        }
+        if (ocr && ocr.items.length) {
+          // Печати, подписи, фото со скана — картинками; линии — для таблиц
+          const regions = inkRegions(ocr.canvas, ocr.scale, ocr.items, raw.height);
+          raw.canvas.width = 0;
+          raw = {
+            ...raw,
+            items: ocr.items,
+            canvas: ocr.canvas,
+            scale: ocr.scale,
+            images: regions.map((b) => ({ ...b, fullPage: false })),
+            hSegs: ocr.hSegs,
+            vSegs: ocr.vSegs,
+            fills: [],
+            shapes: [],
+          };
+          ocrPages.add(i - 1);
         } else {
           // Скан без распознавания — страница целиком картинкой
           const img = await cropImage(raw, { x0: 0, y0: 0, x1: raw.width, y1: raw.height });
@@ -239,6 +356,39 @@ export async function convertPdfToDocx(data: ArrayBuffer, title: string, opts: C
       raw.canvas.height = 0;
       page.cleanup();
       await new Promise((r) => setTimeout(r, 0));
+    }
+
+    // Колонтитулы сканов: на распознанных страницах текста при первом проходе
+    // не было — ищем повторяющиеся первые/последние абзацы после раскладки
+    if (ocrPages.size >= 2) {
+      // Распознанный текст колонтитула «гуляет» («ООО»/«000»), поэтому
+      // сравниваем нечётко — по общим парам букв
+      const key = (b: Block | undefined) =>
+        b && b.kind === "para" ? b.runs.map((r) => r.text).join("").replace(/[^\p{L}]+/gu, "").toLowerCase().slice(0, 80) : "";
+      const pairs = (t: string) => {
+        const m = new Map<string, number>();
+        for (let i = 0; i + 1 < t.length; i++) m.set(t.slice(i, i + 2), (m.get(t.slice(i, i + 2)) ?? 0) + 1);
+        return m;
+      };
+      const similar = (a: string, b: string) => {
+        if (a.length < 4 || b.length < 4) return false;
+        const pa = pairs(a);
+        const pb = pairs(b);
+        let common = 0;
+        for (const [k, n] of pa) common += Math.min(n, pb.get(k) ?? 0);
+        return (2 * common) / (a.length - 1 + b.length - 1) >= 0.75;
+      };
+      const ocrLayouts = pages.filter((p) => ocrPages.has(p.index) && p.zones.length);
+      const edges = ocrLayouts.flatMap((p) => [key(firstBlock(p)), key(lastBlock(p))]).filter((k) => k.length >= 4);
+      const need = Math.max(2, Math.ceil(ocrLayouts.length * 0.6));
+      const repeated = (k: string) => k.length >= 4 && ocrLayouts.filter((p) => similar(k, key(firstBlock(p))) || similar(k, key(lastBlock(p)))).length >= need;
+      if (edges.length)
+        for (const p of ocrLayouts) {
+          const z0 = p.zones[0];
+          if (z0.blocks.length && repeated(key(z0.blocks[0]))) z0.blocks.shift();
+          const zl = p.zones[p.zones.length - 1];
+          if (zl.blocks.length && repeated(key(zl.blocks[zl.blocks.length - 1]))) zl.blocks.pop();
+        }
     }
 
     // ── Документ: поля, шрифт, склейка страниц ──
@@ -334,7 +484,7 @@ export async function convertPdfToDocx(data: ArrayBuffer, title: string, opts: C
         }
     }
     opts.onProgress(total * 2, total * 2, "Готово");
-    return { blob, pages: total, paragraphs, tables, images, scannedPages: scanned, designPages: designed };
+    return { blob, pages: total, paragraphs, tables, images, scannedPages: scanned, designPages: designed, ocrError };
   } finally {
     await doc.destroy();
   }

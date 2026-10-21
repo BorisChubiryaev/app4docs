@@ -36,3 +36,4 @@ __pycache__/
 *.pyc
 scripts/*.mjs
 !scripts/vendor-pdf2pptx.mjs
+!scripts/vendor-ocr.mjs

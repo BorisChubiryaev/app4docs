@@ -1,0 +1,41 @@
+{
+ "version": "tesseract7.0.0-core7.0.0-rus+eng",
+ "files": {
+  "rus": {
+   "parts": [
+    "e3d2fc47_0.txt"
+   ],
+   "size": 2679598,
+   "sha256": "f51f5edc992249ff9b70a227b22f242dfa47b2b1bbc7ae0ea74908640c101f6a"
+  },
+  "eng": {
+   "parts": [
+    "d9fdefad_0.txt"
+   ],
+   "size": 2952873,
+   "sha256": "45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91"
+  }
+ },
+ "chunks": {
+  "e3d2fc47_0.txt": {
+   "size": 5359196,
+   "sha256": "70682662b8653183ea0a6f6f7caeee2b59c2248a45637854e5d47e973fa3cf02"
+  },
+  "d9fdefad_0.txt": {
+   "size": 5905746,
+   "sha256": "89b2f38a79ecca74e2ce5383b7243d70bec6f820dc081af4951e420a7f4bc9ca"
+  }
+ },
+ "scripts": {
+  "worker": {
+   "file": "d2ee1745.js",
+   "size": 111307,
+   "sha256": "fc2c42c739aefe6eaf41404477114f6cb9a80eb7039f438b595f4e9b722d079d"
+  },
+  "core": {
+   "file": "908adbfc.js",
+   "size": 3899472,
+   "sha256": "c58b46a4c796c0b8afccf77591d5b875b6896b45d402bbce8caa6f5362447b38"
+  }
+ }
+}
