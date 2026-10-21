@@ -201,6 +201,8 @@ const BULLET_LIKE = /^[®©°•·*eoо◦●○▪■□➢➤»]$/u;
 export async function recognizePage(canvas: HTMLCanvasElement, scale: number, pageH: number, onProgress: OcrProgress): Promise<OcrPage> {
   const w = await ensureOcr(onProgress);
   onProgress("Распознаём текст…", 0);
+  // Разрешение известно — Tesseract не гадает (и не пишет об этом в консоль)
+  await w.setParameters({ user_defined_dpi: String(Math.round(scale * 72)) });
   const { data } = await withTimeout(
     w.recognize(canvas, { rotateAuto: true }, { blocks: true, text: false, imageColor: true }),
     300000,
