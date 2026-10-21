@@ -1,13 +1,11 @@
 // pages/PdfToWord/PdfToWord.tsx
 import React, { useState, useRef, useCallback } from "react";
 import * as pdfjs from "pdfjs-dist";
-import mammoth from "mammoth";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import { saveAs } from "file-saver";
 
 import { PdfToWordInstructionsModal } from "./components/PdfToWordInstructionsModal";
 import { convertPdfToDocx, PdfPasswordError, type LayoutMode } from "./engine";
+import { convertDocxToPdf } from "./word2pdf";
 
 import PageShell from "../../components/PageShell";
 import "./PdfToWord.css";
@@ -48,275 +46,6 @@ function pluralFiles(n: number): string {
   if (n === 1) return "файл";
   if (n >= 2 && n <= 4) return "файла";
   return "файлов";
-}
-
-// ==================== WORD → PDF УТИЛИТЫ (ИСПРАВЛЕННЫЕ) ====================
-
-async function wordToHtml(file: File): Promise<string> {
-  const ab = await file.arrayBuffer();
-  const result = await mammoth.convertToHtml(
-    { arrayBuffer: ab },
-    {
-      styleMap: [
-        "p[style-name='Heading 1'] => h1:fresh",
-        "p[style-name='Heading 2'] => h2:fresh",
-        "p[style-name='Heading 3'] => h3:fresh",
-        "b => strong",
-        "i => em",
-        "u => u",
-        "strike => s",
-      ],
-      convertImage: mammoth.images.imgElement((image) =>
-        image
-          .read("base64")
-          .then((buf) => ({ src: `data:${image.contentType};base64,${buf}` })),
-      ),
-    },
-  );
-  return result.value;
-}
-
-/**
- * ИСПРАВЛЕННАЯ генерация PDF — рендерим постранично, не режем картинки
- */
-async function htmlToPdf(
-  html: string,
-  onProgress?: (p: number) => void,
-): Promise<{ blob: Blob; pageCount: number }> {
-  // Размеры A4 в пикселях при 96 DPI
-  const PAGE_WIDTH_PX = 595;
-  const PAGE_HEIGHT_PX = 842;
-  const MARGIN_PX = 50;
-  const CONTENT_HEIGHT_PX = PAGE_HEIGHT_PX - MARGIN_PX * 2; // 742
-
-  // 1. Создаём контейнер с фиксированной шириной A4
-  const container = document.createElement("div");
-  container.style.cssText = `position:fixed;left:-9999px;top:0;width:${PAGE_WIDTH_PX}px;background:#fff;z-index:-9999;`;
-  container.innerHTML = `
-    <div id="__pdf_render_root" style="
-      font-family:'Times New Roman','Calibri','Arial',serif;
-      font-size:12pt;line-height:1.6;color:#000;background:#fff;
-      width:${PAGE_WIDTH_PX}px;padding:${MARGIN_PX}px;
-      box-sizing:border-box;word-wrap:break-word;
-    ">
-      <style>
-        h1{font-size:22pt;font-weight:bold;margin:20px 0 10px;page-break-after:avoid}
-        h2{font-size:17pt;font-weight:bold;margin:16px 0 8px;page-break-after:avoid}
-        h3{font-size:14pt;font-weight:bold;margin:14px 0 6px;page-break-after:avoid}
-        h4{font-size:12pt;font-weight:bold;margin:12px 0 4px;page-break-after:avoid}
-        p{margin:0 0 8px;text-align:justify}
-        ul,ol{margin:6px 0;padding-left:24px}
-        li{margin:3px 0}
-        table{border-collapse:collapse;width:100%;margin:10px 0}
-        td,th{border:1px solid #333;padding:5px 7px;font-size:11pt}
-        th{background:#f0f0f0;font-weight:bold}
-        img{max-width:100%;height:auto;margin:6px 0;page-break-inside:avoid}
-        strong,b{font-weight:bold}em,i{font-style:italic}
-        u{text-decoration:underline}s{text-decoration:line-through}
-        a{color:#0563C1;text-decoration:underline}
-        blockquote{margin:10px 0;padding:6px 14px;border-left:3px solid #ccc;color:#555}
-      </style>
-      ${html}
-    </div>
-  `;
-  document.body.appendChild(container);
-
-  try {
-    // Ждём загрузки картинок
-    const imgs = container.querySelectorAll("img");
-    if (imgs.length > 0) {
-      await Promise.allSettled(
-        Array.from(imgs).map(
-          (img) =>
-            new Promise<void>((r) => {
-              if (img.complete) r();
-              else {
-                img.onload = () => r();
-                img.onerror = () => r();
-                setTimeout(r, 3000);
-              }
-            }),
-        ),
-      );
-    }
-    await new Promise((r) => setTimeout(r, 150));
-    onProgress?.(5);
-
-    // 2. Получаем все дочерние блоки верхнего уровня
-    const root = container.querySelector("#__pdf_render_root") as HTMLElement;
-    const children = Array.from(root.children) as HTMLElement[];
-
-    // 3. Разбиваем блоки на страницы по высоте
-    type PageBlocks = { startIdx: number; endIdx: number }; // [startIdx, endIdx)
-    const pageBreaks: PageBlocks[] = [];
-    let currentPageStart = 0;
-    let accumulatedHeight = 0;
-
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i];
-      const rect = child.getBoundingClientRect();
-      const childH = rect.height;
-
-      // Если один блок больше страницы — он займёт свою страницу
-      if (childH > CONTENT_HEIGHT_PX) {
-        if (i > currentPageStart) {
-          pageBreaks.push({ startIdx: currentPageStart, endIdx: i });
-        }
-        pageBreaks.push({ startIdx: i, endIdx: i + 1 });
-        currentPageStart = i + 1;
-        accumulatedHeight = 0;
-        continue;
-      }
-
-      if (accumulatedHeight + childH > CONTENT_HEIGHT_PX) {
-        // Текущая страница заполнена — начинаем новую
-        pageBreaks.push({ startIdx: currentPageStart, endIdx: i });
-        currentPageStart = i;
-        accumulatedHeight = childH;
-      } else {
-        accumulatedHeight += childH;
-      }
-    }
-    // Последняя страница
-    if (currentPageStart < children.length) {
-      pageBreaks.push({ startIdx: currentPageStart, endIdx: children.length });
-    }
-
-    if (pageBreaks.length === 0) {
-      pageBreaks.push({ startIdx: 0, endIdx: children.length });
-    }
-
-    onProgress?.(15);
-
-    // 4. Рендерим каждую «страницу» отдельно
-    const pdf = new jsPDF("p", "mm", "a4");
-    const pdfW = 210; // мм
-    const pdfH = 297; // мм
-    const scale = 2;
-
-    for (let pageIdx = 0; pageIdx < pageBreaks.length; pageIdx++) {
-      const { startIdx, endIdx } = pageBreaks[pageIdx];
-
-      if (pageIdx > 0) pdf.addPage();
-
-      // Создаём временный контейнер только для блоков этой страницы
-      const pageContainer = document.createElement("div");
-      pageContainer.style.cssText = `
-        position:fixed;left:-9999px;top:0;
-        width:${PAGE_WIDTH_PX}px;background:#fff;z-index:-9999;
-        font-family:'Times New Roman','Calibri','Arial',serif;
-        font-size:12pt;line-height:1.6;color:#000;
-        padding:${MARGIN_PX}px;box-sizing:border-box;
-      `;
-
-      // Копируем стили
-      const styleEl = root.querySelector("style");
-      if (styleEl) pageContainer.appendChild(styleEl.cloneNode(true));
-
-      // Копируем нужные блоки
-      for (let i = startIdx; i < endIdx; i++) {
-        pageContainer.appendChild(children[i].cloneNode(true));
-      }
-
-      document.body.appendChild(pageContainer);
-
-      try {
-        await new Promise((r) => setTimeout(r, 50));
-
-        const canvas = await html2canvas(pageContainer, {
-          scale,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: "#ffffff",
-          logging: false,
-          width: PAGE_WIDTH_PX,
-          windowWidth: PAGE_WIDTH_PX,
-        });
-
-        const imgW = pdfW;
-        const imgH = (canvas.height * pdfW) / canvas.width;
-
-        if (imgH <= pdfH + 1) {
-          // Блок помещается на страницу — добавляем целиком, без искажений.
-          pdf.addImage(
-            canvas.toDataURL("image/jpeg", 0.92),
-            "JPEG",
-            0,
-            0,
-            imgW,
-            imgH,
-          );
-        } else {
-          // Блок выше страницы (например, большая таблица): режем растр по
-          // высоте на несколько страниц, СОХРАНЯЯ пропорции (не сжимаем).
-          const pxPerPage = Math.floor((canvas.width * pdfH) / pdfW);
-          let rendered = 0;
-          let firstSlice = true;
-          while (rendered < canvas.height) {
-            const sliceH = Math.min(pxPerPage, canvas.height - rendered);
-            const slice = document.createElement("canvas");
-            slice.width = canvas.width;
-            slice.height = sliceH;
-            const sctx = slice.getContext("2d");
-            if (sctx) {
-              sctx.fillStyle = "#ffffff";
-              sctx.fillRect(0, 0, slice.width, slice.height);
-              sctx.drawImage(
-                canvas,
-                0,
-                rendered,
-                canvas.width,
-                sliceH,
-                0,
-                0,
-                canvas.width,
-                sliceH,
-              );
-            }
-            if (!firstSlice) pdf.addPage();
-            pdf.addImage(
-              slice.toDataURL("image/jpeg", 0.92),
-              "JPEG",
-              0,
-              0,
-              imgW,
-              (sliceH * pdfW) / canvas.width,
-            );
-            rendered += sliceH;
-            firstSlice = false;
-          }
-        }
-      } finally {
-        document.body.removeChild(pageContainer);
-      }
-
-      onProgress?.(15 + ((pageIdx + 1) / pageBreaks.length) * 80);
-    }
-
-    onProgress?.(100);
-    const actualPages =
-      typeof pdf.getNumberOfPages === "function"
-        ? pdf.getNumberOfPages()
-        : pageBreaks.length;
-    return { blob: pdf.output("blob"), pageCount: actualPages };
-  } finally {
-    document.body.removeChild(container);
-  }
-}
-
-// ========== Конвертация одного Word в PDF ==========
-
-async function convertOneWordToPdf(
-  file: File,
-  onProgress: (progress: number, stage: string) => void,
-): Promise<{ blob: Blob; pageCount: number }> {
-  onProgress(5, "Чтение Word...");
-  const html = await wordToHtml(file);
-  onProgress(20, "Генерация PDF...");
-  const result = await htmlToPdf(html, (p) => {
-    onProgress(20 + p * 0.8, "Генерация PDF...");
-  });
-  return result;
 }
 
 // ==================== КОМПОНЕНТ ====================
@@ -461,7 +190,7 @@ const PdfToWord: React.FC = () => {
           extraInfo: parts.join(", "),
         });
       } else {
-        const result = await convertOneWordToPdf(item.file, (p, stage) => {
+        const result = await convertDocxToPdf(item.file, (p, stage) => {
           updateFile(item.id, { progress: p, stage });
         });
         updateFile(item.id, {
@@ -834,25 +563,22 @@ const PdfToWord: React.FC = () => {
                     <div className="info-item">
                       <span className="info-icon">📘</span>
                       <div className="info-text">
-                        <strong>Чтение .docx</strong>
-                        <p>Текст, стили, таблицы, изображения</p>
+                        <strong>Как в Word</strong>
+                        <p>Размер страниц и поля, шрифты, цвета, списки, картинки, колонтитулы с номерами страниц, альбомные разделы</p>
                       </div>
                     </div>
                     <div className="info-item">
                       <span className="info-icon">📑</span>
                       <div className="info-text">
-                        <strong>Умное разбиение</strong>
-                        <p>
-                          Страницы разбиваются по блокам — картинки не
-                          обрезаются
-                        </p>
+                        <strong>Аккуратные страницы</strong>
+                        <p>Таблицы переносятся по строкам с повтором шапки, абзацы — по строкам, заголовок не остаётся внизу страницы</p>
                       </div>
                     </div>
                     <div className="info-item">
-                      <span className="info-icon">📦</span>
+                      <span className="info-icon">🔎</span>
                       <div className="info-text">
-                        <strong>Пакетная обработка</strong>
-                        <p>Загрузите несколько Word файлов сразу</p>
+                        <strong>Текст в PDF ищется и копируется</strong>
+                        <p>Поверх изображения страницы — невидимый текстовый слой</p>
                       </div>
                     </div>
                   </>
@@ -877,14 +603,13 @@ const PdfToWord: React.FC = () => {
                 <div className="warning-text">
                   {mode === "pdf-to-word" ? (
                     <>
-                      <strong>Ограничения:</strong> Таблицы без видимых рамок,
-                      многоколоночная вёрстка и формы переносятся приближённо.
-                      Отсканированные PDF требуют OCR.
+                      <strong>Ограничения:</strong> сложные формы и нестандартные шрифты переносятся
+                      приближённо. Сканы распознаются (русский и английский) — проверьте важные цифры.
                     </>
                   ) : (
                     <>
-                      <strong>Поддержка:</strong> .docx (Word 2007+). SmartArt и
-                      фигуры отображаются упрощённо.
+                      <strong>Поддержка:</strong> .docx (Word 2007+). SmartArt, фигуры и надписи — упрощённо.
+                      Страницы PDF — изображения с текстовым слоем: поиск работает, править текст в PDF нельзя.
                     </>
                   )}
                 </div>
