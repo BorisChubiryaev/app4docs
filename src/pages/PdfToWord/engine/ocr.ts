@@ -198,13 +198,21 @@ const BULLET_LIKE = /^[®©°•·*eoо◦●○▪■□➢➤»]$/u;
  * Распознать отрисованную страницу. `scale` — пикселей на пункт PDF,
  * `pageH` — высота страницы в пунктах (Y в PDF растёт вверх).
  */
-export async function recognizePage(canvas: HTMLCanvasElement, scale: number, pageH: number, onProgress: OcrProgress): Promise<OcrPage> {
+export async function recognizePage(
+  canvas: HTMLCanvasElement,
+  scale: number,
+  pageH: number,
+  onProgress: OcrProgress,
+  // false — не выравнивать наклон: координаты слов совпадут с исходной
+  // страницей (нужно для невидимого текстового слоя поверх скана)
+  straighten = true,
+): Promise<OcrPage> {
   const w = await ensureOcr(onProgress);
   onProgress("Распознаём текст…", 0);
   // Разрешение известно — Tesseract не гадает (и не пишет об этом в консоль)
   await w.setParameters({ user_defined_dpi: String(Math.round(scale * 72)) });
   const { data } = await withTimeout(
-    w.recognize(canvas, { rotateAuto: true }, { blocks: true, text: false, imageColor: true }),
+    w.recognize(canvas, { rotateAuto: straighten }, { blocks: true, text: false, imageColor: straighten }),
     300000,
     "распознавание страницы заняло больше 5 минут",
   );

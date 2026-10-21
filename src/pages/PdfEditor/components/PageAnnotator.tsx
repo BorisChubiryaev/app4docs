@@ -1,5 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
+import SignatureLibrary from "./SignatureLibrary";
+import { ensureStudioFont } from "./studioFont";
 import "./PageAnnotator.css";
 
 /** Аннотация в НОРМАЛИЗОВАННЫХ координатах (0..1 от размеров страницы). */
@@ -28,6 +30,16 @@ export type Annotation =
   | {
       id: string;
       type: "highlight";
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      color: string;
+    }
+  | {
+      id: string;
+      /** Вымарывание: при сохранении содержимое под ним удаляется */
+      type: "redact";
       x: number;
       y: number;
       w: number;
@@ -66,6 +78,8 @@ type Tool =
   | "text"
   | "rect"
   | "highlight"
+  | "redact"
+  | "signature"
   | "image"
   | "draw"
   | "line"
@@ -81,13 +95,16 @@ const TOOLS: { id: Tool; icon: string; label: string }[] = [
   { id: "arrow", icon: "➤", label: "Стрелка" },
   { id: "rect", icon: "▭", label: "Прямоугольник" },
   { id: "highlight", icon: "🖍️", label: "Выделение" },
+  { id: "redact", icon: "⬛", label: "Вымарать (содержимое под рамкой удаляется)" },
   { id: "image", icon: "🖼️", label: "Картинка" },
+  { id: "signature", icon: "✍️", label: "Подпись или печать" },
 ];
 
 const isBox = (a: Annotation) =>
   a.type === "text" ||
   a.type === "rect" ||
   a.type === "highlight" ||
+  a.type === "redact" ||
   a.type === "image";
 
 interface Props {
@@ -103,7 +120,39 @@ const PageAnnotator: React.FC<Props> = ({
   onSave,
   onClose,
 }) => {
-  const [items, setItems] = useState<Annotation[]>(initial);
+  const [items, setItemsRaw] = useState<Annotation[]>(initial);
+  // Отмена внутри редактора: снимки списка; набор текста в одном поле —
+  // один шаг, а не по букве
+  const past = useRef<Annotation[][]>([]);
+  const future = useRef<Annotation[][]>([]);
+  const lastTextEdit = useRef<string | null>(null);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const setItems = (next: Annotation[] | ((prev: Annotation[]) => Annotation[]), textEditOf: string | null = null) => {
+    if (!(textEditOf && textEditOf === lastTextEdit.current)) {
+      past.current.push(itemsRef.current);
+      if (past.current.length > 100) past.current.shift();
+      future.current = [];
+    }
+    lastTextEdit.current = textEditOf;
+    setItemsRaw(next);
+  };
+  const undo = () => {
+    const prev = past.current.pop();
+    if (!prev) return;
+    future.current.push(itemsRef.current);
+    lastTextEdit.current = null;
+    setItemsRaw(prev);
+  };
+  const redo = () => {
+    const next = future.current.pop();
+    if (!next) return;
+    past.current.push(itemsRef.current);
+    lastTextEdit.current = null;
+    setItemsRaw(next);
+  };
+  const [showSignatures, setShowSignatures] = useState(false);
+  useEffect(ensureStudioFont, []);
   const [tool, setTool] = useState<Tool>("select");
   const [color, setColor] = useState("#e5484d");
   const [strokeWidth, setStrokeWidth] = useState(3);
@@ -135,8 +184,9 @@ const PageAnnotator: React.FC<Props> = ({
   }, []);
 
   const update = (id: string, patch: Partial<Annotation>) =>
-    setItems((prev) =>
-      prev.map((a) => (a.id === id ? ({ ...a, ...patch } as Annotation) : a)),
+    setItems(
+      (prev) => prev.map((a) => (a.id === id ? ({ ...a, ...patch } as Annotation) : a)),
+      "text" in patch && Object.keys(patch).length === 1 ? id : null,
     );
 
   const removeSelected = () => {
@@ -148,9 +198,18 @@ const PageAnnotator: React.FC<Props> = ({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      const el = document.activeElement;
+      const typing = !!el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT");
+      if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if ((e.ctrlKey || e.metaKey) && !typing && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redo();
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
-        const el = document.activeElement;
-        if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")) return;
+        if (typing) return;
         removeSelected();
       }
     };
@@ -231,6 +290,11 @@ const PageAnnotator: React.FC<Props> = ({
       fileInputRef.current?.click();
       return;
     }
+    if (tool === "signature") {
+      pendingImagePos.current = n;
+      setShowSignatures(true);
+      return;
+    }
     stageRef.current?.setPointerCapture(e.pointerId);
     if (tool === "draw") {
       drawingRef.current = [n];
@@ -267,7 +331,7 @@ const PageAnnotator: React.FC<Props> = ({
         color,
         strokeWidth,
       });
-    } else if (tool === "rect" || tool === "highlight") {
+    } else if (tool === "rect" || tool === "highlight" || tool === "redact") {
       const x = Math.min(s.x, n.x);
       const y = Math.min(s.y, n.y);
       const w = Math.abs(n.x - s.x);
@@ -275,7 +339,9 @@ const PageAnnotator: React.FC<Props> = ({
       setDraft(
         tool === "rect"
           ? { id: "draft", type: "rect", x, y, w, h, color, strokeWidth }
-          : { id: "draft", type: "highlight", x, y, w, h, color },
+          : tool === "redact"
+            ? { id: "draft", type: "redact", x, y, w, h, color: "#000000" }
+            : { id: "draft", type: "highlight", x, y, w, h, color },
       );
     }
   };
@@ -283,7 +349,7 @@ const PageAnnotator: React.FC<Props> = ({
   const onStagePointerUp = () => {
     if (draft) {
       const tiny =
-        (draft.type === "rect" || draft.type === "highlight") &&
+        (draft.type === "rect" || draft.type === "highlight" || draft.type === "redact") &&
         draft.w < 0.008 &&
         draft.h < 0.008;
       const dot =
@@ -301,31 +367,32 @@ const PageAnnotator: React.FC<Props> = ({
     // Инструмент НЕ сбрасываем — можно рисовать дальше
   };
 
+  const insertImage = (dataUrl: string, width: number, centered: boolean) => {
+    const img = new Image();
+    img.onload = () => {
+      const aspect = img.width / img.height || 1;
+      let w = width;
+      let h = (w * stage.w) / aspect / (stage.h || 1);
+      if (h > 0.5) {
+        h = 0.5;
+        w = (h * (stage.h || 1) * aspect) / (stage.w || 1);
+      }
+      const pos = pendingImagePos.current;
+      // Подпись ставим центром в точку клика, обычную картинку — углом
+      const x = Math.max(0, Math.min(1 - w, centered ? pos.x - w / 2 : pos.x));
+      const y = Math.max(0, Math.min(1 - h, centered ? pos.y - h / 2 : pos.y));
+      const a: Annotation = { id: uid(), type: "image", x, y, w, h, dataUrl };
+      setItems((prev) => [...prev, a]);
+      setSelectedId(a.id);
+    };
+    img.src = dataUrl;
+  };
+
   const onImagePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const aspect = img.width / img.height;
-        const w = 0.3;
-        const h = (w * stage.w) / aspect / (stage.h || 1);
-        const pos = pendingImagePos.current;
-        const a: Annotation = {
-          id: uid(),
-          type: "image",
-          x: pos.x,
-          y: pos.y,
-          w,
-          h,
-          dataUrl: reader.result as string,
-        };
-        setItems((prev) => [...prev, a]);
-        setSelectedId(a.id);
-      };
-      img.src = reader.result as string;
-    };
+    reader.onload = () => insertImage(reader.result as string, 0.3, false);
     reader.readAsDataURL(file);
     setTool("select");
     e.target.value = "";
@@ -404,6 +471,11 @@ const PageAnnotator: React.FC<Props> = ({
             style={{ background: a.color, opacity: 0.35 }}
           />
         )}
+        {a.type === "redact" && (
+          <div className="pa-fill pa-redact" title="Будет вымарано при сохранении">
+            вымарать
+          </div>
+        )}
         {a.type === "image" && (
           <img className="pa-img" src={a.dataUrl} alt="" draggable={false} />
         )}
@@ -418,14 +490,16 @@ const PageAnnotator: React.FC<Props> = ({
 
   // Черновик box-фигур (live) — прямоугольник / выделение
   const draftBox =
-    draft && (draft.type === "rect" || draft.type === "highlight") ? draft : null;
+    draft && (draft.type === "rect" || draft.type === "highlight" || draft.type === "redact")
+      ? draft
+      : null;
 
   const showStroke =
     ["draw", "line", "arrow", "rect"].includes(tool) ||
     (selected != null &&
       ["draw", "line", "arrow", "rect"].includes(selected.type));
   const showFont = tool === "text" || selected?.type === "text";
-  const curColor = selected?.color ?? color;
+  const curColor = selected && "color" in selected ? selected.color : color;
   const curStroke =
     selected && "strokeWidth" in selected ? selected.strokeWidth : strokeWidth;
   const curFont =
@@ -441,7 +515,13 @@ const PageAnnotator: React.FC<Props> = ({
                 key={t.id}
                 className={`pa-tool ${tool === t.id ? "is-active" : ""}`}
                 title={t.label}
-                onClick={() => setTool(t.id)}
+                onClick={() => {
+                  setTool(t.id);
+                  if (t.id === "signature") {
+                    pendingImagePos.current = { x: 0.5, y: 0.5 };
+                    setShowSignatures(true);
+                  }
+                }}
               >
                 {t.icon}
               </button>
@@ -480,6 +560,22 @@ const PageAnnotator: React.FC<Props> = ({
                 />
               </label>
             )}
+            <button
+              className="pa-tool"
+              onClick={undo}
+              title="Отменить (Ctrl/cmd + Z)"
+              disabled={!past.current.length}
+            >
+              ↶
+            </button>
+            <button
+              className="pa-tool"
+              onClick={redo}
+              title="Повторить (Ctrl/cmd + Shift + Z)"
+              disabled={!future.current.length}
+            >
+              ↷
+            </button>
             {selectedId && (
               <button
                 className="pa-danger"
@@ -532,8 +628,11 @@ const PageAnnotator: React.FC<Props> = ({
                   background:
                     draftBox.type === "highlight"
                       ? draftBox.color
-                      : "transparent",
-                  opacity: draftBox.type === "highlight" ? 0.35 : 1,
+                      : draftBox.type === "redact"
+                        ? "#000"
+                        : "transparent",
+                  opacity:
+                    draftBox.type === "highlight" ? 0.35 : draftBox.type === "redact" ? 0.75 : 1,
                 }}
               />
             )}
@@ -609,6 +708,19 @@ const PageAnnotator: React.FC<Props> = ({
         onChange={onImagePicked}
         style={{ display: "none" }}
       />
+      {showSignatures && (
+        <SignatureLibrary
+          onPick={(url) => {
+            setShowSignatures(false);
+            setTool("select");
+            insertImage(url, 0.25, true);
+          }}
+          onClose={() => {
+            setShowSignatures(false);
+            setTool("select");
+          }}
+        />
+      )}
     </div>
   );
 };
