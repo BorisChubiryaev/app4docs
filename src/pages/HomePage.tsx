@@ -71,7 +71,6 @@ const ToolCard = memo(({ tool, index }) => (
     </div>
     <h3 className="lg-card__title">
       {tool.title}
-      {tool.isNew && <span className="cvx-new-badge">Новинка</span>}
     </h3>
     <p className="lg-card__desc">{tool.description}</p>
     <ul className="lg-card__tags">
@@ -219,11 +218,24 @@ type Tool = {
 
 const tools: Tool[] = [
   {
+    title: "Графический редактор",
+    path: "/ImageEditor",
+    description:
+      "Слои, маски, выделения, удаление фона и коррекция — редактор изображений прямо в браузере",
+    icon: "🎨",
+    isNew: true,
+    features: [
+      "Слои с режимами наложения и масками, PSD со слоями",
+      "Удаление фона, волшебная палочка, лассо, кадрирование",
+      "Кисть, штамп, градиент, текст, фигуры, фильтры",
+    ],
+  },
+  {
     title: "PDF → PowerPoint",
     path: "/PdfToPptx",
     description:
       "Редактируемая презентация из PDF: текст, картинки и фигуры — как в оригинале",
-    icon: "📊",
+    icon: "🌀",
     isNew: true,
     features: [
       "Слайд того же размера на каждую страницу",
@@ -273,13 +285,13 @@ const tools: Tool[] = [
     title: "PDF Studio",
     path: "/PdfEditor",
     description:
-      "Всё для работы со страницами PDF в одном месте — объединение, порядок, подписи, распознавание, сжатие",
+      "Всё для работы со страницами PDF в одном месте — объединение, порядок, повороты, сжатие",
     icon: "📄",
     features: [
-      "Объединение и разделение по правилу, архивом",
-      "Подпись и печать, вымарывание персональных данных",
-      "Сканы → PDF с поиском по тексту, заполнение форм",
-      "Номера страниц, водяной знак, сжатие, отмена любых действий",
+      "Объединение и разделение PDF-файлов",
+      "Перемещение, удаление и поворот страниц",
+      "Сжатие PDF для уменьшения размера",
+      "Drag & Drop загрузка страниц",
     ],
   },
   {
@@ -312,11 +324,12 @@ const tools: Tool[] = [
     description: "PDF ↔ Word — конвертируйте в обе стороны, прямо в браузере",
     icon: "🔄",
     features: [
-      "PDF → Word: шрифты, таблицы, колонки, колонтитулы",
-      "Распознавание сканов (русский и английский)",
-      "Word → PDF с колонтитулами и поиском по тексту",
+      "PDF → Word с сохранением форматирования",
+      "Word → PDF с разбиением по страницам",
+      "Три режима обработки изображений",
       "Пакетная обработка нескольких файлов",
     ],
+    note: "Не подходит для документов со сложными таблицами",
   },
   {
     title: "Объединение изменений в оферту",
@@ -968,7 +981,6 @@ const MenuLayout = memo(() => {
           >
             <span className="hp-menu__ico">{tool.icon}</span>
             <span className="hp-menu__name">{tool.title}</span>
-            {tool.isNew && <span className="cvx-new-badge">Новинка</span>}
           </Link>
         ))}
       </nav>
@@ -1000,7 +1012,6 @@ const MenuLayout = memo(() => {
           <div className="hp-menu__detail-icon">{t.icon}</div>
           <h2 className="hp-menu__detail-title">
             {t.title}
-            {t.isNew && <span className="cvx-new-badge">Новинка</span>}
           </h2>
           <TypedDescription desc={t.description} features={t.features} />
           {t.note && (
@@ -1030,7 +1041,6 @@ const ListLayout = memo(() => (
         <span className="hp-list__text">
           <span className="hp-list__title">
             {tool.title}
-            {tool.isNew && <span className="cvx-new-badge">Новинка</span>}
           </span>
           <span className="hp-list__desc">{tool.description}</span>
         </span>
