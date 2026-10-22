@@ -11,6 +11,7 @@ import React, {
 import type { ExcelSheet } from "../../../types/sheet.types";
 import {
   compareSheets,
+  type AlignedRow,
   type CellDiff,
   type CompareOptions,
   type DiffKind,
@@ -67,14 +68,24 @@ const lowerBound = (arr: number[], target: number): number => {
   return lo;
 };
 
+/** Адрес различия: «B12» или «B12 → B11», если строка сместилась. */
+const diffAddress = (row: AlignedRow, c: number): string => {
+  if (row.a !== null && row.a === row.b) return cellAddress(row.a, c);
+  const a = row.a === null ? "—" : cellAddress(row.a, c);
+  const b = row.b === null ? "—" : cellAddress(row.b, c);
+  return `${a} → ${b}`;
+};
+
 // ─────────────────────────── Виртуальная таблица листа ───────────────────────────
 
 interface GridPaneProps {
   sheet: ExcelSheet;
   side: 1 | 2;
   title: string;
-  /** Номера строк листа (0-based) в порядке показа; null — все подряд. */
+  /** Номера строк сравнения в порядке показа; null — все подряд. */
   rows: number[] | null;
+  /** Строка сравнения → строка этого листа (null — в этом файле её нет). */
+  srcRow: (r: number) => number | null;
   totalRows: number;
   cols: number[];
   colLabel: (c: number) => string;
@@ -93,6 +104,7 @@ const GridPane = memo(function GridPane({
   side,
   title,
   rows,
+  srcRow,
   totalRows,
   cols,
   colLabel,
@@ -127,15 +139,20 @@ const GridPane = memo(function GridPane({
   const body: React.ReactNode[] = [];
   for (let i = firstRow; i < lastRow; i++) {
     const r = rows ? rows[i] : i;
+    const sr = srcRow(r);
     body.push(
-      <tr key={r} style={{ height: ROW_H }}>
-        <th className="xc-rownum" scope="row">
-          {r + 1}
+      <tr key={r} style={{ height: ROW_H }} className={sr === null ? "xc-row--gap" : undefined}>
+        <th
+          className="xc-rownum"
+          scope="row"
+          title={sr === null ? (side === 1 ? "Этой строки нет в файле 1 — она добавлена" : "Этой строки нет в файле 2 — она удалена") : undefined}
+        >
+          {sr === null ? "—" : sr + 1}
         </th>
         {padLeft > 0 && <td className="xc-pad" />}
         {visibleCols.map((c) => {
-          const kind = kindAt(r, c);
-          const text = displayCell(sheet, r, c);
+          const kind = sr === null ? undefined : kindAt(r, c);
+          const text = sr === null ? "" : displayCell(sheet, sr, c);
           const isFocus = focus !== null && focus.r === r && focus.c === c;
           return (
             <td
@@ -211,6 +228,7 @@ const GridPane = memo(function GridPane({
 
 interface DiffListProps {
   diffs: CellDiff[];
+  aligned: AlignedRow[];
   sheet1: ExcelSheet;
   sheet2: ExcelSheet;
   colLabel: (c: number) => string;
@@ -221,6 +239,7 @@ interface DiffListProps {
 
 const DiffList = memo(function DiffList({
   diffs,
+  aligned,
   sheet1,
   sheet2,
   colLabel,
@@ -247,8 +266,9 @@ const DiffList = memo(function DiffList({
   const rows: React.ReactNode[] = [];
   for (let i = first; i < last; i++) {
     const d = diffs[i];
-    const v1 = displayCell(sheet1, d.r, d.c);
-    const v2 = displayCell(sheet2, d.r, d.c);
+    const row = aligned[d.r];
+    const v1 = row.a === null ? "" : displayCell(sheet1, row.a, d.c);
+    const v2 = row.b === null ? "" : displayCell(sheet2, row.b, d.c);
     rows.push(
       <tr
         key={i}
@@ -257,7 +277,7 @@ const DiffList = memo(function DiffList({
         onClick={() => onPick(i)}
         title="Показать в таблицах"
       >
-        <td className="xc-list__addr">{cellAddress(d.r, d.c)}</td>
+        <td className="xc-list__addr">{diffAddress(row, d.c)}</td>
         <td className="xc-list__col">{colLabel(d.c)}</td>
         <td>
           <span className={`xc-kind xc-kind--${d.kind}`}>
@@ -283,7 +303,7 @@ const DiffList = memo(function DiffList({
     >
       <table className="xc-list__table">
         <colgroup>
-          <col style={{ width: 90 }} />
+          <col style={{ width: 120 }} />
           <col style={{ width: "22%" }} />
           <col style={{ width: 120 }} />
           <col />
@@ -326,6 +346,7 @@ const ExcelCompareView: React.FC<Props> = ({
   // Параметры сравнения
   const [ignoreCase, setIgnoreCase] = useState(false);
   const [ignoreSpaces, setIgnoreSpaces] = useState(false);
+  const [alignRowsOpt, setAlignRows] = useState(true);
 
   // Фильтры
   const [kinds, setKinds] = useState<Set<DiffKind>>(() => new Set(KINDS));
@@ -344,8 +365,8 @@ const ExcelCompareView: React.FC<Props> = ({
   const [focus, setFocus] = useState<{ r: number; c: number } | null>(null);
 
   const options: CompareOptions = useMemo(
-    () => ({ ignoreCase, ignoreSpaces }),
-    [ignoreCase, ignoreSpaces],
+    () => ({ ignoreCase, ignoreSpaces, alignRows: alignRowsOpt }),
+    [ignoreCase, ignoreSpaces, alignRowsOpt],
   );
   const result = useMemo(
     () => compareSheets(sheet1, sheet2, options),
@@ -389,9 +410,11 @@ const ExcelCompareView: React.FC<Props> = ({
       if (!kinds.has(d.kind)) return false;
       if (column !== null && d.c !== column) return false;
       if (q) {
-        if (cellAddress(d.r, d.c).toLowerCase() === q) return true;
-        const v1 = displayCell(sheet1, d.r, d.c).toLowerCase();
-        const v2 = displayCell(sheet2, d.r, d.c).toLowerCase();
+        const row = result.rows[d.r];
+        if (row.a !== null && cellAddress(row.a, d.c).toLowerCase() === q) return true;
+        if (row.b !== null && cellAddress(row.b, d.c).toLowerCase() === q) return true;
+        const v1 = row.a === null ? "" : displayCell(sheet1, row.a, d.c).toLowerCase();
+        const v2 = row.b === null ? "" : displayCell(sheet2, row.b, d.c).toLowerCase();
         if (!v1.includes(q) && !v2.includes(q)) return false;
       }
       return true;
@@ -409,6 +432,8 @@ const ExcelCompareView: React.FC<Props> = ({
     (r: number, c: number) => kindByCell.get(r * result.colCount + c),
     [kindByCell, result.colCount],
   );
+  const srcRow1 = useCallback((r: number) => result.rows[r]?.a ?? null, [result]);
+  const srcRow2 = useCallback((r: number) => result.rows[r]?.b ?? null, [result]);
 
   // Строки и колонки, которые показываем в таблицах.
   const diffRows = useMemo(() => {
@@ -579,7 +604,7 @@ const ExcelCompareView: React.FC<Props> = ({
         <span className="xc-identical__icon">✅</span>
         <div>
           <strong>Листы идентичны.</strong>{" "}
-          Сравнено {fmtN(result.rowCount)} строк × {fmtN(result.colCount)} колонок
+          Сравнено {fmtN(Math.max(sheet1.rowCount, sheet2.rowCount))} строк × {fmtN(result.colCount)} колонок
           {(ignoreCase || ignoreSpaces) && " с учётом выбранных параметров"}.
           {(ignoreCase || ignoreSpaces) && (
             <button
@@ -605,6 +630,12 @@ const ExcelCompareView: React.FC<Props> = ({
           <strong>{fmtN(total)}</strong> {plural(total, DIFFS)} в{" "}
           <strong>{fmtN(changedRows)}</strong>{" "}
           {changedRows % 10 === 1 && changedRows % 100 !== 11 ? "строке" : "строках"}
+          {(result.rowsRemoved > 0 || result.rowsAdded > 0) && (
+            <span className="xc-summary__rows">
+              {" "}· строк удалено: <strong>{fmtN(result.rowsRemoved)}</strong>, добавлено:{" "}
+              <strong>{fmtN(result.rowsAdded)}</strong>
+            </span>
+          )}
           {filtersActive && (
             <span className="xc-summary__filtered">
               · показано {fmtN(filtered.length)}
@@ -736,6 +767,17 @@ const ExcelCompareView: React.FC<Props> = ({
             Строка 1 — заголовки
           </label>
           <span className="xc-sep" />
+          <label
+            className="xc-check"
+            title="Удалённая или вставленная строка не сдвигает сравнение всех строк ниже: строки сопоставляются по содержимому"
+          >
+            <input
+              type="checkbox"
+              checked={alignRowsOpt}
+              onChange={(e) => setAlignRows(e.target.checked)}
+            />
+            Учитывать вставленные и удалённые строки
+          </label>
           <label className="xc-check" title="«Москва» и «МОСКВА» считаются одинаковыми">
             <input
               type="checkbox"
@@ -776,8 +818,8 @@ const ExcelCompareView: React.FC<Props> = ({
         </button>
         <span className="xc-nav__pos">
           {activeIndex >= 0 && filtered[activeIndex]
-            ? `${fmtN(activeIndex + 1)} из ${fmtN(filtered.length)} · ${cellAddress(
-                filtered[activeIndex].r,
+            ? `${fmtN(activeIndex + 1)} из ${fmtN(filtered.length)} · ${diffAddress(
+                result.rows[filtered[activeIndex].r],
                 filtered[activeIndex].c,
               )}`
             : `${fmtN(filtered.length)} ${plural(filtered.length, DIFFS)}`}
@@ -813,6 +855,7 @@ const ExcelCompareView: React.FC<Props> = ({
             focus={focus}
             height={contentH}
             scrollRef={pane1}
+            srcRow={srcRow1}
             onScroll={handleScroll}
             scrollTop={scroll1.top}
             scrollLeft={scroll1.left}
@@ -830,6 +873,7 @@ const ExcelCompareView: React.FC<Props> = ({
             focus={focus}
             height={contentH}
             scrollRef={pane2}
+            srcRow={srcRow2}
             onScroll={handleScroll}
             scrollTop={scroll2.top}
             scrollLeft={scroll2.left}
@@ -839,6 +883,7 @@ const ExcelCompareView: React.FC<Props> = ({
       ) : (
         <DiffList
           diffs={filtered}
+          aligned={result.rows}
           sheet1={sheet1}
           sheet2={sheet2}
           colLabel={colLabel}

@@ -508,3 +508,19 @@
   outline: 2px solid var(--xc-focus);
   outline-offset: -2px;
 }
+
+/* Строка, которой нет в этом файле (удалена или добавлена) */
+.xc-summary__rows {
+  color: var(--xc-muted);
+  margin-left: 6px;
+}
+.xc-grid tr.xc-row--gap td:not(.xc-pad) {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    rgba(127, 127, 127, 0.14) 6px 8px
+  );
+}
+.xc-grid tr.xc-row--gap .xc-rownum {
+  color: var(--xc-muted);
+}
