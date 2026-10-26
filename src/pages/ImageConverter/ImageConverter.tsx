@@ -25,6 +25,12 @@ import {
   hasAnyTarget,
   type IconPackOptions,
 } from "./core/iconPack";
+import BackgroundRemover, {
+  composeResult,
+  computeMask,
+  loadAi,
+  workingCopy,
+} from "./components/BackgroundRemover";
 import "./ImageConverter.css";
 
 /** Куда конвертируем: многостраничный PDF или растровый формат. */
@@ -44,6 +50,8 @@ interface ImageFile {
   height: number;
   /** Тип источника для подписи (SVG/PDF/PSD и т.п.). */
   sourceLabel?: string;
+  /** Исходник до удаления фона (чтобы можно было вернуть). */
+  original?: DecodedRaster;
   status: "pending" | "converting" | "done" | "error";
   error?: string;
 }
@@ -184,6 +192,12 @@ const ImageConverter: React.FC = () => {
   const [editingNameIndex, setEditingNameIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showInstructions, setShowInstructions] = useState(false);
+
+  // ─── Удаление фона ───
+  const [bgTargetId, setBgTargetId] = useState<string | null>(null);
+  const [bgBulk, setBgBulk] = useState<{ done: number; total: number; text: string; fraction: number } | null>(null);
+  const [bgNotice, setBgNotice] = useState<string | null>(null);
+  const bgCancel = useRef(false);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -1391,6 +1405,87 @@ const ImageConverter: React.FC = () => {
     }
   };
 
+  // ─── Удаление фона ───
+
+  /** Заменить растр изображения результатом удаления фона. */
+  const applyBackgroundResult = async (id: string, canvas: HTMLCanvasElement) => {
+    const current = images.find((i) => i.id === id);
+    if (!current) return;
+    const raster: DecodedRaster = {
+      canvas,
+      width: canvas.width,
+      height: canvas.height,
+      name: current.raster.name,
+    };
+    const previewUrl = await rasterToPreviewUrl(raster);
+    setImages((prev) =>
+      prev.map((img) => {
+        if (img.id !== id) return img;
+        URL.revokeObjectURL(img.previewUrl);
+        return {
+          ...img,
+          raster,
+          previewUrl,
+          width: raster.width,
+          height: raster.height,
+          original: img.original ?? img.raster,
+        };
+      }),
+    );
+    // Прозрачность сохраняют только PNG, WEBP и ICO
+    if (outputFormat === "jpeg" || outputFormat === "bmp") {
+      changeOutputFormat("png");
+      setBgNotice("Формат переключён на PNG, чтобы сохранить прозрачный фон. JPEG и BMP прозрачность не поддерживают.");
+    }
+  };
+
+  const revertBackground = async (id: string) => {
+    const img = images.find((i) => i.id === id);
+    if (!img?.original) return;
+    const raster = img.original;
+    const previewUrl = await rasterToPreviewUrl(raster);
+    setImages((prev) =>
+      prev.map((it) => {
+        if (it.id !== id) return it;
+        URL.revokeObjectURL(it.previewUrl);
+        return { ...it, raster, previewUrl, width: raster.width, height: raster.height, original: undefined };
+      }),
+    );
+  };
+
+  /** Нейросетью у всех изображений, где фон ещё не убран. */
+  const removeBackgroundAll = async () => {
+    const targets = images.filter((i) => !i.original);
+    if (!targets.length) return;
+    bgCancel.current = false;
+    setBgBulk({ done: 0, total: targets.length, text: "Готовим…", fraction: 0 });
+    const failed: string[] = [];
+    try {
+      await loadAi((text, fraction) => setBgBulk((b) => b && { ...b, text, fraction }));
+      for (let i = 0; i < targets.length; i++) {
+        if (bgCancel.current) break;
+        const img = targets[i];
+        setBgBulk((b) => b && { ...b, done: i, text: `Изображение ${i + 1} из ${targets.length}: ${img.customName}`, fraction: 1 });
+        await new Promise((r) => setTimeout(r, 20));
+        try {
+          const src = workingCopy(img.raster.canvas);
+          const mask = await computeMask(src, { mode: "ai", tolerance: 30, feather: 1, cleanup: true });
+          await applyBackgroundResult(img.id, composeResult(src, mask, { kind: "transparent" }, false));
+        } catch (err) {
+          console.error("Удаление фона:", img.name, err);
+          failed.push(img.customName);
+        }
+      }
+      if (failed.length) setError(`Не удалось убрать фон: ${failed.join(", ")}`);
+    } catch (err) {
+      setError(`Нейросеть не загрузилась: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBgBulk(null);
+    }
+  };
+
+  const bgTarget = bgTargetId ? images.find((i) => i.id === bgTargetId) : undefined;
+
   const clearAll = () => {
     images.forEach((img) => URL.revokeObjectURL(img.previewUrl));
     setImages([]);
@@ -1626,6 +1721,15 @@ const ImageConverter: React.FC = () => {
           </div>
         )}
 
+        {bgNotice && (
+          <div className="bg-notice">
+            <span>ℹ️ {bgNotice}</span>
+            <button onClick={() => setBgNotice(null)} className="error-close">
+              ✕
+            </button>
+          </div>
+        )}
+
         {images.length > 0 && (
           <div className="images-section">
             <div className="images-header">
@@ -1642,6 +1746,14 @@ const ImageConverter: React.FC = () => {
                     👁️ Предпросмотр
                   </button>
                 )}
+                <button
+                  onClick={removeBackgroundAll}
+                  disabled={!!bgBulk || images.every((i) => i.original)}
+                  className="btn-settings"
+                  title="Убрать фон нейросетью у всех изображений (доправить можно у каждого отдельно кнопкой ✂️)"
+                >
+                  ✂️ Убрать фон у всех
+                </button>
                 <button
                   onClick={() => setShowSettings(!showSettings)}
                   className="btn-settings"
@@ -2478,8 +2590,9 @@ const ImageConverter: React.FC = () => {
                   onDrop={(e) => handleDropCard(e, index)}
                   onDragEnd={handleDragEnd}
                 >
-                  <div className="image-preview">
+                  <div className={`image-preview ${image.original ? "image-preview--cut" : ""}`}>
                     <img src={image.previewUrl} alt={image.name} />
+                    {image.original && <span className="bg-cut-badge">без фона</span>}
                     <div
                       className="drag-handle"
                       title="Перетащите для изменения порядка"
@@ -2539,6 +2652,22 @@ const ImageConverter: React.FC = () => {
                     >
                       ↓
                     </button>
+                    <button
+                      onClick={() => setBgTargetId(image.id)}
+                      className="btn-move"
+                      title="Убрать фон"
+                    >
+                      ✂️
+                    </button>
+                    {image.original && (
+                      <button
+                        onClick={() => revertBackground(image.id)}
+                        className="btn-move"
+                        title="Вернуть исходник (с фоном)"
+                      >
+                        ↺
+                      </button>
+                    )}
                     <button
                       onClick={() => removeImage(image.id)}
                       className="btn-remove"
@@ -2613,6 +2742,46 @@ const ImageConverter: React.FC = () => {
             </div>
           </div>
         )}
+      {bgTarget && (
+        <BackgroundRemover
+          key={bgTarget.id}
+          // Повторное удаление — всегда от исходника, а не от уже вырезанного
+          source={(bgTarget.original ?? bgTarget.raster).canvas}
+          name={bgTarget.customName}
+          onApply={({ canvas }) => {
+            const id = bgTarget.id;
+            setBgTargetId(null);
+            applyBackgroundResult(id, canvas);
+          }}
+          onClose={() => setBgTargetId(null)}
+        />
+      )}
+      {bgBulk && (
+        <div className="bgr-overlay">
+          <div className="bgr-bulk">
+            <h3>✂️ Удаление фона</h3>
+            <p>{bgBulk.text}</p>
+            <div className="bgr-progress">
+              <div
+                style={{
+                  width: `${Math.round(
+                    (bgBulk.fraction < 1 ? bgBulk.fraction : (bgBulk.done + 0.5) / bgBulk.total) * 100,
+                  )}%`,
+                }}
+              />
+            </div>
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                bgCancel.current = true;
+                setBgBulk((b) => b && { ...b, text: "Останавливаем после текущего изображения…" });
+              }}
+            >
+              Остановить
+            </button>
+          </div>
+        </div>
+      )}
       <ImageConverterInstructions
         isOpen={showInstructions}
         onClose={() => setShowInstructions(false)}

@@ -37,3 +37,4 @@ __pycache__/
 scripts/*.mjs
 !scripts/vendor-pdf2pptx.mjs
 !scripts/vendor-ocr.mjs
+!scripts/vendor-aibg.mjs

@@ -271,13 +271,13 @@ const tools: Tool[] = [
     title: "Универсальный конвертер изображений",
     path: "/ImageConverter",
     description:
-      "SVG, PNG, JPG, WebP, GIF, BMP, PDF, PSD → PNG, JPEG, WebP, BMP, ICO или PDF — прямо в браузере",
+      "SVG, PNG, JPG, WebP, GIF, BMP, PDF, PSD → PNG, JPEG, WebP, BMP, ICO или PDF, удаление фона — прямо в браузере",
     icon: "🖼️",
     features: [
       "Форматы дизайнеров: SVG, PDF, PSD на вход",
       "Экспорт в PNG, JPEG, WebP, BMP, ICO и PDF",
+      "Удаление фона нейросетью — офлайн",
       "Сборка PDF: сетка, нумерация, подписи, порядок",
-      "Настройка размера, фона и качества",
       "Полностью офлайн — без сервера и интернета",
     ],
   },
