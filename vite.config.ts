@@ -34,5 +34,10 @@ export default defineConfig({
   // Добавляем только это:
   optimizeDeps: {
     exclude: ['pdfjs-dist'],
+    // Зависимости фоновых потоков Vite не видит при старте и находит только
+    // при первом запуске потока — тогда он пересобирает их и перезагружает
+    // страницу (в режиме разработки: «new dependencies optimized … reloading»).
+    // Готовим их заранее.
+    include: ['onnxruntime-web/wasm', 'exceljs'],
   },
 });
