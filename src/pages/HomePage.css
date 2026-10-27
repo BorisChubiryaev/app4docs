@@ -2314,3 +2314,71 @@ body {
 .hp-menu__item .cvx-new-badge {
   margin-left: auto;
 }
+
+/* Лейбл «Тест» — инструмент в тестовом режиме */
+.cvx-test-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  white-space: nowrap;
+  color: #9a5b00;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.55);
+}
+[data-theme="dark"] .cvx-test-badge {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.14);
+}
+.hp-menu__item .cvx-test-badge {
+  margin-left: auto;
+}
+.hp-menu__detail-title .cvx-test-badge {
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  vertical-align: 0.4em;
+  margin-left: 12px;
+}
+
+/* ── Деталь меню: текст не «прыгает» и не вылезает ──
+   Раньше содержимое центрировалось по высоте, а высота у инструментов
+   разная (название в 1–3 строки) — при наведении на соседний пункт
+   заголовок смещался. Размер шрифта зависел только от высоты окна, поэтому
+   при масштабе Windows 125–150% длинные названия переносились и текст
+   выходил за блок. Теперь содержимое прижато к верху, кегль ограничен и
+   шириной, а на совсем низких окнах блок прокручивается. */
+.hp-menu__detail {
+  justify-content: flex-start;
+  padding-top: clamp(20px, 4.5vh, 48px);
+  padding-bottom: clamp(16px, 3vh, 32px);
+}
+.hp-menu__detail-body {
+  min-height: 0;
+  max-height: 100%;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.hp-menu__detail-title {
+  font-size: clamp(1.75rem, min(6vh, 3.4vw), 3.8rem);
+  line-height: 1.1;
+  text-wrap: balance;
+  max-width: 900px;
+}
+.hp-menu__detail-desc {
+  font-size: clamp(1rem, min(2.3vh, 1.45vw), 1.45rem);
+  line-height: 1.45;
+}
+.hp-menu__detail-features li {
+  align-items: baseline;
+  line-height: 1.4;
+}
