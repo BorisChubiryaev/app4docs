@@ -37,7 +37,27 @@ interface SourceState {
   ratio: number;
 }
 
-const OPTION_TEXT: { key: keyof BuildOptions; title: string; hint: string }[] = [
+type FlagKey = Exclude<keyof BuildOptions, "textColors">;
+
+const TEXT_COLOR_MODES: { id: BuildOptions["textColors"]; title: string; hint: string }[] = [
+  {
+    id: "template",
+    title: "Цвета шаблона",
+    hint: "Заголовки — цветом заголовков шаблона, весь текст — цветом текста шаблона (зелёные заголовки старого оформления станут как в шаблоне)",
+  },
+  {
+    id: "palette",
+    title: "Фирменные акценты",
+    hint: "Заголовки — как в шаблоне, выделенные цветом слова — в ближайший цвет палитры шаблона",
+  },
+  {
+    id: "keep",
+    title: "Как в исходнике",
+    hint: "Цветной текст и заголовки сохраняют свои цвета (с поправкой, чтобы читались на новом фоне)",
+  },
+];
+
+const OPTION_TEXT: { key: FlagKey; title: string; hint: string }[] = [
   { key: "fonts", title: "Шрифты шаблона", hint: "Весь текст — шрифтами шаблона (заголовки — шрифтом заголовков)" },
   { key: "colors", title: "Цвета шаблона", hint: "Текст читается на новом фоне, заливки и линии — в фирменной палитре, таблицы и диаграммы перекрашены" },
   { key: "titles", title: "Заголовки на место шаблона", hint: "Заголовок слайда переносится туда, где он стоит в шаблоне, с его размером; длинный уменьшается, чтобы не наехать на содержимое" },
@@ -57,6 +77,7 @@ const PptxRestyle: React.FC = () => {
   const [options, setOptions] = useState<BuildOptions>({
     fonts: true,
     colors: true,
+    textColors: "template",
     titles: true,
     dropBackgroundPictures: true,
     sections: true,
@@ -443,6 +464,26 @@ const PptxRestyle: React.FC = () => {
             ))}
           </div>
 
+          <div className={`rs-textmode ${options.colors ? "" : "is-off"}`} role="radiogroup" aria-label="Цветной текст">
+            <span className="rs-textmode__label">Цветной текст и заголовки</span>
+            {TEXT_COLOR_MODES.map((m) => (
+              <label key={m.id} className={`rs-chip ${options.textColors === m.id ? "is-active" : ""}`} title={m.hint}>
+                <input
+                  type="radio"
+                  name="textColors"
+                  checked={options.textColors === m.id}
+                  disabled={!options.colors}
+                  onChange={() => {
+                    clearResult();
+                    setOptions({ ...options, textColors: m.id });
+                  }}
+                />
+                {m.title}
+              </label>
+            ))}
+            <small className="rs-muted">{TEXT_COLOR_MODES.find((m) => m.id === options.textColors)?.hint}</small>
+          </div>
+
           <div className="rs-actions">
             <button className="btn-primary rs-build" disabled={!template || !totalSlides || !!busy} onClick={build}>
               {busy && progress !== null ? `⏳ ${Math.round(progress * 100)}%` : `🪄 Собрать презентацию${totalSlides ? ` (${totalSlides} слайд.)` : ""}`}
@@ -508,6 +549,10 @@ const PptxRestyle: React.FC = () => {
           <ul>
             <li>Фон — из шаблона; старые фоны и элементы старого оформления убираются</li>
             <li>Текст — шрифтами шаблона; цвет подбирается так, чтобы читался на новом фоне</li>
+            <li>
+              Цветной текст — на выбор: цветами шаблона (по умолчанию: заголовки и подзаголовки — цветом заголовков
+              шаблона, остальное — цветом текста), фирменными акцентами палитры или как в исходнике
+            </li>
             <li>Заголовки встают на место и в размер, как в шаблоне; длинные — уменьшаются</li>
             <li>Цветные фигуры — в фирменную палитру, светлые плашки на тёмном шаблоне — в «карточки» шаблона</li>
             <li>Таблицы и диаграммы перекрашиваются; картинки, схемы и всё содержимое остаются как были</li>

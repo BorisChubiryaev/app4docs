@@ -302,3 +302,38 @@
     max-width: 160px;
   }
 }
+
+.rs-textmode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+.rs-textmode.is-off {
+  opacity: 0.5;
+}
+.rs-textmode__label {
+  font-weight: 600;
+  margin-right: 4px;
+}
+.rs-textmode small {
+  flex-basis: 100%;
+}
+.rs-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line, #d6d9e4);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.rs-chip.is-active {
+  border-color: var(--accent, #515dad);
+  background: rgba(81, 93, 173, 0.1);
+  font-weight: 600;
+}
+.rs-chip input {
+  margin: 0;
+}

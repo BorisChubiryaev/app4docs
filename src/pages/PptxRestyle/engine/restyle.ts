@@ -19,9 +19,20 @@ import { RPR_ORDER, setOrdered } from "./styles";
 import type { TemplateProfile } from "./template";
 import { NS, desc, kid, kids, make, num, path, removeEl } from "./xml";
 
+/**
+ * Цветной текст:
+ *  template — цветами шаблона (заголовки — цветом заголовков, текст — цветом текста);
+ *  palette — в ближайший по оттенку цвет фирменной палитры;
+ *  keep — как в исходнике (только с поправкой на читаемость).
+ * Заголовки и подзаголовки в режимах template и palette всегда берут цвет
+ * заголовков шаблона.
+ */
+export type TextColorMode = "template" | "palette" | "keep";
+
 export interface RestyleOptions {
   fonts: boolean;
   colors: boolean;
+  textColors: TextColorMode;
 }
 
 /** Сопоставление цветов исходной презентации фирменной палитре. */
@@ -131,6 +142,8 @@ export interface SlideStyleCtx {
   title: Element | null;
   /** Крупный заголовок титульного/раздела (стиль heroTitle) */
   hero: Element | null;
+  /** Основной кегль слайда (сотые пункта) */
+  bodySz: number;
 }
 
 /** Заливка фигуры (с учётом стиля темы). null — без заливки. */
@@ -200,17 +213,56 @@ function restyleShapeColors(shape: Element, ctx: SlideStyleCtx, bg: RGB): RGB | 
   return fillRgb;
 }
 
+type TextKind = "title" | "heading" | "body";
+
+/**
+ * Подзаголовок внутри текста: заметно крупнее основного текста слайда или
+ * целиком жирный абзац крупнее основного. Жирное слово того же кегля, что
+ * и текст, — это выделение, а не подзаголовок.
+ */
+const headingKind = (rPr: Element, bodySz: number): TextKind => {
+  const sz = num(rPr, "sz") ?? 1800;
+  if (sz >= Math.max(2000, bodySz * 1.2)) return "heading";
+  const p = rPr.parentNode?.parentNode as Element | null;
+  const runs = p ? kids(p, "r") : [];
+  const allBold = runs.length > 0 && runs.every((r) => kid(r, "rPr")?.getAttribute("b") === "1");
+  return allBold && sz >= bodySz * 1.15 ? "heading" : "body";
+};
+
+/** Основной кегль слайда — кегль, которым набрано больше всего символов. */
+export function bodySizeOf(tree: Element): number {
+  const count = new Map<number, number>();
+  for (const r of desc(tree, "r", NS.a)) {
+    const n = (kid(r, "t")?.textContent ?? "").trim().length;
+    if (!n) continue;
+    const sz = num(kid(r, "rPr"), "sz") ?? 1800;
+    count.set(sz, (count.get(sz) ?? 0) + n);
+  }
+  return [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 1800;
+}
+
 /** Цвет текста под новый фон. */
-function textColor(c: Color, behind: RGB, onSlideBg: boolean, isTitle: boolean, ctx: SlideStyleCtx): RGB {
+function textColor(c: Color, behind: RGB, onSlideBg: boolean, kind: TextKind, ctx: SlideStyleCtx): RGB {
   const { profile } = ctx;
-  const target = hexToRgb(isTitle ? profile.title.color : profile.body.color);
-  if (chroma(c.rgb) < 0.2) {
+  const mode = ctx.opts.textColors;
+  const heading = kind !== "body";
+  const target = hexToRgb(heading ? profile.title.color : profile.body.color);
+  const colored = chroma(c.rgb) >= 0.2;
+  // Заголовки — цветом заголовков шаблона, даже если в исходнике были цветными
+  if (heading && colored && mode !== "keep" && onSlideBg) return ensureContrast(target, behind, 3);
+  if (!colored) {
     if (onSlideBg) return contrast(target, behind) >= 3 ? target : ensureContrast(target, behind, 4.5);
     if (contrast(c.rgb, behind) >= 4.5) return c.rgb;
     const options: RGB[] = [target, [255, 255, 255], [16, 16, 16]];
     return options.sort((a, b) => contrast(b, behind) - contrast(a, behind))[0];
   }
-  const m = ctx.mapper.accent(c.rgb);
+  if (mode === "template") {
+    // Цветной текст на плашке — читаемым цветом шаблона для этой плашки
+    if (onSlideBg) return ensureContrast(target, behind, 3);
+    const options: RGB[] = [target, hexToRgb(profile.body.color), [255, 255, 255], [16, 16, 16]];
+    return options.sort((a, b) => contrast(b, behind) - contrast(a, behind))[0];
+  }
+  const m = mode === "palette" ? ctx.mapper.accent(c.rgb) : c.rgb;
   return ensureContrast(m, behind, 3);
 }
 
@@ -226,7 +278,7 @@ function restyleText(body: Element, ctx: SlideStyleCtx, behind: RGB, onSlideBg: 
         const c = (fill && resolveColor(colorChild(fill), ctx.src)) || { rgb: ctx.src.scheme[ctx.src.map.tx1 ?? "dk1"] ?? [0, 0, 0], alpha: 1 };
         const rgb = hero
           ? hexToRgb(ctx.profile.heroTitle.color)
-          : textColor(c, behind, onSlideBg, isTitle, ctx);
+          : textColor(c, behind, onSlideBg, isTitle ? "title" : headingKind(rPr, ctx.bodySz), ctx);
         setOrdered(rPr, solidFill(doc, rgb, c.alpha), RPR_ORDER, [["noFill", "solidFill", "gradFill", "blipFill", "pattFill", "grpFill"]]);
       }
       // Подсветка текста и цвет подчёркивания старой темы — убираем
@@ -248,7 +300,7 @@ function restyleText(body: Element, ctx: SlideStyleCtx, behind: RGB, onSlideBg: 
       const c = resolveColor(colorChild(bu), ctx.src);
       if (!c) continue;
       const old = colorChild(bu);
-      if (old) bu.replaceChild(srgb(doc, textColor(c, behind, onSlideBg, false, ctx), c.alpha), old);
+      if (old) bu.replaceChild(srgb(doc, textColor(c, behind, onSlideBg, "body", ctx), c.alpha), old);
     }
   }
 }

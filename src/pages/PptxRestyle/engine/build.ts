@@ -3,7 +3,7 @@
 import { colorChild, resolveColor, rgbToHex, hexToRgb, type ColorCtx } from "./color";
 import { loadDeck, type Deck, type SlideInfo } from "./deck";
 import { Pkg, RT, relIs, baseOf, dirOf, relsPathOf, type Rel } from "./pkg";
-import { ColorMapper, collectColors, placeTitle, restyleTree, type RestyleOptions } from "./restyle";
+import { ColorMapper, bodySizeOf, collectColors, placeTitle, restyleTree, type RestyleOptions } from "./restyle";
 import { biggestText, findTitle, hasText, maxSize, placedShapes, shapesIn } from "./shapes";
 import { RPR_ORDER, materializeBody, materializeText, phOf, setOrdered } from "./styles";
 import { analyzeTemplate, type Role, type TemplateProfile } from "./template";
@@ -23,6 +23,7 @@ export interface BuildOptions extends RestyleOptions {
 export const DEFAULT_OPTIONS: BuildOptions = {
   fonts: true,
   colors: true,
+  textColors: "template",
   titles: true,
   dropBackgroundPictures: true,
   sections: true,
@@ -364,8 +365,9 @@ export async function buildPresentation(
     // Заголовок и перекраска
     const title = item.role === "content" ? findTitle(tree, profile.cy)?.el ?? null : null;
     const hero = item.role !== "content" ? biggestText(tree)?.el ?? null : null;
-    restyleTree(tree, { src, profile, mapper, opts, slideBg, title, hero });
-    if (title && opts.titles) placeTitle(title, tree, { src, profile, mapper, opts, slideBg, title, hero }, profile.cy);
+    const styleCtx = { src, profile, mapper, opts, slideBg, title, hero, bodySz: bodySizeOf(tree) };
+    restyleTree(tree, styleCtx);
+    if (title && opts.titles) placeTitle(title, tree, styleCtx, profile.cy);
     // Плейсхолдеры, кроме заголовка, становятся обычными фигурами: всё уже закреплено
     for (const sh of [...desc(tree, "sp", NS.p), ...desc(tree, "pic", NS.p), ...desc(tree, "graphicFrame", NS.p)]) {
       const ph = phOf(sh);

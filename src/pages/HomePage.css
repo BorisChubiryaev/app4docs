@@ -1930,8 +1930,19 @@ body {
 /* note и офлайн-бейдж проявляются после того, как текст «набран» */
 .hp-menu__detail-note,
 .hp-menu__offline {
-  animation: hp-fade 0.45s ease both;
+  /* Только прозрачность, без сдвига: сдвинутая вниз плашка на время
+     анимации выходила за низ блока, и в Windows (где полосы прокрутки
+     видны всегда) мелькала полоса прокрутки */
+  animation: hp-appear 0.45s ease both;
   animation-delay: 1.7s;
+}
+@keyframes hp-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes hp-fade {
   from {
@@ -2381,4 +2392,13 @@ body {
 .hp-menu__detail-features li {
   align-items: baseline;
   line-height: 1.4;
+}
+/* Отступы детали — тоже от высоты окна: на низких окнах (масштаб Windows
+   150%) самое длинное описание помещается без прокрутки */
+.hp-menu__detail-features {
+  gap: clamp(4px, 1vh, 8px);
+  margin-bottom: clamp(12px, 2.6vh, 24px);
+}
+.hp-menu__offline {
+  margin-top: clamp(8px, 2vh, 18px);
 }
