@@ -71,6 +71,7 @@ const ToolCard = memo(({ tool, index }) => (
     </div>
     <h3 className="lg-card__title">
       {tool.title}
+      <TestBadge tool={tool} />
     </h3>
     <p className="lg-card__desc">{tool.description}</p>
     <ul className="lg-card__tags">
@@ -214,9 +215,32 @@ type Tool = {
   note?: string;
   /** Показывать лейбл «Новинка» */
   isNew?: boolean;
+  /** Инструмент в тестовом режиме — лейбл «Тест» */
+  isTest?: boolean;
 };
 
+const TestBadge = ({ tool }: { tool: Tool }) =>
+  tool.isTest ? (
+    <span className="cvx-test-badge" title="Инструмент в тестовом режиме — результат стоит проверить">
+      Тест
+    </span>
+  ) : null;
+
 const tools: Tool[] = [
+  {
+    title: "Перенос в шаблон",
+    path: "/PptxRestyle",
+    description:
+      "Переложите презентации в новый корпоративный шаблон: фон, шрифты, цвета и заголовки — автоматически",
+    icon: "🪄",
+    isTest: true,
+    features: [
+      "Обновлённый фирменный шаблон — без ручного перекладывания",
+      "Несколько презентаций → одна в едином стиле",
+      "Текст читается на новом фоне, таблицы и диаграммы перекрашены",
+      "Работает в браузере — файлы не уходят на сервер",
+    ],
+  },
   {
     title: "PDF → PowerPoint",
     path: "/PdfToPptx",
@@ -967,6 +991,7 @@ const MenuLayout = memo(() => {
           >
             <span className="hp-menu__ico">{tool.icon}</span>
             <span className="hp-menu__name">{tool.title}</span>
+            <TestBadge tool={tool} />
           </Link>
         ))}
       </nav>
@@ -998,6 +1023,7 @@ const MenuLayout = memo(() => {
           <div className="hp-menu__detail-icon">{t.icon}</div>
           <h2 className="hp-menu__detail-title">
             {t.title}
+            <TestBadge tool={t} />
           </h2>
           <TypedDescription desc={t.description} features={t.features} />
           {t.note && (
@@ -1027,6 +1053,7 @@ const ListLayout = memo(() => (
         <span className="hp-list__text">
           <span className="hp-list__title">
             {tool.title}
+            <TestBadge tool={tool} />
           </span>
           <span className="hp-list__desc">{tool.description}</span>
         </span>
