@@ -12,6 +12,7 @@ import DocMatchGame from "./pages/DocMatch/DocMatchGame";
 import OfferMerge from "./pages/OfferMerge/OfferMerge";
 import PdfToPptx from "./pages/PdfToPptx/PdfToPptx";
 import PptxRestyle from "./pages/PptxRestyle/PptxRestyle";
+import HtmlStudio from "./pages/HtmlStudio/HtmlStudio";
 import SnakeGame from "./pages/SnakeGame/SnakeGame";
 import ChessGame from "./pages/Chess/ChessGame";
 import CheckersGame from "./pages/Checkers/CheckersGame";
@@ -35,6 +36,7 @@ const RootRoutes = () => {
       <Route path="/OfferMerge" element={<OfferMerge />} />
       <Route path="/PdfToPptx" element={<PdfToPptx />} />
       <Route path="/PptxRestyle" element={<PptxRestyle />} />
+      <Route path="/HtmlStudio" element={<HtmlStudio />} />
       <Route path="/SnakeGame" element={<SnakeGame />} />
       <Route path="/Chess" element={<ChessGame />} />
       <Route path="/Checkers" element={<CheckersGame />} />
