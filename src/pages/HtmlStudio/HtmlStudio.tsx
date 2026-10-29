@@ -269,6 +269,7 @@ const HtmlStudio: React.FC = () => {
         if (editRef.current && editRef.current.contains(t)) return;
         e.preventDefault(); // ссылки и кнопки не срабатывают
         if (editRef.current) stopEdit();
+        doc.getSelection()?.removeAllRanges(); // синяя подсветка текста браузера мешает видеть выделение блока
         select(t);
       },
       true,
@@ -413,6 +414,17 @@ const HtmlStudio: React.FC = () => {
     stopEdit();
     if (view === "code") applyCode();
     if (v === "code") setCodeText(htmlRef.current ?? "");
+    if (view === "visual") {
+      // Фрейм правки уходит со страницы вместе с его документом: выделение и
+      // панели не должны держать элементы из него (при возврате фрейм новый)
+      selRef.current = null;
+      editRef.current = null;
+      hoverRef.current = null;
+      setSelected(null);
+      setEditing(null);
+      setFrameDoc(null);
+      setToolbarPos(null);
+    }
     setView(v);
   };
 
@@ -866,7 +878,7 @@ const HtmlStudio: React.FC = () => {
               </div>
               <div className="hs-side__body">
                 {side === "element" &&
-                  (selected ? (
+                  (selected?.isConnected && selected.ownerDocument.defaultView ? (
                     <ElementPanel
                       el={selected}
                       version={version}

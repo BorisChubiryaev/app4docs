@@ -9,7 +9,10 @@ const EDITOR_CSS = `
 [data-he-hover]:not([data-he-sel]) { outline: 2px dashed rgba(79, 110, 247, 0.85) !important; outline-offset: 1px !important; cursor: pointer !important; }
 /* Контейнеры, которые заполняют скрипты (в визуальном режиме скрипты не выполняются) */
 canvas, div[id]:empty, svg:empty { min-height: 48px; background: repeating-linear-gradient(45deg, rgba(79, 110, 247, 0.06) 0 8px, transparent 8px 16px) !important; }
-[data-he-sel] { outline: 2px solid #ff1c77 !important; outline-offset: 2px !important; }
+/* Выделение должно читаться на любом фоне: розовая рамка, белый ободок и
+   розовое свечение снаружи. Заливку не делаем — на цветном фоне она похожа
+   на обычное выделение текста браузером */
+[data-he-sel] { outline: 3px solid #ff1c77 !important; outline-offset: 4px !important; box-shadow: 0 0 0 4px #fff, 0 0 0 10px rgba(255, 28, 119, 0.3) !important; }
 [data-he-edit] { outline: 2px solid #ff1c77 !important; outline-offset: 2px !important; cursor: text !important; background-image: linear-gradient(rgba(255, 28, 119, 0.05), rgba(255, 28, 119, 0.05)) !important; }
 [data-he-flash] { animation: he-flash 1.2s ease !important; }
 @keyframes he-flash { 0%, 50% { box-shadow: 0 0 0 4px rgba(255, 28, 119, 0.55); } 100% { box-shadow: none; } }
