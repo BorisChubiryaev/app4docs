@@ -40,8 +40,16 @@ const CodeEditor: React.FC<Props> = ({ value, onChange, dark }) => {
               "&": { height: "100%", fontSize: "13px", backgroundColor: dark ? "#16181f" : "#fff", color: dark ? "#e6e8ef" : "#1f2330" },
               ".cm-scroller": { fontFamily: "ui-monospace, 'Cascadia Code', Consolas, 'Courier New', monospace" },
               ".cm-gutters": { backgroundColor: dark ? "#1c1f28" : "#f5f6fa", color: dark ? "#7b8194" : "#9aa0b2", border: "none" },
-              ".cm-activeLine": { backgroundColor: dark ? "#1f2330" : "#f3f5ff" },
+              // Слой выделения CodeMirror лежит ПОД текстом и под подсветкой
+              // строки: непрозрачная подсветка строки закрывала выделенное
+              // слово, поэтому она полупрозрачная, а выделение — яркое
+              ".cm-activeLine": { backgroundColor: dark ? "rgba(255, 255, 255, 0.04)" : "rgba(79, 110, 247, 0.05)" },
               ".cm-activeLineGutter": { backgroundColor: dark ? "#232735" : "#e9ecfb" },
+              "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection": {
+                backgroundColor: dark ? "#3b5bdb" : "#a5bcff",
+              },
+              ".cm-selectionMatch": { backgroundColor: dark ? "rgba(255, 212, 59, 0.25)" : "rgba(255, 200, 0, 0.3)" },
+              ".cm-cursor, .cm-dropCursor": { borderLeftColor: dark ? "#e6e8ef" : "#1f2330", borderLeftWidth: "2px" },
             },
             { dark },
           ),
