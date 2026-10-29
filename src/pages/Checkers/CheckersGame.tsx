@@ -15,7 +15,9 @@ import {
   type Move,
 } from "../../games/checkers/engine";
 import { CHECKERS_LEVELS } from "../../games/checkers/levels";
-import type { CheckersRequest, CheckersResponse } from "../../games/checkers/checkersWorker";
+import { CheckersSearcher } from "../../games/checkers/engine";
+import { runCheckersRequest, type CheckersRequest, type CheckersResponse } from "../../games/checkers/search";
+import { EngineRunner } from "../../games/engineRunner";
 import { useLocalState, EMPTY_SCORE, type Score } from "../BoardGames/useLocalState";
 import "../BoardGames/BoardGames.css";
 
@@ -93,7 +95,7 @@ const CheckersGame = () => {
   const [hintPending, setHintPending] = useState(false);
   const [showOver, setShowOver] = useState(true);
 
-  const workerRef = useRef<Worker | null>(null);
+  const workerRef = useRef<EngineRunner<CheckersRequest, CheckersResponse> | null>(null);
   const reqId = useRef(0);
   const hintId = useRef(-1);
   const hintSeq = useRef(1_000_000);
@@ -110,7 +112,11 @@ const CheckersGame = () => {
   const mustCapture = legal.length > 0 && legal[0].captured.length > 0;
 
   useEffect(() => {
-    const w = new Worker(new URL("../../games/checkers/checkersWorker.ts", import.meta.url), { type: "module" });
+    let local: CheckersSearcher | null = null;
+    const w = new EngineRunner<CheckersRequest, CheckersResponse>(
+      () => new Worker(new URL("../../games/checkers/checkersWorker.ts", import.meta.url), { type: "module" }),
+      (req) => runCheckersRequest((local ??= new CheckersSearcher()), req),
+    );
     workerRef.current = w;
     return () => w.terminate();
   }, []);
@@ -118,8 +124,7 @@ const CheckersGame = () => {
   useEffect(() => {
     const w = workerRef.current;
     if (!w) return;
-    w.onmessage = (e: MessageEvent<CheckersResponse>) => {
-      const r = e.data;
+    w.onmessage = (r) => {
       if (r.id >= 1_000_000) {
         if (r.id === hintId.current) {
           hintId.current = -1;
@@ -128,7 +133,8 @@ const CheckersGame = () => {
         }
         return;
       }
-      if (r.id !== reqId.current || !r.move) return;
+      if (r.id !== reqId.current) return;
+      if (!r.move) return setThinking(false);
       const wait = Math.max(0, MIN_THINK_MS - (performance.now() - startedAt.current));
       setTimeout(() => {
         if (r.id !== reqId.current) return;
@@ -143,7 +149,7 @@ const CheckersGame = () => {
     const id = ++reqId.current;
     startedAt.current = performance.now();
     setThinking(true);
-    workerRef.current.postMessage({ id, moves, opts: levelInfo.opts } satisfies CheckersRequest);
+    workerRef.current.post({ id, moves, opts: levelInfo.opts } satisfies CheckersRequest);
   }, [moves, player, over, board, levelInfo]);
 
   const recorded = useRef(`${game.moves.join(" ")}|${game.resigned}`);
@@ -234,7 +240,7 @@ const CheckersGame = () => {
     const id = ++hintSeq.current;
     hintId.current = id;
     setHintPending(true);
-    workerRef.current.postMessage({ id, moves, opts: { depth: 64, timeMs: 900 } } satisfies CheckersRequest);
+    workerRef.current.post({ id, moves, opts: { depth: 64, timeMs: 900 } } satisfies CheckersRequest);
   };
 
   const canUndo = moves.some((_, i) => i % 2 === player);

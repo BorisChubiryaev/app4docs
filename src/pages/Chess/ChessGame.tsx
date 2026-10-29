@@ -16,10 +16,13 @@ import {
 } from "../../games/chess/engine";
 import { CHESS_LEVELS } from "../../games/chess/levels";
 import { PieceSvg } from "../../games/chess/pieces";
-import type {
-  ChessRequest,
-  ChessResponse,
-} from "../../games/chess/chessWorker";
+import {
+  runChessRequest,
+  type ChessRequest,
+  type ChessResponse,
+} from "../../games/chess/search";
+import { Searcher } from "../../games/chess/engine";
+import { EngineRunner } from "../../games/engineRunner";
 import {
   useLocalState,
   EMPTY_SCORE,
@@ -129,7 +132,7 @@ const ChessGame = () => {
   } | null>(null);
   const [hintPending, setHintPending] = useState(false);
 
-  const workerRef = useRef<Worker | null>(null);
+  const workerRef = useRef<EngineRunner<ChessRequest, ChessResponse> | null>(null);
   const reqId = useRef(0);
   const hintId = useRef(-1);
   const hintSeq = useRef(1_000_000);
@@ -146,9 +149,14 @@ const ChessGame = () => {
 
   // ── Компьютер ──
   useEffect(() => {
-    const w = new Worker(
-      new URL("../../games/chess/chessWorker.ts", import.meta.url),
-      { type: "module" },
+    let local: Searcher | null = null;
+    const w = new EngineRunner<ChessRequest, ChessResponse>(
+      () =>
+        new Worker(
+          new URL("../../games/chess/chessWorker.ts", import.meta.url),
+          { type: "module" },
+        ),
+      (req) => runChessRequest((local ??= new Searcher()), req),
     );
     workerRef.current = w;
     return () => w.terminate();
@@ -158,8 +166,7 @@ const ChessGame = () => {
   useEffect(() => {
     const w = workerRef.current;
     if (!w) return;
-    w.onmessage = (e: MessageEvent<ChessResponse>) => {
-      const r = e.data;
+    w.onmessage = (r) => {
       if (r.id >= 1_000_000) {
         if (r.id === hintId.current) {
           hintId.current = -1;
@@ -168,7 +175,8 @@ const ChessGame = () => {
         }
         return;
       }
-      if (r.id !== reqId.current || !r.move) return;
+      if (r.id !== reqId.current) return;
+      if (!r.move) return setThinking(false);
       const wait = Math.max(
         0,
         MIN_THINK_MS - (performance.now() - startedAt.current),
@@ -188,7 +196,7 @@ const ChessGame = () => {
     startedAt.current = performance.now();
     setThinking(true);
     const req: ChessRequest = { id, moves, opts: levelInfo.opts };
-    workerRef.current.postMessage(req);
+    workerRef.current.post(req);
   }, [moves, player, over, pos, levelInfo]);
 
   // Запоминаем итог партии один раз
@@ -322,7 +330,7 @@ const ChessGame = () => {
     const id = ++hintSeq.current;
     hintId.current = id;
     setHintPending(true);
-    workerRef.current.postMessage({
+    workerRef.current.post({
       id,
       moves,
       opts: { depth: 64, timeMs: 900 },
