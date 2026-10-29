@@ -71,6 +71,7 @@ const ToolCard = memo(({ tool, index }) => (
     </div>
     <h3 className="lg-card__title">
       {tool.title}
+      {tool.isNew && <span className="cvx-new-badge">Новинка</span>}
       <TestBadge tool={tool} />
     </h3>
     <p className="lg-card__desc">{tool.description}</p>
@@ -232,8 +233,8 @@ const tools: Tool[] = [
     path: "/PptxRestyle",
     description:
       "Переложите презентации в новый корпоративный шаблон: фон, шрифты, цвета и заголовки — автоматически",
-    icon: "🪄",
-    isTest: true,
+    icon: "☄︎",
+    isNew: true,
     features: [
       "Обновлённый фирменный шаблон — без ручного перекладывания",
       "Несколько презентаций → одна в едином стиле",
@@ -247,7 +248,6 @@ const tools: Tool[] = [
     description:
       "Редактируемая презентация из PDF: текст, картинки и фигуры — как в оригинале",
     icon: "🌀",
-    isNew: true,
     features: [
       "Слайд того же размера на каждую страницу",
       "Текст, картинки и графика остаются редактируемыми",
@@ -351,6 +351,20 @@ const tools: Tool[] = [
       "Разбор инструкций алгоритмом (без ИИ)",
       "Правки: сноски, пункты, редакции, строки таблиц",
       "Выделение цветом или как исправления Word"
+    ],
+  },
+    {
+    title: "HTML-редактор",
+    path: "/HtmlStudio",
+    description:
+      "Правьте страницы и отчёты, которые сгенерировал ИИ: тексты, таблицы, данные графиков, цвета — без знания HTML",
+    icon: "🧩",
+    isTest: true,
+    features: [
+      "Правка текста, картинок и блоков прямо на странице",
+      "Таблицы и данные графиков — как в Excel, со вставкой из Excel",
+      "Цвета и шрифты всей страницы одним кликом, поиск и замена",
+      "Код с подсветкой и просмотр со скриптами",
     ],
   },
 
@@ -991,6 +1005,7 @@ const MenuLayout = memo(() => {
           >
             <span className="hp-menu__ico">{tool.icon}</span>
             <span className="hp-menu__name">{tool.title}</span>
+            {tool.isNew && <span className="cvx-new-badge">Новинка</span>}
             <TestBadge tool={tool} />
           </Link>
         ))}
