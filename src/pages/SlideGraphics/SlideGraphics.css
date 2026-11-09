@@ -1,0 +1,539 @@
+/* Графика для слайдов */
+
+.sg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--ink, #1d1d1f);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.sg-btn:hover {
+  border-color: var(--brand-2, #515dad);
+}
+.sg-hint {
+  margin: 4px 0;
+  color: var(--muted, #6b7280);
+  font-size: 0.82rem;
+}
+.sg-note {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 183, 3, 0.14);
+  font-size: 0.84rem;
+}
+.sg-msg {
+  margin-top: 12px;
+  font-size: 0.86rem;
+}
+.sg-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  color: var(--muted, #6b7280);
+}
+.sg-inline input[type="number"] {
+  width: 64px;
+  padding: 5px 6px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+.sg-sep {
+  flex: 1;
+}
+
+/* ── Каталог ── */
+.sg-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.sg-groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sg-chip {
+  padding: 8px 16px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  color: var(--ink, #1d1d1f);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.sg-chip.is-on {
+  background: var(--ink, #1d1d1f);
+  color: var(--surface, #fff);
+  border-color: transparent;
+}
+.sg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 18px;
+}
+.sg-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 18px;
+  background: var(--surface, #fff);
+  color: var(--ink, #1d1d1f);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.sg-card:hover,
+.sg-card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.14));
+}
+.sg-card__pic {
+  position: relative;
+  background: var(--surface-2, #f5f6f8);
+  line-height: 0;
+}
+.sg-card__tag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+.sg-thumb {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.sg-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px 16px;
+}
+.sg-card__body span {
+  color: var(--muted, #6b7280);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+/* Шахматка под прозрачным фоном */
+.is-checker {
+  background-color: #fff;
+  background-image: linear-gradient(45deg, #e6e7eb 25%, transparent 25%), linear-gradient(-45deg, #e6e7eb 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e6e7eb 75%), linear-gradient(-45deg, transparent 75%, #e6e7eb 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+
+/* ── Редактор ── */
+.sg-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+.sg-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 14px;
+  background: var(--surface, #fff);
+}
+.sg-bar__name {
+  margin-right: auto;
+}
+.sg-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 12px;
+}
+.sg-stage-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.sg-stage {
+  flex: 1;
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background: var(--surface-2, #f5f6f8);
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  overflow: hidden;
+}
+.sg-stage canvas {
+  display: block;
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+}
+.sg-timeline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 14px;
+  background: var(--surface, #fff);
+}
+.sg-timeline input[type="range"] {
+  flex: 1;
+}
+.sg-icon {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ink, #1d1d1f);
+  color: var(--surface, #fff);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.sg-icon + .sg-icon {
+  background: var(--surface-2, #f5f6f8);
+  color: var(--ink, #1d1d1f);
+}
+.sg-time {
+  min-width: 92px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #6b7280);
+  font-size: 0.85rem;
+}
+
+.sg-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 16px;
+  background: var(--surface, #fff);
+  overflow: hidden;
+}
+.sg-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+}
+.sg-tab {
+  flex: 1;
+  padding: 12px 6px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted, #6b7280);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.sg-tab.is-on {
+  color: var(--ink, #1d1d1f);
+  border-bottom-color: var(--brand-4, #ff1c77);
+  font-weight: 600;
+}
+.sg-side__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.84rem;
+  color: var(--muted, #6b7280);
+}
+.sg-field b {
+  color: var(--ink, #1d1d1f);
+  font-weight: 600;
+}
+.sg-field input:not([type="range"]):not([type="color"]),
+.sg-field textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: var(--ink, #1d1d1f);
+  font: inherit;
+  font-size: 0.9rem;
+}
+.sg-field textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+.sg-field--row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.sg-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+}
+.sg-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+}
+.sg-group__title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.sg-palettes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.sg-pal {
+  display: flex;
+  height: 28px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  cursor: pointer;
+}
+.sg-pal i {
+  flex: 1;
+}
+.sg-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sg-swatch {
+  position: relative;
+}
+.sg-swatch input {
+  width: 38px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+.sg-swatch button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--ink, #1d1d1f);
+  color: var(--surface, #fff);
+  font-size: 9px;
+  line-height: 16px;
+  cursor: pointer;
+}
+.sg-presets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.sg-preset {
+  height: 54px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+  padding: 6px;
+}
+.sg-preset span {
+  font-size: 0.72rem;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.sg-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface-2, #f5f6f8);
+}
+.sg-seg button {
+  flex: 1;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink, #1d1d1f);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.sg-seg button.is-on {
+  background: var(--surface, #fff);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.08));
+  font-weight: 600;
+}
+.sg-seg--big button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 6px;
+}
+.sg-seg--big small {
+  color: var(--muted, #6b7280);
+  font-size: 0.72rem;
+}
+
+.sg-actions {
+  display: flex;
+  gap: 8px;
+}
+.sg-actions button {
+  flex: 1;
+}
+.sg-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.84rem;
+}
+.sg-progress__bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2, #f5f6f8);
+  overflow: hidden;
+}
+.sg-progress__bar i {
+  display: block;
+  height: 100%;
+  background: var(--brand-gradient, #515dad);
+  transition: width 0.2s ease;
+}
+
+/* Таблица данных */
+.sg-rows table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+.sg-rows th {
+  padding: 4px 4px 6px;
+  color: var(--muted, #6b7280);
+  font-weight: 500;
+  text-align: left;
+}
+.sg-rows td {
+  padding: 2px;
+}
+.sg-rows input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--ink, #1d1d1f);
+  font: inherit;
+}
+.sg-rows__del {
+  width: 26px;
+}
+.sg-rows__del button {
+  border: none;
+  background: none;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+}
+.sg-rows__foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* Фото */
+.sg-photos__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+.sg-photos__list {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.sg-photo {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.sg-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sg-photo button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+@media (max-width: 1000px) {
+  .sg-main {
+    grid-template-columns: 1fr;
+  }
+  .sg-stage {
+    min-height: 240px;
+  }
+}
+
+[data-theme="dark"] .sg-chip.is-on {
+  background: #f2f3f7;
+  color: #111;
+}
