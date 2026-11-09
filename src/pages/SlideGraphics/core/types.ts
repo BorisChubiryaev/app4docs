@@ -49,6 +49,12 @@ export interface Frame {
   dark: boolean;
   /** Цвет подложки под шаблоном или null, если фон прозрачный */
   base: string | null;
+  /**
+   * Точка, за которой следует интерактивный шаблон, в долях кадра:
+   * follow(0) — сейчас, follow(0.5) — полсекунды назад. null — курсора нет,
+   * шаблон движется по своей траектории (так же пишется видео).
+   */
+  follow: ((ago: number) => [number, number]) | null;
 }
 
 export interface Template {
@@ -73,6 +79,8 @@ export interface Template {
   };
   /** Кнопка «Перемешать» меняет параметр seed */
   shuffle?: boolean;
+  /** Шаблон следует за курсором в превью; подсказка для пользователя */
+  interactive?: string;
   draw(f: Frame): void;
 }
 
@@ -91,4 +99,6 @@ export interface Scene {
   background: Background;
   /** Цвет текста: авто по фону или принудительно */
   ink: "auto" | "dark" | "light";
+  /** Проверенная палитра, подобранная под светлый или тёмный фон */
+  paletteAuto: boolean;
 }

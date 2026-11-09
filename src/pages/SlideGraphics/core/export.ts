@@ -7,7 +7,7 @@
 
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import { renderFrame } from "./render";
-import type { Scene, Template } from "./types";
+import type { Frame, Scene, Template } from "./types";
 
 type Images = (HTMLImageElement | ImageBitmap)[];
 
@@ -29,10 +29,11 @@ export async function renderImage(
   t: number,
   dur: number,
   type: "image/png" | "image/jpeg",
+  follow: Frame["follow"] = null,
 ): Promise<Blob> {
   const c = canvasOf(w, h);
   const ctx = c.getContext("2d")!;
-  renderFrame(ctx, w, h, t, scene, tpl, images, dur, type === "image/jpeg" ? "#ffffff" : undefined);
+  renderFrame(ctx, w, h, t, scene, tpl, images, dur, type === "image/jpeg" ? "#ffffff" : undefined, follow);
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("Браузер не смог сохранить картинку"))), type, 0.93));
 }
 
@@ -60,6 +61,8 @@ export interface VideoOptions {
   fallbackBase: string;
   onProgress: (k: number) => void;
   signal: AbortSignal;
+  /** Закреплённая точка для живых шаблонов (иначе — своя траектория) */
+  follow?: Frame["follow"];
 }
 
 export async function renderVideo(scene: Scene, tpl: Template, images: Images, o: VideoOptions): Promise<{ blob: Blob; ext: string }> {
@@ -86,7 +89,7 @@ export async function renderVideo(scene: Scene, tpl: Template, images: Images, o
     for (let i = 0; i < frames; i++) {
       if (o.signal.aborted) throw new DOMException("Отменено", "AbortError");
       if (failure) throw failure;
-      renderFrame(ctx, w, h, i / o.fps, scene, tpl, images, o.dur, o.fallbackBase);
+      renderFrame(ctx, w, h, i / o.fps, scene, tpl, images, o.dur, o.fallbackBase, o.follow ?? null);
       const frame = new VideoFrame(c, { timestamp: Math.round(i * usec), duration: Math.round(usec) });
       enc.encode(frame, { keyFrame: i % (o.fps * 2) === 0 });
       frame.close();
@@ -113,7 +116,7 @@ async function recordRealtime(scene: Scene, tpl: Template, images: Images, o: Vi
   const ctx = c.getContext("2d", { alpha: false })!;
   const types = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"];
   const mime = types.find((m) => MediaRecorder.isTypeSupported(m)) ?? "";
-  renderFrame(ctx, o.w, o.h, 0, scene, tpl, images, o.dur, o.fallbackBase);
+  renderFrame(ctx, o.w, o.h, 0, scene, tpl, images, o.dur, o.fallbackBase, o.follow ?? null);
   const stream = c.captureStream(o.fps);
   const rec = new MediaRecorder(stream, { mimeType: mime || undefined, videoBitsPerSecond: Math.min(40e6, o.w * o.h * 6) });
   const chunks: Blob[] = [];
@@ -134,7 +137,7 @@ async function recordRealtime(scene: Scene, tpl: Template, images: Images, o: Vi
         resolve();
         return;
       }
-      renderFrame(ctx, o.w, o.h, t, scene, tpl, images, o.dur, o.fallbackBase);
+      renderFrame(ctx, o.w, o.h, t, scene, tpl, images, o.dur, o.fallbackBase, o.follow ?? null);
       o.onProgress(t / o.dur);
       requestAnimationFrame(tick);
     };

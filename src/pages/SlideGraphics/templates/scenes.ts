@@ -29,7 +29,7 @@ const phrases: Template = {
     const list = f.phrases.filter((x) => x.trim());
     if (!list.length) return;
     const per = dur / list.length;
-    const i = Math.min(list.length - 1, Math.floor(t / per));
+    const i = clamp(Math.floor(t / per), 0, list.length - 1);
     const lt = t - i * per;
     const [first, second = ""] = list[i].split("|").map((x) => x.trim());
     const kIn = easeOut(prog(lt, 0, 0.5));

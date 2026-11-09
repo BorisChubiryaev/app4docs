@@ -3,6 +3,12 @@
 import { isDark } from "./draw";
 import type { Background, Frame, Scene, Template } from "./types";
 
+// Категориальная палитра, проверенная на различимость (в т.ч. при нарушениях
+// цветовосприятия) отдельно для светлого и тёмного фона — валидатор скилла
+// dataviz. Порядок фиксирован: цвет закреплён за позицией, а не за рангом.
+export const SAFE_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
+export const SAFE_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+
 export const BG_COLORS: Record<Exclude<Background["kind"], "custom" | "transparent">, string> = {
   white: "#ffffff",
   light: "#f4f5f8",
@@ -29,6 +35,7 @@ export function renderFrame(
   dur: number,
   /** Залить прозрачный фон (для JPEG и видео) */
   forceBase?: string,
+  follow: Frame["follow"] = null,
 ) {
   const base = baseColor(scene, tpl);
   ctx.save();
@@ -44,18 +51,19 @@ export function renderFrame(
     ctx,
     w,
     h,
-    t: tpl.loop ? ((t % dur) + dur) % dur : Math.min(t, dur),
+    t: tpl.loop ? ((t % dur) + dur) % dur : Math.min(Math.max(0, t), dur),
     dur,
     s: Math.min(w, h) / 1080,
     p: scene.params,
     rows: scene.rows,
     phrases: scene.phrases,
     images,
-    pal: scene.palette.length ? scene.palette : ["#4f6ef7"],
+    pal: scene.paletteAuto ? (dark ? SAFE_DARK : SAFE_LIGHT) : scene.palette.length ? scene.palette : ["#4f6ef7"],
     ink: dark ? "#ffffff" : "#15171c",
     muted: dark ? "rgba(255,255,255,0.66)" : "rgba(21,23,28,0.58)",
     dark,
     base,
+    follow,
   };
   try {
     tpl.draw(f);

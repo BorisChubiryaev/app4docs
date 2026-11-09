@@ -65,6 +65,19 @@ function label(f: Frame, text: string, x: number, y: number, maxW: number, px: n
 
 function fillBar(f: Frame, x: number, y: number, w: number, h: number, color: string, horizontal = false) {
   const { ctx, s } = f;
+  if (f.p.glow) {
+    ctx.save();
+    ctx.shadowColor = rgba(color, 0.65);
+    ctx.shadowBlur = 36 * s;
+    fillBarBody(f, x, y, w, h, color, horizontal);
+    ctx.restore();
+    return;
+  }
+  fillBarBody(f, x, y, w, h, color, horizontal);
+}
+
+function fillBarBody(f: Frame, x: number, y: number, w: number, h: number, color: string, horizontal: boolean) {
+  const { ctx, s } = f;
   const style = String(f.p.style ?? "solid");
   const r = Number(f.p.radius ?? 12) * s;
   const radii = horizontal ? [0, r, r, 0] : [r, r, 0, 0];
@@ -104,6 +117,7 @@ const BAR_STYLE: Control = {
     ["cap", "Светлые с крышкой"],
   ],
 };
+const GLOW: Control = { key: "glow", label: "Свечение", type: "toggle" };
 const COLORS: Control = {
   key: "colors",
   label: "Цвета",
@@ -128,6 +142,7 @@ const bars: Template = {
     ...TITLE,
     BAR_STYLE,
     COLORS,
+    GLOW,
     { key: "highlight", label: "Выделить столбец №", type: "number", min: 0, max: 50, step: 1 },
     { key: "radius", label: "Скругление", type: "range", min: 0, max: 40, step: 1 },
     { key: "gap", label: "Промежуток", type: "range", min: 5, max: 70, step: 1, unit: "%" },
@@ -135,7 +150,8 @@ const bars: Template = {
     ...NUMBERS,
   ],
   defaults: {
-    params: { title: "Выручка по месяцам", subtitle: "млн ₽", style: "fade", colors: "one", highlight: 6, radius: 14, gap: 32, values: true, unit: "", decimals: 1 },
+    background: { kind: "dark", color: "#0e1016" },
+    params: { title: "Выручка по месяцам", subtitle: "млн ₽", style: "fade", colors: "one", glow: true, highlight: 0, radius: 14, gap: 32, values: true, unit: "", decimals: 1 },
     rows: MONTHS,
   },
   draw(f) {
@@ -200,6 +216,7 @@ const hbars: Template = {
     ...TITLE,
     BAR_STYLE,
     COLORS,
+    GLOW,
     { key: "highlight", label: "Выделить полосу №", type: "number", min: 0, max: 50, step: 1 },
     { key: "sort", label: "Сортировать по убыванию", type: "toggle" },
     { key: "radius", label: "Скругление", type: "range", min: 0, max: 40, step: 1 },
@@ -207,6 +224,7 @@ const hbars: Template = {
     ...NUMBERS,
   ],
   defaults: {
+    background: { kind: "white", color: "#0e1016" },
     params: { title: "Каналы привлечения", subtitle: "доля новых клиентов", style: "solid", colors: "one", highlight: 1, sort: true, radius: 10, gap: 38, unit: "%", decimals: 0 },
     rows: [
       { label: "Рекомендации", value: 34 },
@@ -278,6 +296,7 @@ const pairs: Template = {
     ...NUMBERS,
   ],
   defaults: {
+    background: { kind: "white", color: "#0e1016" },
     params: { title: "Продажи по кварталам", subtitle: "млн ₽", s1: "План", s2: "Факт", radius: 12, values: true, decimals: 0 },
     rows: [
       { label: "I кв.", value: 120, value2: 112 },
@@ -373,6 +392,7 @@ const line: Template = {
     ...NUMBERS,
   ],
   defaults: {
+    background: { kind: "dark", color: "#0e1016" },
     params: { title: "Активные клиенты", subtitle: "тыс. человек", smooth: true, area: true, glow: true, dots: true, values: false, mark: 6, zero: false, width: 6, decimals: 1 },
     rows: MONTHS,
   },
@@ -506,6 +526,7 @@ const kpi: Template = {
     ...NUMBERS,
   ],
   defaults: {
+    background: { kind: "light", color: "#0e1016" },
     params: { title: "Выручка за квартал", subtitle: "", value: 12.4, delta: "+18 % к прошлому году", card: "auto", unit: "млн ₽", decimals: 1 },
     rows: MONTHS,
   },
@@ -628,6 +649,7 @@ const donut: Template = {
     ...NUMBERS,
   ],
   defaults: {
+    background: { kind: "white", color: "#0e1016" },
     params: { title: "Структура выручки", subtitle: "", style: "solid", show: "percent", center: "млн ₽ всего", thickness: 30, decimals: 0 },
     rows: [
       { label: "Розница", value: 46 },
@@ -755,7 +777,7 @@ const percent: Template = {
     { key: "ticks", label: "Штрихов", type: "range", min: 24, max: 120, step: 1 },
     { key: "decimals", label: "Знаков после запятой", type: "number", min: 0, max: 2, step: 1 },
   ],
-  defaults: { params: { value: 72, caption: "клиентов рекомендуют нас", style: "ticks", ticks: 72, decimals: 0 } },
+  defaults: { params: { value: 72, caption: "клиентов рекомендуют нас", style: "ticks", ticks: 72, decimals: 0 }, background: { kind: "dark", color: "#0e1016" } },
   draw(f) {
     const { ctx, w, h, s, t } = f;
     const cx = w / 2;
@@ -850,6 +872,7 @@ const rose: Template = {
     ...NUMBERS,
   ],
   defaults: {
+    background: { kind: "light", color: "#0e1016" },
     params: { title: "Обращения по месяцам", subtitle: "", cold: "#4cc9f0", warm: "#ffb703", hole: 14, values: true, decimals: 0 },
     rows: [
       { label: "Янв", value: 42 },
@@ -939,6 +962,7 @@ const funnel: Template = {
   loop: false,
   controls: [...TITLE, { key: "conv", label: "Показывать конверсию", type: "toggle" }, ...NUMBERS],
   defaults: {
+    background: { kind: "dark", color: "#0e1016" },
     params: { title: "Путь клиента", subtitle: "", conv: true, decimals: 0 },
     rows: [
       { label: "Визиты", value: 12000 },
@@ -1049,7 +1073,7 @@ const bignum: Template = {
     { key: "glow", label: "Свечение", type: "range", min: 0, max: 100, step: 1, unit: "%" },
     ...NUMBERS,
   ],
-  defaults: { params: { value: 1240, caption: "новых клиентов за месяц", fill: "gradient", glow: 70, prefix: "+", unit: "", decimals: 0 } },
+  defaults: { params: { value: 1240, caption: "новых клиентов за месяц", fill: "gradient", glow: 70, prefix: "+", unit: "", decimals: 0 }, background: { kind: "dark", color: "#0e1016" } },
   draw(f) {
     const { ctx, w, h, s, t } = f;
     const v = Number(f.p.value ?? 0);
