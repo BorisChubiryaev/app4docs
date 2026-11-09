@@ -15,6 +15,23 @@ import "./SlideGraphics.css";
 // фоном, видео — MP4 (H.264), которое вставляется в PowerPoint и Keynote.
 
 type Images = HTMLImageElement[];
+type Sample = { at: number; x: number; y: number };
+
+/** Положение курсора в момент at по записанному пути (с интерполяцией) */
+function sampleAt(list: Sample[], at: number): [number, number] {
+  if (!list.length) return [0.5, 0.5];
+  if (at <= list[0].at) return [list[0].x, list[0].y];
+  for (let i = list.length - 1; i > 0; i--) {
+    if (list[i - 1].at <= at) {
+      const a = list[i - 1];
+      const b = list[i];
+      const k = Math.min(1, (at - a.at) / (b.at - a.at || 1));
+      return [a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k];
+    }
+  }
+  const last = list[list.length - 1];
+  return [last.x, last.y];
+}
 type Backdrop = "light" | "dark";
 
 const ASPECTS: [string, number, number][] = [
@@ -187,7 +204,11 @@ const SlideGraphics: React.FC = () => {
   const [showExport, setShowExport] = useState(false);
   const [backdrop, setBackdrop] = useState<Backdrop | null>(null);
   const [fontsReady, setFontsReady] = useState(0);
-  const [pinned, setPinned] = useState<[number, number] | null>(null);
+  // Закреплённое положение: путь мыши до момента клика. Лента-змейка — это
+  // модель верёвки, которая каждый кадр пересчитывается по последним секундам
+  // движения; если запомнить только точку, верёвка распрямится. С путём форма
+  // замирает ровно такой, какой была в момент клика.
+  const [pinned, setPinned] = useState<{ at: number; list: Sample[] } | null>(null);
   const [following, setFollowing] = useState(false);
 
   const tpl = byId(tplId);
@@ -198,7 +219,7 @@ const SlideGraphics: React.FC = () => {
   const exportRef = useRef<HTMLDivElement>(null);
   const timeRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
-  const samples = useRef<{ at: number; x: number; y: number }[]>([]);
+  const samples = useRef<Sample[]>([]);
   const [stageSize, setStageSize] = useState({ w: 960, h: 540 });
 
   // Шрифт Inter должен загрузиться до первой отрисовки, иначе canvas возьмёт запасной
@@ -240,24 +261,9 @@ const SlideGraphics: React.FC = () => {
 
   // ── Курсор для живых шаблонов ──
   const follow = useMemo<Frame["follow"]>(() => {
-    if (pinned) return () => pinned;
+    if (pinned) return (ago: number) => sampleAt(pinned.list, pinned.at - ago);
     if (!following) return null;
-    return (ago: number) => {
-      const list = samples.current;
-      if (!list.length) return [0.5, 0.5];
-      const at = performance.now() / 1000 - ago;
-      if (at <= list[0].at) return [list[0].x, list[0].y];
-      for (let i = list.length - 1; i > 0; i--) {
-        if (list[i - 1].at <= at) {
-          const a = list[i - 1];
-          const b = list[i];
-          const k = Math.min(1, (at - a.at) / (b.at - a.at || 1));
-          return [a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k];
-        }
-      }
-      const last = list[list.length - 1];
-      return [last.x, last.y];
-    };
+    return (ago: number) => sampleAt(samples.current, performance.now() / 1000 - ago);
   }, [pinned, following]);
 
   const pointerAt = (e: React.PointerEvent) => {
@@ -280,7 +286,18 @@ const SlideGraphics: React.FC = () => {
     if (pinned) {
       setPinned(null);
       setFollowing(true);
-    } else setPinned(pointerAt(e));
+      return;
+    }
+    const [x, y] = pointerAt(e);
+    const now = performance.now() / 1000;
+    samples.current.push({ at: now, x, y });
+    if (samples.current.length < 2) {
+      // Мышь ещё не водили — сначала начинаем следить, закрепить можно следующим кликом
+      setFollowing(true);
+      setPlaying(true);
+      return;
+    }
+    setPinned({ at: now, list: samples.current.map((p) => ({ ...p })) });
   };
 
   // ── Размер сцены под область просмотра ──
@@ -381,7 +398,7 @@ const SlideGraphics: React.FC = () => {
 
   // ── Выгрузка ──
   const exportSize = custom ? { w: even(long), h: even(long / (out.w / out.h)) } : sizeOf(aspect, long);
-  const exportFollow: Frame["follow"] = pinned ? () => pinned : null;
+  const exportFollow: Frame["follow"] = pinned ? follow : null;
   const save = async (copy = false) => {
     setMsg("");
     const { w, h } = exportSize;
