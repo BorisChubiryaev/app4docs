@@ -2,7 +2,7 @@
 // курсора — по своей траектории, так же пишется видео), лента карточек и
 // линия со следом.
 
-import { badge, clamp, drawCover, easeInOut, fitFont, fmtUnit, font, header, lerp, mix, pc, prog, rgba, rng, roundRect, smoothPath, wrap } from "../core/draw";
+import { badge, captionOf, clamp, drawCover, pickImage, easeInOut, fitFont, fmtUnit, font, header, lerp, mix, pc, prog, rgba, rng, roundRect, smoothPath, wrap } from "../core/draw";
 import type { Frame, Template } from "../core/types";
 
 const TAU = Math.PI * 2;
@@ -192,7 +192,7 @@ function card(f: Frame, i: number, x: number, y: number, w: number, h: number, r
   ctx.save();
   roundRect(ctx, x, y, w, h, r);
   ctx.clip();
-  const img = f.images.length ? f.images[i % f.images.length] : null;
+  const img = pickImage(f, i);
   if (img) drawCover(ctx, img as HTMLImageElement, x, y, w, h);
   else {
     const g = ctx.createLinearGradient(x, y, x + w, y + h);
@@ -200,8 +200,17 @@ function card(f: Frame, i: number, x: number, y: number, w: number, h: number, r
     g.addColorStop(1, pc(f, i + 2));
     ctx.fillStyle = g;
     ctx.fillRect(x, y, w, h);
-    const list = f.phrases.filter((p) => p.trim());
-    const text = list.length ? list[i % list.length] : "";
+  }
+  {
+    const text = captionOf(f, i, f.p.captions !== false);
+    if (text && img) {
+      // Затемнение снизу, чтобы подпись читалась на любом фото
+      const sh = ctx.createLinearGradient(0, y + h * 0.45, 0, y + h);
+      sh.addColorStop(0, "rgba(0,0,0,0)");
+      sh.addColorStop(1, "rgba(0,0,0,0.65)");
+      ctx.fillStyle = sh;
+      ctx.fillRect(x, y, w, h);
+    }
     if (text) {
       const [main, sub = ""] = text.split("|").map((v) => v.trim());
       const p = w * 0.1;
@@ -234,6 +243,7 @@ const flow: Template = {
   duration: 10,
   loop: true,
   controls: [
+    { key: "captions", label: "Подписи поверх фото", type: "toggle" },
     { key: "rows", label: "Рядов", type: "range", min: 1, max: 3, step: 1 },
     { key: "size", label: "Размер карточек", type: "range", min: 20, max: 70, step: 1, unit: "%" },
     { key: "gap", label: "Промежуток", type: "range", min: 0, max: 80, step: 1 },
@@ -242,7 +252,7 @@ const flow: Template = {
     { key: "tilt", label: "Покачивание", type: "range", min: 0, max: 15, step: 1 },
   ],
   defaults: {
-    params: { rows: 3, size: 36, gap: 24, radius: 22, pause: 45, tilt: 6 },
+    params: { rows: 3, size: 36, gap: 24, radius: 22, pause: 45, tilt: 6, captions: true },
     phrases: ["Команда|наш главный ресурс", "Клиенты|рекомендуют нас", "Качество|в каждой детали", "Скорость|решения за день", "Рост|+18 % за год", "Забота|24/7"],
     palette: ["#5b5bf7", "#ff4fa3", "#ffb547", "#2bd9a6", "#00b4ff", "#9d7bff"],
     background: { kind: "dark", color: "#0e1016" },

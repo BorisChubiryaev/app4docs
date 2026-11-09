@@ -436,7 +436,8 @@ const SlideGraphics: React.FC = () => {
   const dataControls = tpl.controls.filter((c) => DATA_KEYS.has(c.key));
   const lookControls = tpl.controls.filter((c) => !DATA_KEYS.has(c.key));
   const transparent = !tpl.ownBackground && scene.background.kind === "transparent";
-  const usesPhrases = tpl.input === "phrases" || (["carousel", "deck", "flow"].includes(tpl.id) && !images.length);
+  const cardTpl = ["carousel", "deck", "flow"].includes(tpl.id);
+  const usesPhrases = tpl.input === "phrases" || cardTpl;
   const usesRows = tpl.input === "rows" || tpl.input === "pairs" || tpl.input === "people";
   const usesPhotos = tpl.input === "photos" || tpl.input === "people";
   const stageBackdrop = backdrop ?? autoBackdrop(scene);
@@ -514,6 +515,8 @@ const SlideGraphics: React.FC = () => {
                       </label>
                     </div>
                     {images.length ? (
+                      <>
+                      {cardTpl && <p className="sg-hint">Подписи ниже ложатся на фото по порядку. Если подписей больше, чем фото, — остальные карточки будут цветными.</p>}
                       <div className="sg-photos__list">
                         {images.map((img, i) => (
                           <div key={img.src} className="sg-photo">
@@ -524,14 +527,15 @@ const SlideGraphics: React.FC = () => {
                           </div>
                         ))}
                       </div>
+                      </>
                     ) : (
-                      <p className="sg-hint">{tpl.id === "glass" ? "Без фото под стеклом — цветные пятна." : "Без фото — цветные карточки с фразами."} Фото остаются только в вашем браузере.</p>
+                      <p className="sg-hint">{tpl.id === "glass" ? "Без фото под стеклом — цветные пятна." : "Без фото — цветные карточки с подписями."} Фото остаются только в вашем браузере.</p>
                     )}
                   </div>
                 )}
                 {usesPhrases && (
                   <label className="sg-field">
-                    <span className="sg-field__label">Фразы — по одной в строке, вторая часть после «|»</span>
+                    <span className="sg-field__label">{cardTpl ? "Подписи карточек — по одной в строке, вторая часть после «|»" : "Фразы — по одной в строке, вторая часть после «|»"}</span>
                     <textarea rows={6} value={scene.phrases.join("\n")} onChange={(e) => update({ phrases: e.target.value.split("\n") })} />
                   </label>
                 )}

@@ -253,3 +253,29 @@ export function badge(f: Frame, text: string, x: number, y: number, color: strin
   ctx.textBaseline = "middle";
   ctx.fillText(text, bx + bw / 2, y - bh / 2 + px * 0.04);
 }
+
+// ── Карточки: фото и подписи вместе ──
+
+/** Непустые фразы — подписи карточек */
+export const phraseList = (f: Frame) => f.phrases.filter((p) => p.trim());
+
+/**
+ * Фото для карточки i. Фото идут по порядку; если подписей больше, чем фото,
+ * лишние карточки — цветные (с подписью), иначе фото повторяются по кругу.
+ */
+export function pickImage(f: Frame, i: number) {
+  const n = f.images.length;
+  if (!n) return null;
+  if (i < n) return f.images[i];
+  return phraseList(f).length > n ? null : f.images[i % n];
+}
+
+/** Подпись карточки i: на фото — если включены подписи, на цветной — всегда */
+export function captionOf(f: Frame, i: number, onPhoto: boolean) {
+  const list = phraseList(f);
+  if (!list.length) return undefined;
+  const text = list[i % list.length];
+  if (!pickImage(f, i)) return text;
+  return onPhoto && i < list.length ? text : undefined;
+}
+

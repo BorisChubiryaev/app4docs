@@ -1,6 +1,6 @@
 // Шаблоны без графиков: фразы, фоны для слайдов, раскладки и карточки с фото.
 
-import { blob, clamp, drawCover, easeBack, easeInOut, easeOut, fitFont, font, grain, isDark, lerp, mix, pc, prog, rgba, rng, roundRect, wrap } from "../core/draw";
+import { blob, captionOf, clamp, drawCover, pickImage, easeBack, easeInOut, easeOut, fitFont, font, grain, isDark, lerp, mix, pc, prog, rgba, rng, roundRect, wrap } from "../core/draw";
 import type { Frame, Template } from "../core/types";
 
 const TAU = Math.PI * 2;
@@ -446,7 +446,7 @@ function photoOrCard(f: Frame, i: number, x: number, y: number, w: number, h: nu
   ctx.save();
   roundRect(ctx, x, y, w, h, rad);
   ctx.clip();
-  const img = f.images.length ? f.images[i % f.images.length] : null;
+  const img = pickImage(f, i);
   if (img) drawCover(ctx, img as HTMLImageElement, x, y, w, h);
   else gradientCard(f, x, y, w, h, i);
   if (text) {
@@ -578,18 +578,19 @@ const carousel: Template = {
   id: "carousel",
   name: "Карусель",
   group: "cards",
-  about: "Фото или цветные карточки с фразами стоят по кругу и поворачиваются шагами: пауза — плавный переезд. Видео — бесшовная петля.",
+  about: "Фото с подписями и цветные карточки с фразами стоят по кругу и поворачиваются шагами: пауза — плавный переезд. Видео — бесшовная петля.",
   input: "photos",
   duration: 12,
   loop: true,
   controls: [
+    { key: "captions", label: "Подписи поверх фото", type: "toggle" },
     { key: "visible", label: "Ширина кольца", type: "range", min: 30, max: 100, step: 1, unit: "%" },
     { key: "card", label: "Размер карточки", type: "range", min: 20, max: 60, step: 1, unit: "%" },
     { key: "radius", label: "Скругление", type: "range", min: 0, max: 60, step: 1 },
     { key: "pause", label: "Пауза между шагами", type: "range", min: 0, max: 80, step: 1, unit: "%" },
   ],
   defaults: {
-    params: { visible: 78, card: 38, radius: 28, pause: 55 },
+    params: { visible: 78, card: 38, radius: 28, pause: 55, captions: true },
     phrases: ["Команда|наш главный ресурс", "Клиенты|рекомендуют нас", "Качество|в каждой детали", "Скорость|решения за день", "Рост|+18 % за год", "Забота|24/7"],
   },
   draw(f) {
@@ -621,7 +622,7 @@ const carousel: Template = {
       ctx.fillStyle = "#000";
       ctx.fill();
       ctx.restore();
-      photoOrCard(f, it.i, x, y, cw * sc, ch * sc, Number(f.p.radius ?? 28) * s * sc, f.images.length ? undefined : f.phrases[it.i]);
+      photoOrCard(f, it.i, x, y, cw * sc, ch * sc, Number(f.p.radius ?? 28) * s * sc, captionOf(f, it.i, f.p.captions !== false));
       if (k < 0.98) {
         roundRect(ctx, x, y, cw * sc, ch * sc, Number(f.p.radius ?? 28) * s * sc);
         ctx.fillStyle = `rgba(0,0,0,${(1 - k) * 0.45})`;
@@ -635,18 +636,19 @@ const deck: Template = {
   id: "deck",
   name: "Колода",
   group: "cards",
-  about: "Карточки лежат колодой: верхняя отлетает в сторону и уходит под низ, открывая следующую. Фото или цветные карточки с фразами.",
+  about: "Карточки лежат колодой: верхняя отлетает в сторону и уходит под низ, открывая следующую. Фото с подписями или цветные карточки с фразами.",
   input: "photos",
   duration: 10,
   loop: true,
   controls: [
+    { key: "captions", label: "Подписи поверх фото", type: "toggle" },
     { key: "frame", label: "Белая рамка, как у снимка", type: "toggle" },
     { key: "card", label: "Размер карточки", type: "range", min: 30, max: 80, step: 1, unit: "%" },
     { key: "radius", label: "Скругление", type: "range", min: 0, max: 60, step: 1 },
     { key: "tilt", label: "Разброс углов", type: "range", min: 0, max: 20, step: 1 },
   ],
   defaults: {
-    params: { frame: true, card: 62, radius: 18, tilt: 6 },
+    params: { frame: true, card: 62, radius: 18, tilt: 6, captions: true },
     phrases: ["Идея|с чего всё началось", "Команда|кто это делает", "Результат|что получилось", "Дальше|куда идём", "Спасибо|вопросы?"],
   },
   draw(f) {
@@ -674,7 +676,7 @@ const deck: Template = {
       ctx.fillStyle = frame ? "#ffffff" : "#000";
       ctx.fill();
       ctx.shadowColor = "transparent";
-      photoOrCard(f, i, -cw / 2 + fw, -ch / 2 + fw, cw - fw * 2, ch - fw * (frame ? 3.2 : 2), Math.max(0, rad - fw), f.images.length ? undefined : f.phrases[i]);
+      photoOrCard(f, i, -cw / 2 + fw, -ch / 2 + fw, cw - fw * 2, ch - fw * (frame ? 3.2 : 2), Math.max(0, rad - fw), captionOf(f, i, f.p.captions !== false));
       ctx.restore();
     };
     const dx = Math.sin(fly * Math.PI) * w * 0.42;

@@ -291,13 +291,39 @@ const pairs: Template = {
     ...TITLE,
     { key: "s1", label: "Название ряда 1 (сзади)", type: "text" },
     { key: "s2", label: "Название ряда 2 (спереди)", type: "text" },
+    { key: "colorMode", label: "Цвета рядов", type: "select", options: [["palette", "Из палитры"], ["custom", "Свои — ниже"]] },
+    { key: "c1", label: "Цвет ряда 1", type: "color" },
+    { key: "c2", label: "Цвет ряда 2", type: "color" },
+    {
+      key: "front",
+      label: "Передний столбец",
+      type: "select",
+      options: [
+        ["gradient", "Градиент — светлеет кверху"],
+        ["solid", "Сплошной"],
+        ["duo", "Два цвета — ряд 2 → ряд 1"],
+        ["fade", "Растворяется кверху"],
+      ],
+    },
+    {
+      key: "back",
+      label: "Задний столбец",
+      type: "select",
+      options: [
+        ["soft", "Полупрозрачный"],
+        ["fade", "Растворяется кверху"],
+        ["outline", "Пунктирный контур"],
+        ["hatch", "Штриховка"],
+      ],
+    },
+    GLOW,
     { key: "radius", label: "Скругление", type: "range", min: 0, max: 40, step: 1 },
     { key: "values", label: "Подписывать значения", type: "toggle" },
     ...NUMBERS,
   ],
   defaults: {
     background: { kind: "white", color: "#0e1016" },
-    params: { title: "Продажи по кварталам", subtitle: "млн ₽", s1: "План", s2: "Факт", radius: 12, values: true, decimals: 0 },
+    params: { title: "Продажи по кварталам", subtitle: "млн ₽", s1: "План", s2: "Факт", colorMode: "palette", c1: "#9aa7c7", c2: "#2a78d6", front: "gradient", back: "soft", glow: false, radius: 12, values: true, decimals: 0 },
     rows: [
       { label: "I кв.", value: 120, value2: 112 },
       { label: "II кв.", value: 135, value2: 141 },
@@ -319,25 +345,93 @@ const pairs: Template = {
     const bw = slot * 0.62;
     const fw = bw * 0.55;
     const r = Number(f.p.radius ?? 12) * s;
-    const c1 = pc(f, 0);
-    const c2 = pc(f, 1);
+    const custom = f.p.colorMode === "custom";
+    const c1 = custom ? String(f.p.c1 ?? "#9aa7c7") : pc(f, 0);
+    const c2 = custom ? String(f.p.c2 ?? "#2a78d6") : pc(f, 1);
+    const front = String(f.p.front ?? "gradient");
+    const back = String(f.p.back ?? "soft");
+    /** Заливка заднего столбца; в легенде — тот же образец */
+    const paintBack = (x: number, y: number, bwid: number, bh: number, rr: number | number[]) => {
+      roundRect(ctx, x, y, bwid, bh, rr);
+      if (back === "outline") {
+        ctx.fillStyle = rgba(c1, 0.08);
+        ctx.fill();
+        ctx.setLineDash([8 * s, 6 * s]);
+        ctx.strokeStyle = c1;
+        ctx.lineWidth = 2.5 * s;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (back === "hatch") {
+        ctx.fillStyle = rgba(c1, 0.12);
+        ctx.fill();
+        ctx.save();
+        ctx.clip();
+        ctx.strokeStyle = rgba(c1, 0.6);
+        ctx.lineWidth = 2.5 * s;
+        const step = 12 * s;
+        ctx.beginPath();
+        for (let d = -bh; d < bwid + bh; d += step) {
+          ctx.moveTo(x + d, y + bh);
+          ctx.lineTo(x + d + bh, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      } else if (back === "fade") {
+        const g = ctx.createLinearGradient(0, y + bh, 0, y);
+        g.addColorStop(0, rgba(c1, 0.55));
+        g.addColorStop(1, rgba(c1, 0.04));
+        ctx.fillStyle = g;
+        ctx.fill();
+      } else {
+        ctx.fillStyle = rgba(c1, 0.3);
+        ctx.fill();
+      }
+    };
+    const paintFront = (x: number, y: number, fwid: number, fh: number, rr: number | number[]) => {
+      roundRect(ctx, x, y, fwid, fh, rr);
+      if (front === "solid") ctx.fillStyle = c2;
+      else {
+        const g = ctx.createLinearGradient(0, y + fh, 0, y);
+        if (front === "duo") {
+          g.addColorStop(0, c2);
+          g.addColorStop(1, c1);
+        } else if (front === "fade") {
+          g.addColorStop(0, c2);
+          g.addColorStop(1, rgba(c2, 0.15));
+        } else {
+          g.addColorStop(0, c2);
+          g.addColorStop(1, mix(c2, "#ffffff", 0.35));
+        }
+        ctx.fillStyle = g;
+      }
+      if (f.p.glow) {
+        ctx.save();
+        ctx.shadowColor = rgba(c2, 0.6);
+        ctx.shadowBlur = 30 * s;
+        ctx.fill();
+        ctx.restore();
+      } else ctx.fill();
+    };
     // Легенда
     ctx.font = font(24 * s, 600);
     let lx = x1;
     ctx.textBaseline = "middle";
-    for (const [name, color, a] of [
-      [String(f.p.s2 ?? ""), c2, 1],
-      [String(f.p.s1 ?? ""), c1, 0.35],
-    ] as [string, string, number][]) {
+    for (const [name, isFront] of [
+      [String(f.p.s2 ?? ""), true],
+      [String(f.p.s1 ?? ""), false],
+    ] as [string, boolean][]) {
       if (!name) continue;
+      ctx.font = font(24 * s, 600);
       const tw = ctx.measureText(name).width;
       ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
       ctx.fillStyle = f.ink;
       ctx.fillText(name, lx, pad * 0.8 + 20 * s);
-      roundRect(ctx, lx - tw - 30 * s, pad * 0.8 + 10 * s, 20 * s, 20 * s, 5 * s);
-      ctx.fillStyle = rgba(color, a);
-      ctx.fill();
-      lx -= tw + 60 * s;
+      const sx = lx - tw - 32 * s;
+      const sy = pad * 0.8 + 9 * s;
+      if (isFront) paintFront(sx, sy, 22 * s, 22 * s, 5 * s);
+      else paintBack(sx, sy, 22 * s, 22 * s, 5 * s);
+      lx -= tw + 64 * s;
     }
     rows.forEach((row, i) => {
       const k1 = easeOut(prog(t, 0.2 + i * 0.08, 1));
@@ -345,15 +439,8 @@ const pairs: Template = {
       const cx = x0 + slot * i + slot / 2;
       const h1 = (row.value / max) * (y1 - top) * k1;
       const h2 = ((row.value2 ?? 0) / max) * (y1 - top) * k2;
-      roundRect(ctx, cx - bw / 2, y1 - h1, bw, h1, [r, r, 0, 0]);
-      ctx.fillStyle = rgba(c1, 0.28);
-      ctx.fill();
-      const g = ctx.createLinearGradient(0, y1, 0, y1 - h2);
-      g.addColorStop(0, c2);
-      g.addColorStop(1, mix(c2, "#ffffff", 0.25));
-      roundRect(ctx, cx - fw / 2, y1 - h2, fw, h2, [r * 0.8, r * 0.8, 0, 0]);
-      ctx.fillStyle = g;
-      ctx.fill();
+      if (h1 > 0) paintBack(cx - bw / 2, y1 - h1, bw, h1, [r, r, 0, 0]);
+      if (h2 > 0) paintFront(cx - fw / 2, y1 - h2, fw, h2, [r * 0.8, r * 0.8, 0, 0]);
       if (f.p.values !== false) {
         ctx.globalAlpha = clamp(k2 * 1.4);
         ctx.font = font(30 * s, 700);
@@ -865,15 +952,39 @@ const rose: Template = {
   loop: false,
   controls: [
     ...TITLE,
+    {
+      key: "colorMode",
+      label: "Раскраска",
+      type: "select",
+      options: [
+        ["value", "По значению — два цвета"],
+        ["three", "По значению — три цвета"],
+        ["one", "Оттенки одного цвета"],
+        ["palette", "Переход по палитре"],
+      ],
+    },
     { key: "cold", label: "Цвет малых", type: "color" },
+    { key: "mid", label: "Цвет средних", type: "color" },
     { key: "warm", label: "Цвет больших", type: "color" },
+    {
+      key: "fill",
+      label: "Вид секторов",
+      type: "select",
+      options: [
+        ["radial", "Свечение от центра"],
+        ["solid", "Сплошные"],
+        ["glow", "Сильное свечение"],
+        ["outline", "Контур"],
+      ],
+    },
+    { key: "glowAmt", label: "Сила свечения", type: "range", min: 0, max: 100, step: 1, unit: "%" },
     { key: "hole", label: "Отверстие в центре", type: "range", min: 0, max: 50, step: 1, unit: "%" },
     { key: "values", label: "Подписывать значения", type: "toggle" },
     ...NUMBERS,
   ],
   defaults: {
     background: { kind: "light", color: "#0e1016" },
-    params: { title: "Обращения по месяцам", subtitle: "", cold: "#4cc9f0", warm: "#ffb703", hole: 14, values: true, decimals: 0 },
+    params: { title: "Обращения по месяцам", subtitle: "", colorMode: "value", cold: "#4cc9f0", mid: "#b388ff", warm: "#ffb703", fill: "radial", glowAmt: 50, hole: 14, values: true, decimals: 0 },
     rows: [
       { label: "Янв", value: 42 },
       { label: "Фев", value: 38 },
@@ -918,19 +1029,45 @@ const rose: Template = {
       const rr = r0 + (R - r0) * q * k;
       const a0 = -Math.PI / 2 + i * step + gap / 2;
       const a1 = a0 + step - gap;
-      const color = ramp([String(f.p.cold ?? "#4cc9f0"), String(f.p.warm ?? "#ffb703")], r.value / max);
+      const q2 = Math.max(0, r.value) / max;
+      const cold = String(f.p.cold ?? "#4cc9f0");
+      const mode = String(f.p.colorMode ?? "value");
+      const color =
+        mode === "three"
+          ? ramp([cold, String(f.p.mid ?? "#b388ff"), String(f.p.warm ?? "#ffb703")], q2)
+          : mode === "one"
+            ? ramp([mix(cold, f.dark ? "#0e1016" : "#ffffff", 0.72), cold], q2)
+            : mode === "palette"
+              ? ramp(f.pal, n > 1 ? i / (n - 1) : 0)
+              : ramp([cold, String(f.p.warm ?? "#ffb703")], q2);
+      const fillKind = String(f.p.fill ?? "radial");
+      const glowK = Number(f.p.glowAmt ?? 50) / 100;
       ctx.beginPath();
       ctx.arc(cx, cy, rr, a0, a1);
       ctx.arc(cx, cy, r0, a1, a0, true);
       ctx.closePath();
-      const g = ctx.createRadialGradient(cx, cy, r0, cx, cy, Math.max(r0 + 1, rr));
-      g.addColorStop(0, rgba(color, 0.35));
-      g.addColorStop(1, color);
-      ctx.fillStyle = g;
-      ctx.shadowColor = rgba(color, 0.55);
-      ctx.shadowBlur = 24 * s * (r.value / max);
-      ctx.fill();
-      ctx.shadowBlur = 0;
+      ctx.save();
+      ctx.shadowColor = rgba(color, fillKind === "glow" ? 0.85 : 0.55);
+      ctx.shadowBlur = (fillKind === "glow" ? 70 : 28) * s * glowK * (0.4 + 0.6 * q2);
+      if (fillKind === "solid") {
+        ctx.fillStyle = color;
+        ctx.fill();
+      } else if (fillKind === "outline") {
+        ctx.fillStyle = rgba(color, 0.14);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3 * s;
+        ctx.stroke();
+      } else {
+        const g = ctx.createRadialGradient(cx, cy, r0, cx, cy, Math.max(r0 + 1, rr));
+        g.addColorStop(0, rgba(color, fillKind === "glow" ? 0.15 : 0.35));
+        g.addColorStop(fillKind === "glow" ? 0.7 : 1, color);
+        if (fillKind === "glow") g.addColorStop(1, mix(color, "#ffffff", 0.35));
+        ctx.fillStyle = g;
+        ctx.fill();
+      }
+      ctx.restore();
       const mid = (a0 + a1) / 2;
       ctx.globalAlpha = clamp(k * 1.4);
       ctx.textAlign = "center";
