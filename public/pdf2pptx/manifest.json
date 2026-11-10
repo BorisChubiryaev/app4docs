@@ -1,6 +1,6 @@
 {
   "pyodide": "0.28.3",
-  "engineCommit": "28f77c4eaa80c317e28e05298b050f54614391e8",
+  "engineCommit": "4c79b5391ee96c2917a16549ea83976532b2c8e4",
   "engineFiles": [
     "__init__.py",
     "build.py",
@@ -116,8 +116,8 @@
       "sha256": "af77af58805753aa7d4856f6eb89971f57cd8909c8068a85996f50a81f8a8ccc"
     },
     "engine/92f2176d.txt": {
-      "size": 19580,
-      "sha256": "ace5f946d05e85259c20d9faaa947d68185261a111a8aa6a36c4865405f3c4d2"
+      "size": 21448,
+      "sha256": "b888f6905410c17924975902ef89a916b83caa63c7499011a04c32b9965d8a59"
     },
     "engine/4538d230.txt": {
       "size": 14504,
@@ -132,8 +132,8 @@
       "sha256": "d10fb00b230e40ecaa9400d64b3b8766f90edd19f8f8f4158959946a01e09635"
     },
     "engine/c33b8649.txt": {
-      "size": 24222,
-      "sha256": "45c82daddf8fc6ec1707bceaad93fc8d902e3963f1a2ee5bc9fe0ca402a0e3c2"
+      "size": 25388,
+      "sha256": "768ca6d78a16ef6a82100b4b61ed6b32cfa5eb5266c7619bcb763ecdb57d0671"
     }
   },
   "store": {

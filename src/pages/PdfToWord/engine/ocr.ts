@@ -131,8 +131,29 @@ export function rasterLines(canvas: HTMLCanvasElement, scale: number, pageH: num
   const W = canvas.width;
   const H = canvas.height;
   const px = canvas.getContext("2d", { willReadFrequently: true })!.getImageData(0, 0, W, H).data;
+  // Порог — от яркости «бумаги»: таблицы в выгрузках и скриншотах часто
+  // расчерчены светло-серым (яркость ~215 на белом), и жёсткий порог 150 их
+  // не видел — таблица распадалась на строки текста. Фон — 90-й перцентиль
+  // яркости; линия — заметно темнее фона. На сером скане порог опускается
+  // вместе с фоном, поэтому бумага в линии не превращается.
+  const lum = new Uint8Array(W * H);
+  const hist = new Uint32Array(256);
+  for (let i = 0, k = 0; i < px.length; i += 4, k++) {
+    const v = (px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11) | 0;
+    lum[k] = v;
+    hist[v]++;
+  }
+  let paper = 255;
+  for (let v = 0, acc = 0; v < 256; v++) {
+    acc += hist[v];
+    if (acc >= W * H * 0.9) {
+      paper = v;
+      break;
+    }
+  }
+  const limit = Math.max(150, Math.min(235, paper - 22));
   const dark = new Uint8Array(W * H);
-  for (let i = 0, k = 0; i < px.length; i += 4, k++) dark[k] = px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11 < 150 ? 1 : 0;
+  for (let k = 0; k < lum.length; k++) dark[k] = lum[k] < limit ? 1 : 0;
   const minLen = Math.round(36 * scale); // пт
   const maxGap = Math.max(2, Math.round(scale)); // разрывы линии на скане
   const runs = (horizontal: boolean) => {
