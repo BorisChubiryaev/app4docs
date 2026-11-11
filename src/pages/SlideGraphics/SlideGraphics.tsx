@@ -210,6 +210,11 @@ const SlideGraphics: React.FC = () => {
   // замирает ровно такой, какой была в момент клика.
   const [pinned, setPinned] = useState<{ at: number; list: Sample[] } | null>(null);
   const [following, setFollowing] = useState(false);
+  // Запись движения для видео: путь мыши во времени ролика (0…dur)
+  const [recording, setRecording] = useState(false);
+  const [recorded, setRecorded] = useState<Sample[] | null>(null);
+  const recRef = useRef<Sample[]>([]);
+  const recordingRef = useRef(false);
 
   const tpl = byId(tplId);
   const scene = scenes[tplId];
@@ -255,16 +260,37 @@ const SlideGraphics: React.FC = () => {
     setPinned(null);
     setFollowing(false);
     samples.current = [];
+    stopRecording(null);
     setBackdrop(null);
     setShowExport(false);
   };
 
   // ── Курсор для живых шаблонов ──
   const follow = useMemo<Frame["follow"]>(() => {
+    // Записанное движение проигрывается вместе с роликом
+    if (recorded && !recording) return (ago: number) => sampleAt(recorded, timeRef.current - ago);
     if (pinned) return (ago: number) => sampleAt(pinned.list, pinned.at - ago);
     if (!following) return null;
     return (ago: number) => sampleAt(samples.current, performance.now() / 1000 - ago);
-  }, [pinned, following]);
+  }, [pinned, following, recorded, recording]);
+
+  function stopRecording(list: Sample[] | null) {
+    recordingRef.current = false;
+    setRecording(false);
+    setRecorded(list && list.length > 1 ? list : null);
+  }
+  const startRecording = () => {
+    setPinned(null);
+    setRecorded(null);
+    samples.current = [];
+    recRef.current = [];
+    recordingRef.current = true;
+    setRecording(true);
+    setFollowing(true);
+    timeRef.current = 0;
+    setTime(0);
+    setPlaying(true);
+  };
 
   const pointerAt = (e: React.PointerEvent) => {
     const r = canvasRef.current!.getBoundingClientRect();
@@ -275,6 +301,7 @@ const SlideGraphics: React.FC = () => {
     const [x, y] = pointerAt(e);
     const now = performance.now() / 1000;
     samples.current.push({ at: now, x, y });
+    if (recordingRef.current) recRef.current.push({ at: timeRef.current, x, y });
     while (samples.current.length > 2 && samples.current[0].at < now - 5) samples.current.shift();
     if (!following) {
       setFollowing(true);
@@ -282,7 +309,8 @@ const SlideGraphics: React.FC = () => {
     }
   };
   const onClick = (e: React.PointerEvent) => {
-    if (!tpl.interactive) return;
+    if (!tpl.interactive || recording) return;
+    if (recorded) setRecorded(null);
     if (pinned) {
       setPinned(null);
       setFollowing(true);
@@ -348,6 +376,12 @@ const SlideGraphics: React.FC = () => {
       // Метка кадра бывает чуть раньше старта цикла — время не должно уходить в минус
       timeRef.current = Math.max(0, timeRef.current + (now - last) / 1000);
       last = now;
+      // Запись движения идёт ровно один проход ролика, потом он проигрывается с начала
+      if (recordingRef.current && timeRef.current >= dur) {
+        stopRecording(recRef.current.slice());
+        setFollowing(false);
+        timeRef.current = 0;
+      }
       if (!tpl.loop && timeRef.current >= dur) {
         timeRef.current = dur;
         draw(dur);
@@ -399,6 +433,7 @@ const SlideGraphics: React.FC = () => {
   // ── Выгрузка ──
   const exportSize = custom ? { w: even(long), h: even(long / (out.w / out.h)) } : sizeOf(aspect, long);
   const exportFollow: Frame["follow"] = pinned ? follow : null;
+  const exportFollowAt = recorded ? (t: number) => (ago: number) => sampleAt(recorded, t - ago) : undefined;
   const save = async (copy = false) => {
     setMsg("");
     const { w, h } = exportSize;
@@ -409,12 +444,12 @@ const SlideGraphics: React.FC = () => {
         setBusy(0);
         setPlaying(false);
         const fallback = baseColor(scene, tpl) ?? "#ffffff";
-        const { blob, ext } = await renderVideo(scene, tpl, images, { w, h, fps, dur, fallbackBase: fallback, onProgress: setBusy, signal: ac.signal, follow: exportFollow });
+        const { blob, ext } = await renderVideo(scene, tpl, images, { w, h, fps, dur, fallbackBase: fallback, onProgress: setBusy, signal: ac.signal, follow: exportFollow, followAt: exportFollowAt });
         download(blob, fileName(tpl, even(w), even(h), ext));
         setMsg(ext === "mp4" ? "Видео сохранено — вставьте его в PowerPoint или Keynote." : "Браузер записал WebM — для PowerPoint лучше Chrome или Edge последней версии.");
       } else {
         const type = format === "jpeg" && !copy ? "image/jpeg" : "image/png";
-        const blob = await renderImage(scene, tpl, images, w, h, stillTime(tpl, dur, timeRef.current), dur, type, exportFollow);
+        const blob = await renderImage(scene, tpl, images, w, h, stillTime(tpl, dur, timeRef.current), dur, type, exportFollowAt ? exportFollowAt(stillTime(tpl, dur, timeRef.current)) : exportFollow);
         if (copy) {
           await copyImage(blob);
           setMsg("Картинка в буфере — вставьте в слайд (Ctrl+V).");
@@ -434,7 +469,10 @@ const SlideGraphics: React.FC = () => {
 
   const shown = useMemo(() => TEMPLATES.filter((t) => group === "all" || t.group === group), [group]);
   const dataControls = tpl.controls.filter((c) => DATA_KEYS.has(c.key));
-  const lookControls = tpl.controls.filter((c) => !DATA_KEYS.has(c.key));
+  const lookControls = tpl.controls.filter((c) => !DATA_KEYS.has(c.key) && (!c.when || c.when(scene.params)));
+  // Выбор палитры: шаблон может переключить свои цвета на неё
+  const pickPalette = (pal: string[], auto: boolean) =>
+    update({ palette: [...pal], paletteAuto: auto, params: { ...scene.params, ...(tpl.onPalette?.(scene.params, pal) ?? {}) } });
   const transparent = !tpl.ownBackground && scene.background.kind === "transparent";
   const cardTpl = ["carousel", "deck", "flow"].includes(tpl.id);
   const usesPhrases = tpl.input === "phrases" || cardTpl;
@@ -566,7 +604,7 @@ const SlideGraphics: React.FC = () => {
 
             <Section title="Цвета">
               <div className="sg-pals">
-                <button className={`sg-pal ${scene.paletteAuto ? "is-on" : ""}`} onClick={() => update({ paletteAuto: true })} title="Проверенная палитра: цвета различимы, в том числе при нарушениях цветовосприятия">
+                <button className={`sg-pal ${scene.paletteAuto ? "is-on" : ""}`} onClick={() => pickPalette(autoPal, true)} title="Проверенная палитра: цвета различимы, в том числе при нарушениях цветовосприятия">
                   <span className="sg-pal__dots">
                     {autoPal.slice(0, 5).map((c) => (
                       <i key={c} style={{ background: c }} />
@@ -575,7 +613,7 @@ const SlideGraphics: React.FC = () => {
                   Проверенная
                 </button>
                 {PALETTES.map(([name, pal]) => (
-                  <button key={name} className={`sg-pal ${!scene.paletteAuto && scene.palette.join() === pal.join() ? "is-on" : ""}`} onClick={() => update({ palette: [...pal], paletteAuto: false })}>
+                  <button key={name} className={`sg-pal ${!scene.paletteAuto && scene.palette.join() === pal.join() ? "is-on" : ""}`} onClick={() => pickPalette(pal, false)}>
                     <span className="sg-pal__dots">
                       {pal.map((c) => (
                         <i key={c} style={{ background: c }} />
@@ -723,6 +761,11 @@ const SlideGraphics: React.FC = () => {
                       </p>
                       {format === "mp4" && transparent && <p className="sg-note">В видео нет прозрачности — фон будет белым. Выберите фон под слайд в разделе «Фон».</p>}
                       {format === "mp4" && tpl.loop && <p className="sg-hint">Ролик зациклен: включите в PowerPoint «Повторять до остановки».</p>}
+                      {format === "mp4" && tpl.interactive && (
+                        <p className="sg-hint">
+                          {recorded ? "В видео войдёт записанное движение мыши." : pinned ? "В видео войдёт закреплённая форма." : "Чтобы в видео было ваше движение, нажмите под кадром «● Записать движение» и водите мышью один проход ролика."}
+                        </p>
+                      )}
                       {format === "png" && !transparent && !tpl.ownBackground && <p className="sg-hint">Для прозрачного PNG выберите фон «Прозрачный».</p>}
                       <div className="sg-pop__actions">
                         <button className="sg-primary" disabled={busy !== null} onClick={() => save(false)}>
@@ -764,13 +807,42 @@ const SlideGraphics: React.FC = () => {
             <div className="sg-stage__bottom">
               {tpl.interactive && (
                 <div className="sg-pill">
-                  <i className={pinned ? "is-pinned" : following ? "is-live" : ""} />
-                  {pinned ? "Закреплено · клик по кадру — снова следить" : following ? "Следует за курсором · клик закрепляет" : tpl.interactive}
-                  {(following || pinned) && (
+                  <i className={recording ? "is-rec" : pinned || recorded ? "is-pinned" : following ? "is-live" : ""} />
+                  {recording
+                    ? `Запись ${time.toFixed(1).replace(".", ",")} из ${dur} с — водите мышью по кадру`
+                    : recorded
+                      ? "Движение записано — так и будет в видео"
+                      : pinned
+                        ? "Закреплено · клик по кадру — снова следить"
+                        : following
+                          ? "Следует за курсором · клик закрепляет"
+                          : tpl.interactive}
+                  {!recording && (
+                    <button className="sg-rec" onClick={startRecording} title="Ролик начнётся сначала; всё, что вы нарисуете мышью за один проход, попадёт в видео">
+                      ● {recorded ? "Перезаписать" : "Записать движение"}
+                    </button>
+                  )}
+                  {recording && (
+                    <button
+                      onClick={() => {
+                        // Остановили раньше — ролик становится длиной с запись, без пустого хвоста
+                        const len = Math.max(1, Math.ceil(timeRef.current * 2) / 2);
+                        stopRecording(recRef.current.slice());
+                        setFollowing(false);
+                        setDurs((d) => ({ ...d, [tplId]: len }));
+                        timeRef.current = 0;
+                        setTime(0);
+                      }}
+                    >
+                      Стоп
+                    </button>
+                  )}
+                  {(following || pinned || recorded) && !recording && (
                     <button
                       onClick={() => {
                         setPinned(null);
                         setFollowing(false);
+                        setRecorded(null);
                         samples.current = [];
                       }}
                     >

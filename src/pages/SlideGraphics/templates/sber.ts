@@ -747,6 +747,24 @@ const bubbles: Template = {
 // ── Аврора ──
 
 let auroraCanvas: HTMLCanvasElement | null = null;
+let auroraSoft: HTMLCanvasElement | null = null;
+let auroraMid: HTMLCanvasElement | null = null;
+let blurOk: boolean | null = null;
+/** Есть ли у canvas фильтр размытия (в старом Safari нет) */
+function canBlur() {
+  if (blurOk !== null) return blurOk;
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 9;
+    const g = c.getContext("2d")!;
+    g.filter = "blur(2px)";
+    g.fillRect(4, 4, 1, 1);
+    blurOk = g.getImageData(1, 4, 1, 1).data[3] > 0;
+  } catch {
+    blurOk = false;
+  }
+  return blurOk;
+}
 
 const aurora: Template = {
   id: "sb-aurora",
@@ -773,10 +791,10 @@ const aurora: Template = {
     const base = String(f.p.base ?? "#03140c");
     ctx.fillStyle = base;
     ctx.fillRect(0, 0, w, h);
-    // Рисуем в малом размере: растяжение обратно даёт мягкость сияния
-    const q = 8;
-    const bw = Math.max(16, Math.round(w / q));
-    const bh = Math.max(16, Math.round(h / q));
+    // Сияние мягкое, поэтому считаем его в небольшом холсте постоянной ширины,
+    // размываем и растягиваем в два шага — без ступенек при любом размере кадра
+    const bw = 640;
+    const bh = Math.max(16, Math.round((bw * h) / w));
     if (!auroraCanvas) auroraCanvas = document.createElement("canvas");
     auroraCanvas.width = bw;
     auroraCanvas.height = bh;
@@ -792,8 +810,9 @@ const aurora: Template = {
       const amp = bh * (0.08 + 0.03 * (i % 2));
       const fr = 1 + (i % 3) * 0.5;
       const dir = i % 2 ? -1 : 1;
+      // Столбики ровно по пикселю: с перекрытием «lighter» дал бы полосы
       const step = 1;
-      for (let x = 0; x <= bw; x += step) {
+      for (let x = 0; x < bw; x += step) {
         const u = x / bw;
         const y = yBase + amp * Math.sin(u * TAU * fr + ph * dir + i * 1.3) + amp * 0.4 * Math.sin(u * TAU * 2.3 - ph * 2 * dir);
         // Высота занавеса пульсирует вдоль волны
@@ -803,20 +822,51 @@ const aurora: Template = {
         lg.addColorStop(0.25, rgba(c, 0.32));
         lg.addColorStop(1, rgba(c, 0));
         g.fillStyle = lg;
-        g.fillRect(x, y - hh, step + 0.5, hh + 1.5);
+        g.fillRect(x, y - hh, step, hh);
         // Отражённое свечение вниз
         const lg2 = g.createLinearGradient(0, y, 0, y + hh * 0.35);
         lg2.addColorStop(0, rgba(c, 0.35));
         lg2.addColorStop(1, rgba(c, 0));
         g.fillStyle = lg2;
-        g.fillRect(x, y, step + 0.5, hh * 0.35);
+        g.fillRect(x, y, step, hh * 0.35);
       }
+    }
+    // Размытие на малом холсте (дёшево) убирает ступеньки между столбиками
+    if (!auroraSoft) auroraSoft = document.createElement("canvas");
+    auroraSoft.width = bw;
+    auroraSoft.height = bh;
+    const sg = auroraSoft.getContext("2d")!;
+    sg.clearRect(0, 0, bw, bh);
+    if (canBlur()) {
+      sg.filter = "blur(3px)";
+      sg.drawImage(auroraCanvas, 0, 0);
+      sg.filter = "none";
+    } else {
+      // Без фильтра: уменьшить вдвое и растянуть обратно
+      sg.imageSmoothingQuality = "high";
+      sg.drawImage(auroraCanvas, 0, 0, bw / 4, bh / 4);
+      sg.globalCompositeOperation = "copy";
+      sg.drawImage(auroraSoft, 0, 0, bw / 4, bh / 4, 0, 0, bw, bh);
+      sg.globalCompositeOperation = "source-over";
+    }
+    // Растягиваем в два шага: на большом кадре так нет «квадратиков»
+    let src: HTMLCanvasElement = auroraSoft;
+    if (w > bw * 2) {
+      if (!auroraMid) auroraMid = document.createElement("canvas");
+      auroraMid.width = Math.round(w / 2);
+      auroraMid.height = Math.round(h / 2);
+      const mg = auroraMid.getContext("2d")!;
+      mg.imageSmoothingEnabled = true;
+      mg.imageSmoothingQuality = "high";
+      mg.clearRect(0, 0, auroraMid.width, auroraMid.height);
+      mg.drawImage(auroraSoft, 0, 0, auroraMid.width, auroraMid.height);
+      src = auroraMid;
     }
     ctx.save();
     ctx.globalCompositeOperation = "screen";
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(auroraCanvas, 0, 0, bw, bh, 0, 0, w, h);
+    ctx.drawImage(src, 0, 0, src.width, src.height, 0, 0, w, h);
     ctx.restore();
     // Затемнение снизу — место для текста
     const sh = ctx.createLinearGradient(0, h * 0.55, 0, h);

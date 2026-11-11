@@ -8,6 +8,7 @@ import type {
   WorkerResponse,
 } from "./pdf2pptx.types";
 import { plural } from "../../utils/plural";
+import { stopWarmUp } from "./engineAssets";
 import "./PdfToPptx.css";
 
 type EngineState =
@@ -32,6 +33,9 @@ interface Job {
   details?: string;
   textChars?: number;
 }
+
+/** Сколько раз страница сама перезапускает движок после сбоя загрузки */
+const AUTO_RESTARTS = 2;
 
 const MODES: { id: ConvertMode; title: string; text: string }[] = [
   {
@@ -109,6 +113,10 @@ const PdfToPptx: React.FC = () => {
   const [slowStart, setSlowStart] = useState(false);
 
   const workerRef = useRef<Worker | null>(null);
+  // Сбой при запуске движка (сеть, сервер) лечился перезагрузкой страницы —
+  // теперь страница сама перезапускает движок, пару раз
+  const restarts = useRef(0);
+  const restartRef = useRef<() => void>(() => {});
   const nextId = useRef(1);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -146,7 +154,9 @@ const PdfToPptx: React.FC = () => {
           textChars: m.textChars,
         });
       } else if (m.type === "error") {
-        if (m.fatal || m.id === undefined) {
+        if ((m.fatal || m.id === undefined) && restarts.current < AUTO_RESTARTS) {
+          restartRef.current();
+        } else if (m.fatal || m.id === undefined) {
           setEngine({ status: "error", message: m.message, details: m.details });
         } else {
           patchJob(m.id, { status: "error", error: m.message, details: m.details });
@@ -154,6 +164,10 @@ const PdfToPptx: React.FC = () => {
       }
     };
     worker.onerror = (e) => {
+      if (restarts.current < AUTO_RESTARTS) {
+        restartRef.current();
+        return;
+      }
       setEngine({
         status: "error",
         message: "Не удалось запустить движок конвертации.",
@@ -166,7 +180,19 @@ const PdfToPptx: React.FC = () => {
     workerRef.current = worker;
   }, []);
 
+  restartRef.current = () => {
+    restarts.current += 1;
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    setEngine({ status: "loading", text: "Связь с сервером прервалась — пробуем ещё раз…", step: 0, steps: 1 });
+    window.setTimeout(() => {
+      // Уже готовые файлы лежат в кэше браузера — второй запуск быстрее
+      if (!workerRef.current) startWorker();
+    }, 1500 * restarts.current);
+  };
+
   useEffect(() => {
+    stopWarmUp();
     startWorker();
     return () => {
       workerRef.current?.terminate();
@@ -260,6 +286,7 @@ const PdfToPptx: React.FC = () => {
   };
 
   const restartEngine = () => {
+    restarts.current = 0;
     workerRef.current?.terminate();
     setEngine({ status: "loading", text: "Готовим движок…", step: 0, steps: 1 });
     startWorker();

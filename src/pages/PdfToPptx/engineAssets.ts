@@ -114,6 +114,19 @@ export class DamagedFileError extends Error {
   }
 }
 
+/** Сколько раз пробуем скачать файл движка, прежде чем сдаться */
+const RETRIES = 4;
+
+class HttpError extends Error {
+  constructor(
+    rel: string,
+    readonly status: number,
+  ) {
+    super(`Сервер не отдал ${rel.split("/").pop()}: HTTP ${status}`);
+    this.name = "HttpError";
+  }
+}
+
 const relPath = (url: string, base: string) =>
   url.slice(base.length).split("?")[0];
 
@@ -171,19 +184,28 @@ export const makeCachedFetch = (
       if (!bad) return bytes;
       await cache?.delete(url).catch(() => false); // испорчен — качаем заново
     }
-    const res = await nativeFetch(url, init);
-    if (!res.ok) {
-      note(storedRel, new ArrayBuffer(0), `с сервера (HTTP ${res.status})`, "");
-      throw new Error(
-        `Сервер не отдал ${storedRel.split("/").pop()}: HTTP ${res.status}`,
-      );
+    // Сервер под нагрузкой иногда обрывает ответ, отвечает 5xx или
+    // (файрвол) 403/429 на часть из десятков запросов подряд. Раньше одна
+    // такая осечка ломала запуск до перезагрузки страницы — теперь повторяем.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const res = await nativeFetch(url, init);
+        if (!res.ok) {
+          note(storedRel, new ArrayBuffer(0), `с сервера (HTTP ${res.status}), попытка ${attempt}`, "");
+          throw new HttpError(storedRel, res.status);
+        }
+        const bytes = await res.arrayBuffer();
+        const problem = await checkFile(manifest, storedRel, bytes);
+        note(storedRel, bytes, `с сервера (${res.headers.get("content-type") ?? "тип ?"})`, problem);
+        if (problem) throw new DamagedFileError(problem);
+        if (cache) await cache.put(url, new Response(bytes)).catch(() => {});
+        return bytes;
+      } catch (err) {
+        const final = err instanceof HttpError && err.status === 404;
+        if (final || attempt >= RETRIES) throw err;
+        await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
+      }
     }
-    const bytes = await res.arrayBuffer();
-    const problem = await checkFile(manifest, storedRel, bytes);
-    note(storedRel, bytes, `с сервера (${res.headers.get("content-type") ?? "тип ?"})`, problem);
-    if (problem) throw new DamagedFileError(problem);
-    if (cache) await cache.put(url, new Response(bytes)).catch(() => {});
-    return bytes;
   };
 
   return async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -223,6 +245,15 @@ export const dropOldCaches = async (manifest: Manifest) => {
 };
 
 let warmUpStarted = false;
+let warmUpStopped = false;
+
+/**
+ * Останавливает фоновую подкачку: страница конвертера качает движок сама,
+ * и два параллельных потока запросов к одним файлам только мешают друг другу.
+ */
+export const stopWarmUp = () => {
+  warmUpStopped = true;
+};
 
 /**
  * Тихо подкачивает файлы движка в кэш, пока пользователь занят другим.
@@ -238,6 +269,7 @@ export const warmUpEngine = async (): Promise<void> => {
     await dropOldCaches(manifest);
     const cache = await caches.open(cacheName(manifest));
     for (const file of engineFiles(manifest)) {
+      if (warmUpStopped) return;
       const url = base + file;
       if (await cache.match(url)) continue;
       // По одному файлу и с низким приоритетом — не мешаем работе страницы.

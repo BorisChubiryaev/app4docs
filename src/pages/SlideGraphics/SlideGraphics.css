@@ -757,6 +757,19 @@
 .sg-pill i.is-pinned {
   background: #ffb547;
 }
+.sg-pill i.is-rec {
+  background: #ff4d4f;
+  animation: sg-rec 1s ease-in-out infinite;
+}
+@keyframes sg-rec {
+  50% {
+    opacity: 0.35;
+  }
+}
+.sg-pill button.sg-rec {
+  background: #e5484d;
+  font-weight: 600;
+}
 .sg-pill button {
   padding: 4px 10px;
   border: none;

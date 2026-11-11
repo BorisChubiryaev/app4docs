@@ -29,6 +29,7 @@ const ribbon: Template = {
   duration: 8,
   loop: true,
   interactive: "Водите мышью по кадру — лента ползёт следом. Клик закрепляет, ещё клик — снова следит.",
+  onPalette: (_p, pal) => ({ bandColor: pal[0] }),
   controls: [
     { key: "text", label: "Текст", type: "text" },
     { key: "size", label: "Размер", type: "range", min: 30, max: 200, step: 1 },
@@ -133,6 +134,7 @@ const magnet: Template = {
   duration: 8,
   loop: true,
   interactive: "Водите мышью по кадру — штрихи тянутся к курсору. Клик закрепляет узор.",
+  onPalette: (_p, pal) => ({ hot: pal[0] }),
   controls: [
     { key: "mode", label: "Штрихи", type: "select", options: [["toward", "Смотрят на курсор"], ["around", "Кружат вокруг"]] },
     { key: "step", label: "Шаг сетки", type: "range", min: 14, max: 80, step: 1 },

@@ -19,13 +19,17 @@ export type Group = "charts" | "sber" | "text" | "backgrounds" | "cards";
 /** Какие данные вводит пользователь */
 export type Input = "rows" | "pairs" | "single" | "phrases" | "photos" | "people" | "none";
 
-export type Control =
+export type Control = (
   | { key: string; label: string; type: "text"; placeholder?: string }
   | { key: string; label: string; type: "number"; min?: number; max?: number; step?: number }
   | { key: string; label: string; type: "range"; min: number; max: number; step: number; unit?: string }
   | { key: string; label: string; type: "select"; options: [string, string][] }
   | { key: string; label: string; type: "toggle" }
-  | { key: string; label: string; type: "color" };
+  | { key: string; label: string; type: "color" }
+) & {
+  /** Показывать настройку только при таких параметрах (иначе она ни на что не влияет) */
+  when?: (p: Params) => boolean;
+};
 
 export interface Frame {
   ctx: CanvasRenderingContext2D;
@@ -77,6 +81,11 @@ export interface Template {
     palette?: string[];
     background?: Background;
   };
+  /**
+   * Пользователь выбрал палитру: какие свои цвета шаблона переключить на неё,
+   * чтобы смена палитры была видна сразу
+   */
+  onPalette?: (p: Params, pal: string[]) => Params;
   /** Кнопка «Перемешать» меняет параметр seed */
   shuffle?: boolean;
   /** Шаблон следует за курсором в превью; подсказка для пользователя */

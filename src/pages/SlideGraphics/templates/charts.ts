@@ -288,13 +288,14 @@ const pairs: Template = {
   input: "pairs",
   duration: 5,
   loop: false,
+  onPalette: () => ({ colorMode: "palette" }),
   controls: [
     ...TITLE,
     { key: "s1", label: "Название ряда 1 (сзади)", type: "text" },
     { key: "s2", label: "Название ряда 2 (спереди)", type: "text" },
     { key: "colorMode", label: "Цвета рядов", type: "select", options: [["palette", "Из палитры"], ["custom", "Свои — ниже"]] },
-    { key: "c1", label: "Цвет ряда 1", type: "color" },
-    { key: "c2", label: "Цвет ряда 2", type: "color" },
+    { key: "c1", label: "Цвет ряда 1", type: "color", when: (p) => p.colorMode === "custom" },
+    { key: "c2", label: "Цвет ряда 2", type: "color", when: (p) => p.colorMode === "custom" },
     {
       key: "front",
       label: "Передний столбец",
@@ -951,22 +952,9 @@ const rose: Template = {
   input: "rows",
   duration: 5,
   loop: false,
+  onPalette: (p) => ({ theme: "palette", colorMode: p.colorMode === "palette" ? "palette" : "pvalue" }),
   controls: [
     ...TITLE,
-    {
-      key: "colorMode",
-      label: "Раскраска",
-      type: "select",
-      options: [
-        ["value", "По значению — два цвета"],
-        ["three", "По значению — три цвета"],
-        ["one", "Оттенки одного цвета"],
-        ["palette", "Переход по палитре"],
-      ],
-    },
-    { key: "cold", label: "Цвет малых", type: "color" },
-    { key: "mid", label: "Цвет средних", type: "color" },
-    { key: "warm", label: "Цвет больших", type: "color" },
     {
       key: "fill",
       label: "Вид секторов",
@@ -981,20 +969,37 @@ const rose: Template = {
     },
     {
       key: "theme",
-      label: "Тема теплового свечения",
+      label: "Цвета свечения",
       type: "select",
-      options: HEAT_THEMES.map(([id, name]) => [id, name] as [string, string]),
+      options: [["palette", "Из палитры (ниже)"], ...HEAT_THEMES.map(([id, name]) => [id, name] as [string, string])],
+      when: (p) => p.fill === "heat",
     },
-    { key: "breath", label: "Дыхание", type: "toggle" },
-    { key: "centerText", label: "Текст в центре", type: "text", placeholder: "Например, 2025 или итог" },
-    { key: "glowAmt", label: "Сила свечения", type: "range", min: 0, max: 100, step: 1, unit: "%" },
-    { key: "hole", label: "Отверстие в центре", type: "range", min: 0, max: 50, step: 1, unit: "%" },
+    { key: "breath", label: "Дыхание", type: "toggle", when: (p) => p.fill === "heat" },
+    { key: "centerText", label: "Текст в центре", type: "text", placeholder: "Например, 2025 или итог", when: (p) => p.fill === "heat" },
+    {
+      key: "colorMode",
+      label: "Раскраска",
+      type: "select",
+      options: [
+        ["pvalue", "По значению — цвета палитры"],
+        ["palette", "По порядку — цвета палитры"],
+        ["value", "По значению — свои два цвета"],
+        ["three", "По значению — свои три цвета"],
+        ["one", "Оттенки своего цвета"],
+      ],
+      when: (p) => p.fill !== "heat",
+    },
+    { key: "cold", label: "Цвет малых", type: "color", when: (p) => p.fill !== "heat" && ["value", "three", "one"].includes(String(p.colorMode)) },
+    { key: "mid", label: "Цвет средних", type: "color", when: (p) => p.fill !== "heat" && p.colorMode === "three" },
+    { key: "warm", label: "Цвет больших", type: "color", when: (p) => p.fill !== "heat" && ["value", "three"].includes(String(p.colorMode)) },
+    { key: "glowAmt", label: "Сила свечения", type: "range", min: 0, max: 100, step: 1, unit: "%", when: (p) => p.fill !== "solid" && p.fill !== "outline" },
+    { key: "hole", label: "Отверстие в центре", type: "range", min: 0, max: 50, step: 1, unit: "%", when: (p) => p.fill !== "heat" },
     { key: "values", label: "Подписывать значения", type: "toggle" },
     ...NUMBERS,
   ],
   defaults: {
     background: { kind: "light", color: "#0e1016" },
-    params: { title: "Обращения по месяцам", subtitle: "", colorMode: "value", cold: "#4cc9f0", mid: "#b388ff", warm: "#ffb703", fill: "heat", theme: "warm", breath: true, centerText: "2025", glowAmt: 50, hole: 14, values: true, decimals: 0 },
+    params: { title: "Обращения по месяцам", subtitle: "", colorMode: "pvalue", cold: "#4cc9f0", mid: "#b388ff", warm: "#ffb703", fill: "heat", theme: "warm", breath: true, centerText: "2025", glowAmt: 50, hole: 14, values: true, decimals: 0 },
     rows: [
       { label: "Янв", value: 42 },
       { label: "Фев", value: 38 },
@@ -1046,8 +1051,11 @@ const rose: Template = {
       const q2 = Math.max(0, r.value) / max;
       const cold = String(f.p.cold ?? "#4cc9f0");
       const mode = String(f.p.colorMode ?? "value");
+      const P = f.pal.slice(0, 3);
       const color =
-        mode === "three"
+        mode === "pvalue"
+          ? ramp(P.length > 1 ? P : [mix(P[0], f.dark ? "#0e1016" : "#ffffff", 0.6), P[0]], q2)
+          : mode === "three"
           ? ramp([cold, String(f.p.mid ?? "#b388ff"), String(f.p.warm ?? "#ffb703")], q2)
           : mode === "one"
             ? ramp([mix(cold, f.dark ? "#0e1016" : "#ffffff", 0.72), cold], q2)
@@ -1105,7 +1113,12 @@ const rose: Template = {
 function drawRoseHeat(f: Frame, cx: number, cy: number, R: number, max: number, step: number) {
   const { ctx, w, h, s, t, rows } = f;
   const n = rows.length;
-  const theme = HEAT_THEMES.find(([id]) => id === f.p.theme) ?? HEAT_THEMES[0];
+  // «Из палитры»: край — второй цвет, сердцевина — первый, светлеющий к центру
+  const P = f.pal;
+  const stops =
+    f.p.theme === "palette"
+      ? [P[Math.min(1, P.length - 1)], P[0], mix(P[0], "#ffffff", 0.55), mix(P[0], "#ffffff", 0.92)]
+      : (HEAT_THEMES.find(([id]) => id === f.p.theme) ?? HEAT_THEMES[0])[2];
   const glowK = Number(f.p.glowAmt ?? 50) / 100;
   const breath = f.p.breath !== false;
   const grow = easeOut(prog(t, 0.15, 1.6));
@@ -1144,7 +1157,7 @@ function drawRoseHeat(f: Frame, cx: number, cy: number, R: number, max: number, 
       g.fill();
     });
   };
-  drawHeat(ctx, w, h, shape, R * (0.06 + 0.12 * glowK), theme[2]);
+  drawHeat(ctx, w, h, shape, R * (0.06 + 0.12 * glowK), stops);
 
   // Подписи по кругу, значение — второй строкой
   ctx.textAlign = "center";
