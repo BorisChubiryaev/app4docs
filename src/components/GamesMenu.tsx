@@ -40,11 +40,10 @@ const GamesMenu = () => {
         title="Игры — перерыв для ума"
       >
         <span className="lg-btn__game-icon">🎮</span>
-        Игры
       </button>
       {open && (
         <div className="games-menu__panel" role="menu">
-          <div className="games-menu__title">Перерыв для ума</div>
+          <div className="games-menu__title">Список игр</div>
           {GAMES.map((g) => (
             <Link key={g.to} to={g.to} className="games-menu__item" role="menuitem" onClick={() => setOpen(false)}>
               <span className="games-menu__icon" aria-hidden="true">
