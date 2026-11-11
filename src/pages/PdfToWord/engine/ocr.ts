@@ -131,11 +131,14 @@ export function rasterLines(canvas: HTMLCanvasElement, scale: number, pageH: num
   const W = canvas.width;
   const H = canvas.height;
   const px = canvas.getContext("2d", { willReadFrequently: true })!.getImageData(0, 0, W, H).data;
-  // Порог — от яркости «бумаги»: таблицы в выгрузках и скриншотах часто
-  // расчерчены светло-серым (яркость ~215 на белом), и жёсткий порог 150 их
-  // не видел — таблица распадалась на строки текста. Фон — 90-й перцентиль
-  // яркости; линия — заметно темнее фона. На сером скане порог опускается
-  // вместе с фоном, поэтому бумага в линии не превращается.
+  // Две маски. Тёмная (< 150) — обычные чёрные линии. Серая — от 150 до
+  // порога фона: таблицы в выгрузках и скриншотах часто расчерчены светло-
+  // серым (яркость ~215 на белом), тёмная маска их не видит. Порог фона —
+  // 90-й перцентиль яркости минус 22: на сером скане он опускается вместе
+  // с бумагой. Маски не объединяем: в одной мягкой маске сглаженные края
+  // букв сливались в длинные «линии» внутри слов, и их стирание уничтожало
+  // текст. Серая линия сплошь серая, а у букв серые только края, разорванные
+  // тёмными штрихами, — длинного серого отрезка буквы не дают.
   const lum = new Uint8Array(W * H);
   const hist = new Uint32Array(256);
   for (let i = 0, k = 0; i < px.length; i += 4, k++) {
@@ -153,10 +156,14 @@ export function rasterLines(canvas: HTMLCanvasElement, scale: number, pageH: num
   }
   const limit = Math.max(150, Math.min(235, paper - 22));
   const dark = new Uint8Array(W * H);
-  for (let k = 0; k < lum.length; k++) dark[k] = lum[k] < limit ? 1 : 0;
+  const grey = new Uint8Array(W * H);
+  for (let k = 0; k < lum.length; k++) {
+    dark[k] = lum[k] < 150 ? 1 : 0;
+    grey[k] = lum[k] >= 150 && lum[k] < limit ? 1 : 0;
+  }
   const minLen = Math.round(36 * scale); // пт
   const maxGap = Math.max(2, Math.round(scale)); // разрывы линии на скане
-  const runs = (horizontal: boolean) => {
+  const runs = (mask: Uint8Array, horizontal: boolean) => {
     const out: { pos: number; a: number; b: number }[] = [];
     const n1 = horizontal ? H : W;
     const n2 = horizontal ? W : H;
@@ -164,7 +171,7 @@ export function rasterLines(canvas: HTMLCanvasElement, scale: number, pageH: num
       let start = -1;
       let gap = 0;
       for (let j = 0; j <= n2; j++) {
-        const on = j < n2 && (horizontal ? dark[i * W + j] : dark[j * W + i]);
+        const on = j < n2 && (horizontal ? mask[i * W + j] : mask[j * W + i]);
         if (on) {
           if (start < 0) start = j;
           gap = 0;
@@ -195,14 +202,14 @@ export function rasterLines(canvas: HTMLCanvasElement, scale: number, pageH: num
     }
     return lines.filter((l) => (l.p1 - l.p0 + 1) / scale <= 4); // толще — заливка, не линия
   };
-  const hSegs: Seg[] = merge(runs(true)).map((l) => ({
+  const hSegs: Seg[] = merge([...runs(dark, true), ...runs(grey, true)]).map((l) => ({
     pos: pageH - (l.p0 + l.p1) / 2 / scale,
     a: l.a / scale,
     b: l.b / scale,
     width: Math.max(0.5, (l.p1 - l.p0 + 1) / scale),
     color: "000000",
   }));
-  const vSegs: Seg[] = merge(runs(false)).map((l) => ({
+  const vSegs: Seg[] = merge([...runs(dark, false), ...runs(grey, false)]).map((l) => ({
     pos: (l.p0 + l.p1) / 2 / scale,
     a: pageH - l.b / scale,
     b: pageH - l.a / scale,
