@@ -22,6 +22,7 @@ import {
   roundRect,
   smoothPath,
 } from "../core/draw";
+import { drawHeat, HEAT_THEMES } from "../core/heat";
 import type { Control, Frame, Row, Template } from "../core/types";
 
 const TITLE: Control[] = [
@@ -946,7 +947,7 @@ const rose: Template = {
   id: "rose",
   name: "Полярная роза",
   group: "charts",
-  about: "Сектора одинаковой ширины, длина — значение; цвет плавно переходит от холодного у малых к тёплому у больших.",
+  about: "Длина сектора — значение. Тепловое свечение: мягкое пятно по форме данных, холодное по краю и горячее в сердцевине, дышит.",
   input: "rows",
   duration: 5,
   loop: false,
@@ -971,12 +972,21 @@ const rose: Template = {
       label: "Вид секторов",
       type: "select",
       options: [
+        ["heat", "Тепловое свечение"],
         ["radial", "Свечение от центра"],
         ["solid", "Сплошные"],
         ["glow", "Сильное свечение"],
         ["outline", "Контур"],
       ],
     },
+    {
+      key: "theme",
+      label: "Тема теплового свечения",
+      type: "select",
+      options: HEAT_THEMES.map(([id, name]) => [id, name] as [string, string]),
+    },
+    { key: "breath", label: "Дыхание", type: "toggle" },
+    { key: "centerText", label: "Текст в центре", type: "text", placeholder: "Например, 2025 или итог" },
     { key: "glowAmt", label: "Сила свечения", type: "range", min: 0, max: 100, step: 1, unit: "%" },
     { key: "hole", label: "Отверстие в центре", type: "range", min: 0, max: 50, step: 1, unit: "%" },
     { key: "values", label: "Подписывать значения", type: "toggle" },
@@ -984,7 +994,7 @@ const rose: Template = {
   ],
   defaults: {
     background: { kind: "light", color: "#0e1016" },
-    params: { title: "Обращения по месяцам", subtitle: "", colorMode: "value", cold: "#4cc9f0", mid: "#b388ff", warm: "#ffb703", fill: "radial", glowAmt: 50, hole: 14, values: true, decimals: 0 },
+    params: { title: "Обращения по месяцам", subtitle: "", colorMode: "value", cold: "#4cc9f0", mid: "#b388ff", warm: "#ffb703", fill: "heat", theme: "warm", breath: true, centerText: "2025", glowAmt: 50, hole: 14, values: true, decimals: 0 },
     rows: [
       { label: "Янв", value: 42 },
       { label: "Фев", value: 38 },
@@ -1023,6 +1033,10 @@ const rose: Template = {
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
+    if (String(f.p.fill ?? "radial") === "heat") {
+      drawRoseHeat(f, cx, cy, R, max, step);
+      return;
+    }
     rows.forEach((r, i) => {
       const k = easeOut(prog(t, 0.2 + i * 0.06, 1.1));
       const q = Math.sqrt(Math.max(0, r.value) / max);
@@ -1086,6 +1100,84 @@ const rose: Template = {
     });
   },
 };
+
+/** Роза «тепловое свечение»: одно мягкое пятно, форма — по значениям */
+function drawRoseHeat(f: Frame, cx: number, cy: number, R: number, max: number, step: number) {
+  const { ctx, w, h, s, t, rows } = f;
+  const n = rows.length;
+  const theme = HEAT_THEMES.find(([id]) => id === f.p.theme) ?? HEAT_THEMES[0];
+  const glowK = Number(f.p.glowAmt ?? 50) / 100;
+  const breath = f.p.breath !== false;
+  const grow = easeOut(prog(t, 0.15, 1.6));
+  // Радиус каждого сектора; минимум, чтобы пятно не рвалось на нулях
+  const rad = rows.map((r) => R * (0.18 + 0.82 * Math.pow(Math.max(0, r.value) / max, 1.4)));
+  // Плавный замкнутый контур через центры секторов (Катмулл — Ром по кругу)
+  const at = (theta: number, scale: number, phase: number) => {
+    const x = (((theta + Math.PI / 2) / step - 0.5) % n + n) % n;
+    const j = Math.floor(x);
+    const u = x - j;
+    const p0 = rad[(j - 1 + n) % n];
+    const p1 = rad[j];
+    const p2 = rad[(j + 1) % n];
+    const p3 = rad[(j + 2) % n];
+    const v = 0.5 * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u);
+    // Дыхание: лёгкая волна по контуру и пульс всей фигуры
+    const wave = breath ? 1 + 0.025 * Math.sin(theta * 3 + t * 1.7 + phase) + 0.03 * Math.sin(t * 2.4 - phase) : 1;
+    return Math.max(R * 0.05, v) * scale * wave;
+  };
+  const layers = [1, 0.8, 0.6, 0.42, 0.26];
+  const shape = (g: CanvasRenderingContext2D) => {
+    g.globalCompositeOperation = "lighter";
+    g.fillStyle = "rgba(0,0,0,0.22)";
+    layers.forEach((L, li) => {
+      g.beginPath();
+      const steps = 120;
+      for (let i = 0; i <= steps; i++) {
+        const th = (i / steps) * Math.PI * 2 - Math.PI / 2;
+        const rr = at(th, L * grow, li * 0.7);
+        const x = cx + Math.cos(th) * rr;
+        const y = cy + Math.sin(th) * rr;
+        if (i) g.lineTo(x, y);
+        else g.moveTo(x, y);
+      }
+      g.closePath();
+      g.fill();
+    });
+  };
+  drawHeat(ctx, w, h, shape, R * (0.06 + 0.12 * glowK), theme[2]);
+
+  // Подписи по кругу, значение — второй строкой
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const lr = R + 40 * s;
+  rows.forEach((r, i) => {
+    const k = easeOut(prog(t, 0.5 + i * 0.05, 0.8));
+    const mid = -Math.PI / 2 + (i + 0.5) * step;
+    const x = cx + Math.cos(mid) * lr;
+    const y = cy + Math.sin(mid) * lr;
+    ctx.globalAlpha = clamp(k);
+    const two = f.p.values !== false;
+    ctx.font = font(20 * s, 500);
+    ctx.fillStyle = f.muted;
+    ctx.fillText(r.label, x, two ? y - 12 * s : y);
+    if (two) {
+      ctx.font = font(22 * s, 700);
+      ctx.fillStyle = f.ink;
+      ctx.fillText(fmtUnit(r.value, f), x, y + 13 * s);
+    }
+  });
+  ctx.globalAlpha = 1;
+  // Текст в центре — на горячей сердцевине, поэтому тёмный
+  const label = String(f.p.centerText ?? "").trim();
+  if (label) {
+    ctx.globalAlpha = clamp(prog(t, 0.9, 0.6));
+    const size = fitFont(ctx, label, R * 0.7, 54 * s, 800);
+    ctx.font = font(size, 800);
+    ctx.fillStyle = "#16171d";
+    ctx.fillText(label, cx, cy);
+    ctx.globalAlpha = 1;
+  }
+}
 
 // ── Воронка ──
 
