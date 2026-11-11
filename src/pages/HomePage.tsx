@@ -242,6 +242,7 @@ const tools: Tool[] = [
       "Бесплатно и без ограничений — всё в браузере",
     ],
   },
+  {
     title: "PDF → PowerPoint",
     path: "/PdfToPptx",
     description:
