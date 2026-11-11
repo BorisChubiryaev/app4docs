@@ -14,7 +14,7 @@ export interface Row {
   note?: string;
 }
 
-export type Group = "charts" | "text" | "backgrounds" | "cards";
+export type Group = "charts" | "sber" | "text" | "backgrounds" | "cards";
 
 /** Какие данные вводит пользователь */
 export type Input = "rows" | "pairs" | "single" | "phrases" | "photos" | "people" | "none";

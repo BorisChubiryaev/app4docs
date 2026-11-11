@@ -1,13 +1,15 @@
 import type { Group, Scene, Template } from "../core/types";
 import { CHARTS } from "./charts";
 import { MOTION } from "./motion";
+import { SBER, SBER_GREENS, SBER_TEMPLATES } from "./sber";
 import { SCENES } from "./scenes";
 
-export const TEMPLATES: Template[] = [...CHARTS, ...MOTION, ...SCENES];
+export const TEMPLATES: Template[] = [...CHARTS, ...SBER_TEMPLATES, ...MOTION, ...SCENES];
 
 export const GROUPS: [Group | "all", string][] = [
   ["all", "Все"],
   ["charts", "Графики"],
+  ["sber", "Стиль СБ"],
   ["text", "Текст"],
   ["backgrounds", "Фоны"],
   ["cards", "Карточки и фото"],
@@ -19,9 +21,11 @@ export const GROUPS: [Group | "all", string][] = [
 export const PALETTES: [string, string[]][] = [
   ["Фирменная", ["#0087cd", "#8253aa", "#ff1c77", "#515dad"]],
   ["Неон", ["#5b5bf7", "#ff4fa3", "#2bd9a6", "#ffb547"]],
-  // Фирменные зелёные Сбера
-  ["Сбер", ["#21a038", "#0b5c3b", "#42e3b4", "#a0e720"]],
-  ["Зелёная",["#21a038", "#0ea5a4", "#a3e635", "#14532d"]],
+  // Стиль СБ: для нескольких категорий (проверена на светлом и тёмном фоне)
+  // и зелёные — для одного ряда и градиентов
+  ["Сбер", SBER],
+  ["Сбер — зелёные", SBER_GREENS],
+  ["Зелёная", ["#21a038", "#0ea5a4", "#a3e635", "#14532d"]],
   ["Океан", ["#0077b6", "#00b4d8", "#90e0ef", "#023e8a"]],
   ["Тёплая", ["#ff6b35", "#ff2e63", "#ffd166", "#8338ec"]],
   ["Пастель", ["#7c9cff", "#ff9ecd", "#7ee0b5", "#ffd47a"]],
