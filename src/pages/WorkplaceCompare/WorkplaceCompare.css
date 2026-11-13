@@ -1,13 +1,16 @@
 .workplace-compare-page {
   min-height: 100vh;
-  background: var(--surface-2);
+  background: var(--bg);
   font-family: var(--font-sans);
-  padding: 20px;
+}
+/* Общая шапка (как у остальных инструментов) идёт во всю ширину, отступы — у содержимого */
+.workplace-compare-container > .ds-page__header {
+  margin: 0 -20px 24px;
 }
 
 .workplace-compare-container {
-  max-width: 1800px;
   margin: 0 auto;
+  padding: 0 20px 20px;
 }
 
 /* Заголовок */
@@ -752,7 +755,7 @@
 .workplace-alert-content {
   flex: 1;
   font-size: 1.2rem;
-  color: #1d1d1f;
+  color: var(--ink);
 }
 
 /* Анимации */

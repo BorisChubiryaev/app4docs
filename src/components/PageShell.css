@@ -1,11 +1,17 @@
 /* ============================================================
-   PageShell — единая оболочка страницы (чистый/светлый стиль).
-   Классы ds-page__*. Использует токены из src/styles/tokens.css.
+   PageShell — единая оболочка страниц инструментов.
+   Шапка: знак Convertix (на главную) | название инструмента | поиск,
+   тема, инструкция. Все цвета — из токенов (src/styles/tokens.css).
    ============================================================ */
+
+.ds-page__header-inner,
+.ds-page__body {
+  box-sizing: border-box;
+}
 
 .ds-page {
   min-height: 100vh;
-  background: var(--surface-2);
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
 }
@@ -28,8 +34,6 @@
   display: flex;
   flex-direction: column;
   padding: 12px 24px 16px;
-  /* fill-страницы должны занимать всю доступную ширину (иначе flex-контент
-     схлопывается до собственного размера из-за margin:auto на .ds-page__body) */
   width: 100%;
 }
 
@@ -38,79 +42,132 @@
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: saturate(180%) blur(12px);
-  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
   border-bottom: 1px solid var(--line);
 }
 
 .ds-page__header-inner {
   margin: 0 auto;
-  padding: 14px 24px;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  padding: 10px 24px;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
+  min-height: 60px;
+}
+
+.ds-page__lead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.ds-page__home {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+  padding: 4px 8px 4px 4px;
+  border-radius: 12px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.ds-page__home:hover {
+  background: var(--surface-2);
+}
+.ds-page__brand {
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.cvx-mark {
+  display: block;
+  flex: none;
+}
+.ds-page__sep {
+  width: 1px;
+  height: 26px;
+  background: var(--line-strong);
+  flex: none;
+}
+
+.ds-page__titles {
+  min-width: 0;
+}
+.ds-page__title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 1.06rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-page__icon {
+  font-size: 1.1em;
+  line-height: 1;
+}
+.ds-page__subtitle {
+  margin: 1px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ds-page__nav {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-.ds-page__nav--left {
-  justify-self: start;
-}
-.ds-page__nav--right {
-  justify-self: end;
-}
-
-.ds-page__titles {
-  text-align: center;
-  min-width: 0;
-}
-.ds-page__title {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--ink);
-  display: inline-flex;
-  align-items: center;
   gap: 8px;
-}
-.ds-page__icon {
-  font-size: 1.2em;
-  line-height: 1;
-}
-.ds-page__subtitle {
-  margin: 3px 0 0;
-  font-size: 0.9rem;
-  color: var(--muted);
+  flex: none;
 }
 
-/* Навигационные кнопки шапки (pill) */
+/* Кнопки шапки */
 .ds-nav-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 7px;
+  height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--surface);
   color: var(--ink-soft);
   font-family: var(--font-sans);
-  font-size: 0.9rem;
+  font-size: 0.87rem;
   font-weight: 500;
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
-  transition: background 0.15s, box-shadow 0.15s, transform 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.ds-nav-btn svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
 }
 .ds-nav-btn:hover {
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.ds-nav-btn--search {
+  color: var(--muted);
+}
+.ds-nav-btn--search .kbd {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 0.7rem;
 }
 
 /* ── Тело ── */
@@ -119,10 +176,9 @@
   padding: 28px 24px 64px;
 }
 
-/* ── Нормализация форм-контролов внутри оболочки ──
-   Единый вид текстовых полей/select/textarea на всех страницах.
-   Меняем только оформление (граница/радиус/фон/шрифт/фокус),
-   не трогая padding/ширину, чтобы не сдвигать вёрстку. */
+/* ── Нормализация полей ввода внутри оболочки ──
+   Меняем только оформление (граница, радиус, фон, шрифт, фокус),
+   не трогая отступы и ширину, чтобы не сдвигать вёрстку страниц. */
 .ds-page input[type="text"],
 .ds-page input[type="number"],
 .ds-page input[type="search"],
@@ -133,7 +189,7 @@
   font-family: var(--font-sans);
   color: var(--ink);
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
 }
 .ds-page input[type="text"]:focus,
@@ -144,21 +200,25 @@
 .ds-page select:focus,
 .ds-page textarea:focus {
   outline: none;
-  border-color: var(--brand-2);
-  box-shadow: 0 0 0 3px rgba(81, 93, 173, 0.15);
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
+@media (max-width: 900px) {
+  .ds-page__brand,
+  .ds-nav-btn span,
+  .ds-nav-btn--search .kbd {
+    display: none;
+  }
+  .ds-nav-btn {
+    padding: 0 9px;
+  }
+}
 @media (max-width: 720px) {
   .ds-page__header-inner {
-    grid-template-columns: auto 1fr auto;
+    padding: 8px 16px;
   }
-  .ds-page__titles {
-    text-align: left;
-  }
-  .ds-page__title {
-    font-size: 1.1rem;
-  }
-  .ds-nav-btn span {
+  .ds-page__subtitle {
     display: none;
   }
   .ds-page__body {

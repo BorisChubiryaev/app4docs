@@ -10,29 +10,16 @@
 
 /* ── Общие токены + палитра тёмной темы ── */
 :root[data-theme="dark"] {
-  /* переопределяем общие токены (tokens.css) */
-  --ink: #e8e8ea;
-  --ink-soft: #c7c7cc;
-  --muted: #9a9aa2;
-  --line: rgba(255, 255, 255, 0.12);
-  --surface: #1b1e28;
-  --surface-2: #0f111a;
-  --glass-bg: rgba(30, 33, 44, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.6);
-
-  /* локальная палитра для постраничных правил */
-  --dk-bg1: #0d0f16;
-  --dk-bg2: #13151f;
-  --dk-bg3: #0e1018;
-  --dk-panel: rgba(255, 255, 255, 0.05);
-  --dk-panel-2: rgba(255, 255, 255, 0.08);
-  --dk-border: rgba(255, 255, 255, 0.1);
+  /* общие токены — в tokens.css; здесь локальная палитра постраничных правил */
+  --dk-bg1: var(--bg);
+  --dk-bg2: #10121c;
+  --dk-bg3: var(--bg);
+  --dk-panel: rgba(255, 255, 255, 0.045);
+  --dk-panel-2: rgba(255, 255, 255, 0.075);
+  --dk-border: var(--line-strong);
   --dk-input: rgba(255, 255, 255, 0.06);
-  --dk-text: #e8e8ea;
-  --dk-text-2: #a1a1a6;
+  --dk-text: var(--ink);
+  --dk-text-2: var(--muted);
   --dk-head: rgba(255, 255, 255, 0.08);
 }
 
@@ -42,36 +29,7 @@
   color: var(--ink) !important;
 }
 
-/* ── Переключатель темы (тёмный вид) ── */
-:root[data-theme="dark"] .ds-theme {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
-}
-:root[data-theme="dark"] .ds-theme__opt.is-active {
-  background: rgba(255, 255, 255, 0.14) !important;
-}
-
-/* ══ PageShell (оболочка всех инструментов) ══ */
-:root[data-theme="dark"] .ds-page {
-  background: linear-gradient(
-    160deg,
-    var(--dk-bg1) 0%,
-    var(--dk-bg2) 45%,
-    var(--dk-bg3) 100%
-  );
-}
-:root[data-theme="dark"] .ds-page__header {
-  background: rgba(18, 20, 28, 0.75) !important;
-  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
-}
-:root[data-theme="dark"] .ds-nav-btn {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
-  color: var(--ink) !important;
-}
-:root[data-theme="dark"] .ds-nav-btn:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
-}
+/* Оболочка страниц и переключатель темы берут цвета из токенов (tokens.css). */
 
 /* ══ Общие компоненты (components.css) ══ */
 :root[data-theme="dark"] .ds-card,

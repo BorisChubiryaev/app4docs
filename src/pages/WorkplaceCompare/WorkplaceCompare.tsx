@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import * as ExcelJS from "exceljs";
-import { Link } from "react-router-dom";
 import { WorkplaceInstructionsModal } from "./components/WorkplaceInstructionsModal";
-import ThemeToggle from "../../components/ThemeToggle";
+import { ShellHeader } from "../../components/PageShell";
 import { isLegacyOfficeFile, LEGACY_XLS_MESSAGE } from "../../utils/excelCell";
 import { parseExcelInWorker } from "../../utils/parseExcelInWorker";
 import "./WorkplaceCompare.css";
@@ -682,23 +681,11 @@ export default function Page() {
       >
         <div className="workplace-compare-container">
           {!fullscreen && (
-            <div className="workplace-compare-header">
-              <div className="header-content">
-                <Link to="/" className="home-button">
-                  🏠 На главную
-                </Link>
-                <h1>Сравнение Excel-файлов по рабочим местам</h1>
-              </div>
-              <div className="workplace-header-actions">
-                <ThemeToggle />
-                <button
-                  className="instructions-button home-button"
-                  onClick={() => setShowInstructions(true)}
-                >
-                  📚 Инструкция
-                </button>
-              </div>
-            </div>
+            <ShellHeader
+              title="Сравнение по рабочим местам"
+              subtitle="Сравнение файлов рабочих мест с фильтрами и выгрузкой в Excel"
+              onShowInstructions={() => setShowInstructions(true)}
+            />
           )}
 
           <div className="workplace-upload-section">

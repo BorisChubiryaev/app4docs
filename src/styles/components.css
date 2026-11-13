@@ -61,7 +61,7 @@ textarea {
 .btn-primary {
   background: var(--brand-gradient);
   color: #fff;
-  box-shadow: 0 8px 20px rgba(81, 93, 173, 0.3);
+  box-shadow: 0 6px 16px rgba(81, 93, 173, 0.28);
 }
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.05);
@@ -75,13 +75,13 @@ textarea {
   border: 1px solid var(--line);
 }
 .btn-secondary:hover:not(:disabled) {
-  background: #ececf1;
+  background: var(--surface-3);
 }
 
 /* Danger — мягкая красная (для действий очистки/удаления) */
 .btn-danger {
   background: rgba(255, 59, 48, 0.1);
-  color: #e5484d;
+  color: var(--danger);
   border: 1px solid rgba(255, 59, 48, 0.25);
 }
 .btn-danger:hover:not(:disabled) {
@@ -148,8 +148,8 @@ textarea {
 .ds-select:focus,
 .ds-textarea:focus {
   outline: none;
-  border-color: var(--brand-2);
-  box-shadow: 0 0 0 3px rgba(81, 93, 173, 0.15);
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
 }
 
 /* Табы (сегмент-контрол) */
@@ -206,8 +206,8 @@ textarea {
 }
 .ds-dropzone:hover,
 .ds-dropzone--over {
-  border-color: var(--brand-2);
-  background: #fafbff;
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 /* Переключатель темы (светлая/тёмная) — сегментированная пилюля */
@@ -245,4 +245,25 @@ textarea {
 }
 .ds-theme__opt svg {
   display: block;
+}
+
+/* Видимый фокус с клавиатуры для всех кнопок и ссылок */
+:where(a, button, [role="button"], input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Метка «Тест» — инструмент в тестовом режиме */
+.cvx-test-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }

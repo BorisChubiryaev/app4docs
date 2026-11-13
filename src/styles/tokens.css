@@ -1,53 +1,152 @@
 /* ============================================================
-   Convertix — глобальные дизайн-токены
-   Подключается один раз в src/index.tsx.
-   Только переменные + безопасная база (без глобального
-   box-sizing-ресета, чтобы не ломать вёрстку существующих страниц).
+   Convertix — дизайн-токены
+   Подключается один раз в src/index.tsx. Тёмные значения — в конце
+   файла и в theme-dark.css (data-theme="dark" на <html>).
+
+   Идея оформления: «рабочий стол» — спокойные холодные нейтрали с лёгким
+   индиго-оттенком, фирменный градиент Convertix только там, где главное
+   действие или имя продукта. Цвета разделов помогают находить инструменты
+   глазами: документы — синий, презентации — оранжевый, таблицы — зелёный,
+   изображения — фиолетовый.
    ============================================================ */
 
 :root {
-  /* Фирменный градиент (Convertix) */
+  /* Фирменный градиент Convertix */
   --brand-1: #0087cd;
   --brand-2: #515dad;
   --brand-3: #8253aa;
   --brand-4: #ff1c77;
   --brand-gradient: linear-gradient(
-    135deg,
+    120deg,
     var(--brand-1) 0%,
-    var(--brand-2) 30%,
-    var(--brand-3) 64%,
+    var(--brand-2) 34%,
+    var(--brand-3) 66%,
     var(--brand-4) 100%
   );
 
-  /* Нейтральные */
-  --ink: #1d1d1f;
-  --ink-soft: #3a3a3c;
-  --muted: #6b7280;
-  --line: rgba(0, 0, 0, 0.1);
+  /* Нейтрали с холодным индиго-уклоном */
+  --bg: #f4f5fa;
   --surface: #ffffff;
-  --surface-2: #f5f6f8;
+  --surface-2: #eef0f6;
+  --surface-3: #e4e7f0;
+  --ink: #15172a;
+  --ink-soft: #343850;
+  --muted: #61667d;
+  --faint: #8d92a8;
+  --line: rgba(21, 23, 42, 0.09);
+  --line-strong: rgba(21, 23, 42, 0.16);
+
+  /* Акцент для ссылок, фокуса и выделения */
+  --accent: #4a55c9;
+  --accent-soft: rgba(74, 85, 201, 0.1);
+  --focus-ring: 0 0 0 3px rgba(74, 85, 201, 0.28);
+
+  /* Разделы каталога */
+  --cat-docs: #2563d9;
+  --cat-slides: #d9480f;
+  --cat-data: #12855a;
+  --cat-images: #7c4ddb;
+  --cat-games: #c2185b;
+
+  /* Состояния */
+  --ok: #12855a;
+  --warn: #b26a00;
+  --danger: #d6363c;
 
   /* Радиусы */
   --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 22px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 26px;
 
-  /* Тени */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.14);
-  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.28);
+  /* Тени — мягкие, с холодным оттенком */
+  --shadow-sm: 0 1px 2px rgba(21, 23, 42, 0.06), 0 2px 8px rgba(21, 23, 42, 0.05);
+  --shadow-md: 0 4px 12px rgba(21, 23, 42, 0.06), 0 16px 36px rgba(21, 23, 42, 0.09);
+  --shadow-lg: 0 24px 70px rgba(21, 23, 42, 0.22);
 
   /* Слои */
   --z-modal: 1000;
 
-  /* Типографика */
-  /* Inter подключается из бандла (src/index.tsx), поэтому шрифт одинаковый
-     на macOS, Windows и Linux. Системные шрифты — только запасной вариант,
-     пока Inter грузится. */
+  /* Шрифты встроены в сборку (src/styles/fonts.css): сервер Qlik не отдаёт
+     .woff2, а внешние сервисы шрифтов в закрытой сети недоступны. */
   --font-sans: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Unbounded Variable", "Inter Variable", "Segoe UI", Arial, sans-serif;
+
+  /* Шкала текста */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2.25rem;
 
   /* Стеклянная поверхность (используется на нескольких страницах) */
-  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg: rgba(255, 255, 255, 0.78);
   --glass-border: rgba(255, 255, 255, 0.6);
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0c0d14;
+  --surface: #151724;
+  --surface-2: #1b1e2d;
+  --surface-3: #252939;
+  --ink: #eceef7;
+  --ink-soft: #c9ccdb;
+  --muted: #9a9fb6;
+  --faint: #6f7590;
+  --line: rgba(236, 238, 247, 0.09);
+  --line-strong: rgba(236, 238, 247, 0.17);
+
+  --accent: #9aa3ff;
+  --accent-soft: rgba(154, 163, 255, 0.14);
+  --focus-ring: 0 0 0 3px rgba(154, 163, 255, 0.35);
+
+  --cat-docs: #6ea0ff;
+  --cat-slides: #ff8a4c;
+  --cat-data: #3ccf8e;
+  --cat-images: #b18cff;
+  --cat-games: #ff6fa8;
+
+  --ok: #3ccf8e;
+  --warn: #f2b84b;
+  --danger: #ff6b6f;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.6);
+
+  --glass-bg: rgba(21, 23, 36, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.08);
+
+  color-scheme: dark;
+}
+
+/* Общий сброс. Раньше жил в стилях главной, но действовал на все страницы
+   (стили собираются в один файл), и вёрстка инструментов на него опирается. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
