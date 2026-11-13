@@ -78,7 +78,7 @@ const CommandPalette = () => {
     const out: Item[] = tools.map((t) => ({
       key: t.path,
       title: t.title,
-      hint: `${cat(t.category)} · ${t.formats}`,
+      hint: `${cat(t.category)}: ${t.formats}`,
       path: t.path,
       icon: t.icon,
       tone: t.category,
@@ -100,7 +100,7 @@ const CommandPalette = () => {
       out.push({
         key: g.path,
         title: g.title,
-        hint: `Игры · ${g.description}`,
+        hint: `Игры: ${g.description}`,
         path: g.path,
         icon: <span className="cp-glyph">{g.glyph}</span>,
         tone: "games",

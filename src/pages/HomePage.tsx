@@ -1,6 +1,8 @@
-// Главная Convertix: найти инструмент по задаче или по файлу.
-// Поиск и «перетащите файл» сразу сужают каталог; без них — разделы
-// по типу работы и недавние инструменты этого браузера.
+// Главная Convertix.
+// Главный элемент — фраза «У меня есть [формат], нужно [действие]»: два слова
+// в ней — переключатели, и под фразой сразу появляется нужный инструмент.
+// Перетащенный файл сам подставляет формат. Ниже — указатель всех
+// инструментов по разделам, помощь и игры.
 
 import {
   memo,
@@ -9,11 +11,10 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type DragEvent,
   type ReactNode,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   handleUrlExcelDownload,
   hasUrlDownloadData,
@@ -26,16 +27,18 @@ import {
   CATEGORIES,
   GAMES,
   ICONS,
+  INTENTS,
+  SOURCES,
   TOOLS,
-  extOf,
   rankTools,
   readRecent,
+  sourceOfFile,
   type Tool,
 } from "../tools";
 import { warmUpEngine } from "./PdfToPptx/engineAssets";
 import "./HomePage.css";
 
-// Ссылка на опрос CSI — и в блоке поддержки, и в разовом окне с просьбой
+// Ссылка на опрос CSI — и в блоке помощи, и в разовом окне с просьбой
 const SURVEY_URL = "https://public.oprosso.sber.ru/p/jgwgns80";
 const SBERCHAT_URL =
   "https://sberchat.sberbank.ru/join-circle/0abb2491520a72356261de83e7ba96bbace14faae1248dedd3125ed476f5295b";
@@ -51,6 +54,11 @@ const writeToUs = (subject: string, intro: string) => {
     `mailto:${MAIL_TO}?subject=${encodeURIComponent(subject)}&body=${body}`,
   );
 };
+
+const byId = (id: string) => TOOLS.find((t) => t.id === id)!;
+
+/** Колонки указателя: презентации и изображения делят одну, чтобы колонки были ровнее */
+const COLUMNS: string[][] = [["docs"], ["slides", "images"], ["data"]];
 
 const UdtLogo = memo(() => (
   <svg
@@ -138,39 +146,26 @@ const UdtLogo = memo(() => (
   </svg>
 ));
 
-const fmtSize = (n: number) =>
-  n < 1024 * 1024
-    ? `${Math.max(1, Math.round(n / 1024))} КБ`
-    : `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} МБ`;
+const Caret = () => (
+  <svg
+    className="hm-slot__caret"
+    viewBox="0 0 16 16"
+    width="16"
+    height="16"
+    aria-hidden="true"
+  >
+    <path
+      d="M3.5 6l4.5 4.5L12.5 6"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
-// ─── Карточка инструмента ───
-const ToolCard = memo(({ tool }: { tool: Tool }) => (
-  <Link to={tool.path} className="hm-card">
-    <span className={`hm-card__icon tone-${tool.category}`}>{tool.icon}</span>
-    <span className="hm-card__body">
-      <span className="hm-card__title">
-        {tool.title}
-        {tool.isTest && (
-          <span
-            className="cvx-test-badge"
-            title="Инструмент в тестовом режиме — результат стоит проверить"
-          >
-            Тест
-          </span>
-        )}
-      </span>
-      <span className="hm-card__desc">{tool.description}</span>
-    </span>
-    <span className="hm-card__foot">
-      <span className="hm-card__formats">{tool.formats}</span>
-      <span className="hm-card__go" aria-hidden="true">
-        {ICONS.arrow}
-      </span>
-    </span>
-  </Link>
-));
-
-// ─── Разовые окна: опрос и обратная связь ───
+// ─── Разовые окна: опрос и благодарность ───
 const Notice = ({
   icon,
   title,
@@ -207,17 +202,45 @@ const Notice = ({
   </div>
 );
 
+// ─── Строка указателя ───
+const IndexItem = memo(({ tool }: { tool: Tool }) => (
+  <li>
+    <Link to={tool.path} className={`hm-item tint-${tool.category}`}>
+      <span className="hm-item__icon">{tool.icon}</span>
+      <span className="hm-item__text">
+        <span className="hm-item__title">
+          {tool.title}
+          {tool.isTest && (
+            <span
+              className="cvx-test-badge"
+              title="Инструмент в тестовом режиме: результат стоит проверить"
+            >
+              Тест
+            </span>
+          )}
+        </span>
+        <span className="hm-item__desc">{tool.description}</span>
+        <span className="hm-item__formats">{tool.formats}</span>
+      </span>
+    </Link>
+  </li>
+));
+
 const HomePage = () => {
-  const [query, setQuery] = useState("");
-  const [file, setFile] = useState<{ name: string; size: number } | null>(null);
+  const navigate = useNavigate();
+  const [source, setSource] = useState("pdf");
+  const [intentIdx, setIntentIdx] = useState(0);
+  const [open, setOpen] = useState<"source" | "verb" | null>(null);
+  const [fileName, setFileName] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [query, setQuery] = useState("");
   const [recent] = useState(readRecent);
   const [notice, setNotice] = useState<"csi" | "feedback" | null>(null);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [downloadedFilename, setDownloadedFilename] = useState("");
-  const searchRef = useRef<HTMLInputElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // Тихо подкачиваем движок PDF → PowerPoint (~33 МБ) в кэш браузера, пока
   // страница простаивает: к открытию инструмента он уже на месте.
@@ -246,7 +269,7 @@ const HomePage = () => {
     });
   }, []);
 
-  // Опрос, затем благодарность — по одному разу
+  // Опрос, затем благодарность — каждое по одному разу
   useEffect(() => {
     const key = !localStorage.getItem("csiSurveyShown")
       ? "csi"
@@ -264,10 +287,11 @@ const HomePage = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // «/» — к поиску, как на привычных сайтах
+  // «/» — к поиску по указателю
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
+      if (e.key === "Escape") setOpen(null);
       if (
         e.key === "/" &&
         !/INPUT|TEXTAREA|SELECT/.test(t.tagName) &&
@@ -281,14 +305,35 @@ const HomePage = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const pickFile = useCallback((f?: File | null) => {
+  const verbs = useMemo(
+    () => INTENTS.filter((i) => i.source === source),
+    [source],
+  );
+  const intent = verbs[Math.min(intentIdx, verbs.length - 1)];
+  const tool = byId(intent.tool);
+  const sourceLabel = SOURCES.find((s) => s.id === source)!.label;
+
+  const chooseSource = (id: string) => {
+    setSource(id);
+    setIntentIdx(0);
+    setOpen(INTENTS.filter((i) => i.source === id).length > 1 ? "verb" : null);
+  };
+
+  const takeFile = useCallback((f?: File | null) => {
     if (!f) return;
-    setFile({ name: f.name, size: f.size });
-    setQuery("");
+    const s = sourceOfFile(f.name);
+    setFileName(f.name);
+    if (s) {
+      setSource(s.id);
+      setIntentIdx(0);
+      setOpen(
+        INTENTS.filter((i) => i.source === s.id).length > 1 ? "verb" : null,
+      );
+    } else setOpen("source");
   }, []);
 
   // Файл можно бросить в любое место страницы
-  const dropHandlers = {
+  const drop = {
     onDragEnter: (e: DragEvent) => {
       if (!e.dataTransfer.types.includes("Files")) return;
       dragDepth.current += 1;
@@ -305,23 +350,21 @@ const HomePage = () => {
       e.preventDefault();
       dragDepth.current = 0;
       setDragging(false);
-      pickFile(e.dataTransfer.files?.[0]);
+      takeFile(e.dataTransfer.files?.[0]);
     },
   };
 
-  const ext = file ? extOf(file.name) : "";
-  const fileMatches = useMemo(
-    () => (file ? TOOLS.filter((t) => t.accepts.includes(ext)) : []),
-    [file, ext],
+  const found = useMemo(
+    () => new Set(rankTools(query).map((t) => t.id)),
+    [query],
   );
-  const found = useMemo(() => rankTools(query), [query]);
   const recentTools = recent
     .map((p) => TOOLS.find((t) => t.path === p))
     .filter(Boolean) as Tool[];
-  const filtering = !!query.trim() || !!file;
+  const fileUnknown = !!fileName && !sourceOfFile(fileName);
 
   return (
-    <div className={`hm ${dragging ? "is-dragging" : ""}`} {...dropHandlers}>
+    <div className={`hm ${dragging ? "is-dragging" : ""}`} {...drop}>
       {notice === "csi" && (
         <Notice
           icon={ICONS.star}
@@ -345,7 +388,7 @@ const HomePage = () => {
           }
         >
           Короткий опрос о том, насколько вам удобно работать с инструментами.
-          Займёт пару минут и поможет команде решить, что улучшать дальше.
+          Займёт пару минут и поможет решить, что улучшать дальше.
         </Notice>
       )}
       {notice === "feedback" && (
@@ -378,241 +421,289 @@ const HomePage = () => {
         </Notice>
       )}
 
-      {/* ─── Шапка ─── */}
-      <header className="hm-top">
-        <div className="hm-wrap hm-top__inner">
-          <Link to="/" className="hm-brand" aria-label="Convertix — главная">
-            <BrandMark size={34} />
-            <span className="hm-brand__name">Convertix</span>
-          </Link>
-          <div className="hm-top__right">
-            <ThemeToggle />
-            <span className="hm-udt">
-              <UdtLogo />
-            </span>
-          </div>
+      <header className="hm-wrap hm-top">
+        <Link to="/" className="hm-brand" aria-label="Convertix, главная">
+          <BrandMark size={32} />
+          <span>Convertix</span>
+        </Link>
+        <div className="hm-top__right">
+          <ThemeToggle />
+          <span className="hm-udt">
+            <UdtLogo />
+          </span>
         </div>
       </header>
 
-      <main className="hm-wrap hm-main">
-        {/* ─── Вступление: поиск и файл ─── */}
-        <section className="hm-hero" aria-labelledby="hm-title">
-          <div className="hm-hero__text">
-            <p className="hm-eyebrow">
-              {TOOLS.length} инструментов · работают в браузере
-            </p>
-            <h1 id="hm-title">
-              Документы, таблицы и&nbsp;слайды без лишних программ
-            </h1>
-            <p className="hm-lead">
-              Сравнить версии, перевести PDF в Word или PowerPoint, свести
-              Excel, подготовить графику для презентации. Файлы не покидают ваш
-              компьютер.
-            </p>
-          </div>
-
-          <div className="hm-intake">
-            <label className="hm-search" htmlFor="hm-search">
-              {ICONS.search}
-              <input
-                ref={searchRef}
-                id="hm-search"
-                type="search"
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setFile(null);
-                }}
-                placeholder="Что сделать? Например, сжать PDF"
-                autoComplete="off"
-              />
-              <kbd className="kbd">/</kbd>
-            </label>
-            <button
-              type="button"
-              className={`hm-drop ${dragging ? "is-over" : ""}`}
-              onClick={() => fileRef.current?.click()}
+      <main>
+        {/* ─── Фраза-подборщик ─── */}
+        <section className="hm-wrap">
+          <div className={`hm-plate ${dragging ? "is-over" : ""}`}>
+            <h1
+              className="hm-phrase"
+              aria-label={`У меня есть ${sourceLabel}, нужно ${intent.verb}`}
             >
-              <span className="hm-drop__icon">{ICONS.upload}</span>
-              <span className="hm-drop__text">
-                <b>Перетащите файл</b> или выберите его — покажем, что с ним
-                можно сделать
+              <span className="hm-phrase__line">
+                <span className="hm-phrase__lead">У меня есть</span>{" "}
+                <button
+                  type="button"
+                  className={`hm-slot ${open === "source" ? "is-open" : ""}`}
+                  aria-expanded={open === "source"}
+                  onClick={() => setOpen(open === "source" ? null : "source")}
+                >
+                  {sourceLabel}
+                  <Caret />
+                </button>
+                <span className="hm-phrase__lead">,</span>
+              </span>{" "}
+              {open === "source" && (
+                <span
+                  className="hm-options"
+                  role="listbox"
+                  aria-label="Что у вас есть"
+                >
+                  {SOURCES.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      role="option"
+                      aria-selected={s.id === source}
+                      className={s.id === source ? "is-on" : ""}
+                      onClick={() => chooseSource(s.id)}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </span>
+              )}
+              <span className="hm-phrase__line">
+                <span className="hm-phrase__lead">нужно</span>{" "}
+                {verbs.length > 1 ? (
+                  <button
+                    type="button"
+                    className={`hm-slot ${open === "verb" ? "is-open" : ""}`}
+                    aria-expanded={open === "verb"}
+                    onClick={() => setOpen(open === "verb" ? null : "verb")}
+                  >
+                    {intent.verb}
+                    <Caret />
+                  </button>
+                ) : (
+                  <span className="hm-slot is-fixed">{intent.verb}</span>
+                )}
               </span>
-              <span className="hm-drop__formats" aria-hidden="true">
-                {["PDF", "DOCX", "XLSX", "PPTX", "HTML", "PNG"].map((f) => (
-                  <i key={f}>{f}</i>
-                ))}
+              {open === "verb" && (
+                <span
+                  className="hm-options"
+                  role="listbox"
+                  aria-label="Что нужно сделать"
+                >
+                  {verbs.map((v, i) => (
+                    <button
+                      key={v.verb}
+                      type="button"
+                      role="option"
+                      aria-selected={v === intent}
+                      className={v === intent ? "is-on" : ""}
+                      onClick={() => {
+                        setIntentIdx(i);
+                        setOpen(null);
+                      }}
+                    >
+                      {v.verb}
+                    </button>
+                  ))}
+                </span>
+              )}
+            </h1>
+
+            <div className="hm-answer" key={tool.id} aria-live="polite">
+              <span className={`hm-answer__icon tint-${tool.category}`}>
+                {tool.icon}
               </span>
-            </button>
+              <div className="hm-answer__text">
+                <p className="hm-answer__title">
+                  {tool.title}
+                  <span className="hm-answer__formats">{tool.formats}</span>
+                </p>
+                <p className="hm-answer__desc">{tool.description}</p>
+              </div>
+              <button
+                type="button"
+                className="hm-open"
+                onClick={() => navigate(tool.path)}
+              >
+                Открыть
+              </button>
+            </div>
+
+            <p className="hm-plate__foot">
+              {fileName ? (
+                <>
+                  Файл <b>{fileName}</b>{" "}
+                  {fileUnknown
+                    ? "в незнакомом формате: выберите, что это, в первом слове фразы."
+                    : "узнали. Он не загружается: откройте инструмент и добавьте его там."}{" "}
+                  <button
+                    type="button"
+                    className="hm-textbtn"
+                    onClick={() => setFileName("")}
+                  >
+                    Сбросить
+                  </button>
+                </>
+              ) : (
+                <>
+                  Можно перетащить файл в это окно или{" "}
+                  <button
+                    type="button"
+                    className="hm-textbtn"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    выбрать его
+                  </button>
+                  : формат подставится сам. Файлы не покидают ваш компьютер.
+                </>
+              )}
+            </p>
             <input
               ref={fileRef}
               id="hm-file"
               type="file"
               hidden
-              onChange={(e) => pickFile(e.target.files?.[0])}
+              onChange={(e) => takeFile(e.target.files?.[0])}
             />
-            <p className="hm-intake__note">
-              Файл здесь только для подсказки: он не загружается. Ко всем
-              инструментам —{" "}
-              <kbd className="kbd">{isMac() ? "⌘K" : "Ctrl K"}</kbd> на любой
-              странице.
+          </div>
+
+          {recentTools.length > 0 && (
+            <p className="hm-recent">
+              Недавно открывали:{" "}
+              {recentTools.map((t, i) => (
+                <span key={t.path}>
+                  <Link to={t.path}>{t.title}</Link>
+                  {i < recentTools.length - 1 ? ", " : ""}
+                </span>
+              ))}
             </p>
+          )}
+        </section>
+
+        {/* ─── Указатель всех инструментов ─── */}
+        <section className="hm-wrap hm-index" aria-labelledby="hm-index-title">
+          <div className="hm-index__head">
+            <h2 id="hm-index-title">Все инструменты</h2>
+            <label className="hm-find" htmlFor="hm-find">
+              {ICONS.search}
+              <input
+                ref={searchRef}
+                id="hm-find"
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Найти по названию или задаче"
+                autoComplete="off"
+              />
+              <kbd className="kbd">{isMac() ? "⌘K" : "Ctrl K"}</kbd>
+            </label>
+          </div>
+          <div className="hm-cols">
+            {COLUMNS.map((ids) => {
+              const groups = ids
+                .map((id) => ({
+                  c: CATEGORIES.find((x) => x.id === id)!,
+                  list: TOOLS.filter(
+                    (t) => t.category === id && found.has(t.id),
+                  ),
+                }))
+                .filter((g) => g.list.length);
+              if (!groups.length) return null;
+              return (
+                <div key={ids.join()} className="hm-col">
+                  {groups.map(({ c, list }) => (
+                    <div key={c.id} className={`hm-group tint-${c.id}`}>
+                      <h3>{c.title}</h3>
+                      <ul>
+                        {list.map((t) => (
+                          <IndexItem key={t.id} tool={t} />
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            {!found.size && (
+              <p className="hm-empty">
+                По запросу «{query.trim()}» ничего нет. Попробуйте «excel»,
+                «презентация» или «сравнить».
+              </p>
+            )}
           </div>
         </section>
 
-        {/* ─── Результат поиска или подбор по файлу ─── */}
-        {filtering && (
-          <section className="hm-section" aria-live="polite">
-            <div className="hm-result">
-              {file ? (
-                <p>
-                  <b>{file.name}</b>{" "}
-                  <span className="hm-muted">· {fmtSize(file.size)}</span> —{" "}
-                  {fileMatches.length
-                    ? `подходят ${fileMatches.length} ${fileMatches.length === 1 ? "инструмент" : fileMatches.length < 5 ? "инструмента" : "инструментов"}. Откройте нужный и добавьте файл ещё раз.`
-                    : "такой формат пока не поддерживается."}
-                </p>
-              ) : (
-                <p>
-                  {found.length
-                    ? `Найдено: ${found.length}`
-                    : `По запросу «${query.trim()}» ничего нет. Попробуйте «excel», «презентация» или «сравнить».`}
-                </p>
-              )}
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => {
-                  setFile(null);
-                  setQuery("");
-                }}
-              >
-                Показать все
-              </button>
-            </div>
-            <div className="hm-grid">
-              {(file ? fileMatches : found).map((t) => (
-                <ToolCard key={t.path} tool={t} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ─── Каталог по разделам ─── */}
-        {!filtering && (
-          <>
-            {recentTools.length > 0 && (
-              <section className="hm-recent" aria-label="Недавние">
-                <span className="hm-recent__label">Недавние</span>
-                {recentTools.map((t) => (
-                  <Link key={t.path} to={t.path} className="hm-chip">
-                    <span className={`hm-chip__icon tone-${t.category}`}>
-                      {t.icon}
-                    </span>
-                    {t.title}
-                  </Link>
-                ))}
-              </section>
-            )}
-            <div className="hm-cats">
-              {CATEGORIES.map((c) => {
-                const list = TOOLS.filter((t) => t.category === c.id);
-                return (
-                  <section
-                    key={c.id}
-                    className={`hm-section ${list.length >= 4 ? "is-row" : ""} ${list.length <= 2 ? "is-narrow" : ""}`}
-                    style={{ "--n": list.length } as CSSProperties}
-                    aria-labelledby={`hm-cat-${c.id}`}
-                  >
-                    <div className="hm-section__head">
-                      <span
-                        className={`hm-dot tone-${c.id}`}
-                        aria-hidden="true"
-                      />
-                      <h2 id={`hm-cat-${c.id}`}>{c.title}</h2>
-                      <span className="hm-muted">{c.hint}</span>
-                    </div>
-                    <div className="hm-grid">
-                      {list.map((t) => (
-                        <ToolCard key={t.path} tool={t} />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {/* ─── Поддержка и перерыв ─── */}
-        <section className="hm-bottom">
-          <div className="hm-help">
-            <h2>Нужна помощь?</h2>
-            <p className="hm-muted">
-              Отвечаем в группе и по почте. В документации — инструкции к
-              каждому инструменту.
-            </p>
-            <div className="hm-help__links">
-              <button
-                type="button"
-                className="hm-link"
-                onClick={() =>
-                  writeToUs(
-                    "Вопрос по Convertix",
-                    "У меня вопрос по работе инструмента:",
-                  )
-                }
-              >
-                {ICONS.mail}
-                Написать нам
-                <small>ответим на почту</small>
-              </button>
-              <a
-                className="hm-link"
-                href={SBERCHAT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {ICONS.chat}
-                Группа в СберЧате
-                <small>вопросы и новости</small>
-              </a>
-              <a
-                className="hm-link"
-                href={DOCS_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {ICONS.book}
-                Документация
-                <small>инструкции в Confluence</small>
-              </a>
-              <a
-                className="hm-link"
-                href={SURVEY_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {ICONS.star}
-                Оценить проект
-                <small>опрос на 2 минуты</small>
-              </a>
-            </div>
+        {/* ─── Помощь и перерыв ─── */}
+        <section className="hm-wrap hm-bottom">
+          <div>
+            <h2>Нужна помощь</h2>
+            <ul className="hm-links">
+              <li>
+                <button
+                  type="button"
+                  onClick={() =>
+                    writeToUs(
+                      "Вопрос по Convertix",
+                      "У меня вопрос по работе инструмента:",
+                    )
+                  }
+                >
+                  {ICONS.mail}
+                  <span>
+                    Написать нам<small>ответим на почту</small>
+                  </span>
+                </button>
+              </li>
+              <li>
+                <a
+                  href={SBERCHAT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {ICONS.chat}
+                  <span>
+                    Группа в СберЧате<small>вопросы и новости</small>
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">
+                  {ICONS.book}
+                  <span>
+                    Документация<small>инструкции в Confluence</small>
+                  </span>
+                </a>
+              </li>
+              <li>
+                <a href={SURVEY_URL} target="_blank" rel="noopener noreferrer">
+                  {ICONS.star}
+                  <span>
+                    Оценить проект<small>опрос на две минуты</small>
+                  </span>
+                </a>
+              </li>
+            </ul>
           </div>
-          <div className="hm-break">
-            <h2>
-              <span className="tone-games hm-break__icon">{ICONS.gamepad}</span>
-              Перерыв
-            </h2>
-            <ul>
+          <div>
+            <h2>Перерыв</h2>
+            <ul className="hm-games">
               {GAMES.map((g) => (
                 <li key={g.path}>
                   <Link to={g.path}>
-                    <span className="hm-break__glyph" aria-hidden="true">
+                    <span className="hm-games__glyph" aria-hidden="true">
                       {g.glyph}
                     </span>
-                    <b>{g.title}</b>
-                    <span className="hm-muted">{g.description}</span>
+                    <span>
+                      {g.title}
+                      <small>{g.description}</small>
+                    </span>
                   </Link>
                 </li>
               ))}
@@ -622,21 +713,8 @@ const HomePage = () => {
       </main>
 
       <footer className="hm-wrap hm-foot">
-        <span>Convertix · Unit Data Team</span>
-        <span className="hm-muted">
-          Все инструменты работают в браузере: файлы не отправляются на сервер.
-        </span>
+        Convertix, Unit Data Team. Все инструменты работают в браузере.
       </footer>
-
-      {dragging && (
-        <div className="hm-dropveil" aria-hidden="true">
-          <div>
-            {ICONS.upload}
-            <b>Отпустите файл</b>
-            <span>Подберём подходящие инструменты</span>
-          </div>
-        </div>
-      )}
 
       <DownloadSuccessModal
         isOpen={showDownloadModal}

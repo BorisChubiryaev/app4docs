@@ -230,7 +230,7 @@ export const TOOLS: Tool[] = [
     path: "/SlideGraphics",
     category: "slides",
     description: "Анимированные графики, фоны и карточки для презентаций",
-    formats: "PNG · 4K · MP4",
+    formats: "PNG, 4K, MP4",
     features: [
       "30 шаблонов, раздел в стиле СБ",
       "PNG без фона, 4K и видео MP4",
@@ -317,7 +317,7 @@ export const TOOLS: Tool[] = [
     category: "docs",
     description:
       "Что изменилось между версиями: Excel по ячейкам, Word и PDF по абзацам",
-    formats: "XLSX · DOCX · PDF",
+    formats: "XLSX, DOCX, PDF",
     features: [
       "Word и PDF в любом сочетании",
       "Подсветка правок",
@@ -366,7 +366,7 @@ export const TOOLS: Tool[] = [
     path: "/htmlToExcel",
     category: "data",
     description: "HTML- и JSON-таблицы в файл Excel с сохранением оформления",
-    formats: "HTML · JSON → XLSX",
+    formats: "HTML, JSON → XLSX",
     features: [
       "Предпросмотр перед выгрузкой",
       "Стили сохраняются",
@@ -414,7 +414,7 @@ export const TOOLS: Tool[] = [
     path: "/ChartCraft",
     category: "data",
     description: "Таблица превращается в аккуратный график за пару кликов",
-    formats: "XLSX → PNG · SVG",
+    formats: "XLSX → PNG, SVG",
     features: ["Конструктор графиков", "Рисование поверх", "Экспорт картинкой"],
     accepts: ["xlsx", "xls", "csv"],
     keywords: "график диаграмма chart визуализация",
@@ -427,7 +427,7 @@ export const TOOLS: Tool[] = [
     category: "images",
     description:
       "SVG, PSD, PDF и фото в PNG, JPEG, WebP, ICO или PDF, удаление фона",
-    formats: "SVG · PSD · JPG → PNG · PDF",
+    formats: "SVG, PSD, JPG → PNG, PDF",
     features: [
       "Удаление фона нейросетью",
       "Сборка фото в PDF",
@@ -550,3 +550,55 @@ export function rememberTool(path: string) {
     /* хранилище недоступно — просто не запоминаем */
   }
 }
+
+// ── Фраза на главной: «У меня есть [формат], нужно [действие]» ──
+// Каждое действие ведёт ровно в один инструмент.
+
+export interface Source {
+  id: string;
+  /** Как формат звучит в фразе «У меня есть …» */
+  label: string;
+  /** Расширения файлов, по которым он узнаётся при перетаскивании */
+  exts: string[];
+}
+
+export const SOURCES: Source[] = [
+  { id: "pdf", label: "PDF", exts: ["pdf"] },
+  { id: "word", label: "документ Word", exts: ["docx", "doc"] },
+  { id: "excel", label: "таблица Excel", exts: ["xlsx", "xls", "xlsm", "csv"] },
+  { id: "pptx", label: "презентация", exts: ["pptx", "potx"] },
+  { id: "html", label: "HTML или JSON", exts: ["html", "htm", "json"] },
+  { id: "image", label: "картинка", exts: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg", "psd", "tif", "tiff"] },
+];
+
+export interface Intent {
+  source: string;
+  /** Продолжение фразы «…, нужно …» */
+  verb: string;
+  tool: string;
+}
+
+export const INTENTS: Intent[] = [
+  { source: "pdf", verb: "сделать из него презентацию", tool: "pdf2pptx" },
+  { source: "pdf", verb: "перевести в Word", tool: "docconvert" },
+  { source: "pdf", verb: "объединить, подписать или сжать", tool: "pdfstudio" },
+  { source: "pdf", verb: "сравнить с другой версией", tool: "compare" },
+  { source: "pdf", verb: "сохранить страницы картинками", tool: "images" },
+  { source: "word", verb: "сделать из него PDF", tool: "docconvert" },
+  { source: "word", verb: "сравнить две версии", tool: "compare" },
+  { source: "word", verb: "собрать правки в оферту", tool: "offer" },
+  { source: "excel", verb: "сравнить две версии", tool: "compare" },
+  { source: "excel", verb: "сравнить по рабочим местам", tool: "workplace" },
+  { source: "excel", verb: "свести несколько файлов в один", tool: "grouper" },
+  { source: "excel", verb: "построить график", tool: "chartcraft" },
+  { source: "excel", verb: "оживить график для слайда", tool: "slides" },
+  { source: "pptx", verb: "перенести в новый шаблон", tool: "restyle" },
+  { source: "html", verb: "выгрузить таблицу в Excel", tool: "htmlToExcel" },
+  { source: "html", verb: "поправить текст и оформление", tool: "htmlstudio" },
+  { source: "image", verb: "сменить формат или убрать фон", tool: "images" },
+  { source: "image", verb: "собрать сканы в один PDF", tool: "pdfstudio" },
+  { source: "image", verb: "сделать карусель для слайда", tool: "slides" },
+];
+
+/** Какой формат из фразы соответствует файлу */
+export const sourceOfFile = (name: string) => SOURCES.find((s) => s.exts.includes(extOf(name)));
