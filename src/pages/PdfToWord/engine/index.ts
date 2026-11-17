@@ -30,9 +30,10 @@ export interface ConvertResult {
 
 /**
  * auto — документы потоком, макеты (презентации, буклеты) — фоном с рамками;
- * flow — всё потоком (удобно править); exact — всё макетом (как в PDF).
+ * flow — всё потоком (удобно править); exact — всё макетом (как в PDF);
+ * image — каждая страница целиком, для неизменного внешнего вида.
  */
-export type LayoutMode = "auto" | "flow" | "exact";
+export type LayoutMode = "auto" | "flow" | "exact" | "image";
 
 export interface ConvertOptions {
   /** Распознавать текст на сканах (по умолчанию да); иначе скан — картинкой. */
@@ -267,6 +268,22 @@ export async function convertPdfToDocx(data: ArrayBuffer, title: string, opts: C
       opts.onProgress(total + i - 1, total * 2, `Страница ${i} из ${total}`);
       const page = await doc.getPage(i);
       let raw = await extractPage(page, i - 1);
+      if (mode === "image") {
+        const snapshot = await cropImage(raw, { x0: 0, y0: 0, x1: raw.width, y1: raw.height }, true);
+        pages.push({
+          index: i - 1,
+          width: raw.width,
+          height: raw.height,
+          margins: { left: 0, right: 0, top: 0, bottom: 0 },
+          zones: [],
+          contentBottom: 0,
+          snapshot: snapshot ?? undefined,
+        });
+        raw.canvas.width = 0;
+        raw.canvas.height = 0;
+        page.cleanup();
+        continue;
+      }
       if (textless.has(i - 1) || (raw.items.length === 0 && raw.images.some((im) => im.fullPage))) {
         scanned++;
         let ocr: import("./ocr").OcrPage | null = null;

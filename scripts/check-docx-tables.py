@@ -21,6 +21,8 @@ def check(path):
             col = 0
             active = {}
             for cell in row.findall(W + 'tc'):
+                if len(cell) == 0 or cell[-1].tag != W + 'p':
+                    errors.append(f'Table {ti}, row {ri}: cell must end with a paragraph')
                 span = cell.find(f'{W}tcPr/{W}gridSpan')
                 width = int(span.get(W + 'val')) if span is not None else 1
                 merge = cell.find(f'{W}tcPr/{W}vMerge')

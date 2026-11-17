@@ -37,6 +37,7 @@ import {
   type ISectionOptions,
 } from "docx";
 import type { Align, Block, DesignPage, HeaderFooter, ImageBlock, PageLayout, ParaBlock, Run, TableBlock } from "./types";
+import { xmlText } from "./xmlText";
 
 const tw = (pt: number) => Math.round(pt * 20);
 const px = (pt: number) => Math.max(1, Math.round((pt * 96) / 72));
@@ -54,7 +55,7 @@ function textRuns(runs: Run[], fields = false): TextRun[] {
   const out: TextRun[] = [];
   for (const r of runs) {
     const base = {
-      font: r.font,
+      font: xmlText(r.font),
       size: Math.round(r.size * 2),
       bold: r.bold || undefined,
       italics: r.italic || undefined,
@@ -66,7 +67,7 @@ function textRuns(runs: Run[], fields = false): TextRun[] {
     };
     // Табуляции и поля номера страницы — отдельными элементами
     const children: (string | Tab | (typeof PageNumber)[keyof typeof PageNumber])[] = [];
-    const parts = r.text.split(/(\t|\{PAGE\}|\{NUMPAGES\})/);
+    const parts = xmlText(r.text).split(/(\t|\{PAGE\}|\{NUMPAGES\})/);
     for (const p of parts) {
       if (!p) continue;
       if (p === "\t") children.push(new Tab());
@@ -296,6 +297,32 @@ export async function buildDocx(pages: PageLayout[], meta: DocMeta): Promise<Blo
   };
 
   for (const p of pages) {
+    if (p.snapshot) {
+      flush();
+      const landscape = p.width > p.height;
+      sections.push({
+        properties: {
+          type: sections.length ? SectionType.NEXT_PAGE : undefined,
+          page: {
+            size: landscape
+              ? { width: tw(p.height), height: tw(p.width), orientation: PageOrientation.LANDSCAPE }
+              : { width: tw(p.width), height: tw(p.height), orientation: PageOrientation.PORTRAIT },
+            // Word и LibreOffice могут отбросить inline-картинку размером
+            // ровно со страницу при нулевых полях. Одного пункта достаточно
+            // для совместимой области печати и визуально незаметно.
+            margin: { left: 1, right: 1, top: 1, bottom: 1, header: 0, footer: 0 },
+          },
+        },
+        children: [
+          new Paragraph({
+            children: [new ImageRun({ data: p.snapshot.data, type: p.snapshot.type, transformation: { width: px(p.width - 2), height: px(p.height - 2) } })],
+            spacing: { before: 0, after: 0 },
+          }),
+        ],
+      });
+      cur = null;
+      continue;
+    }
     if (p.design) {
       flush();
       const landscape = p.width > p.height;
@@ -339,11 +366,11 @@ export async function buildDocx(pages: PageLayout[], meta: DocMeta): Promise<Blo
     sections.push({ children: [new Paragraph({ children: [new TextRun({ text: "(В PDF нет текста и картинок)", italics: true, color: "999999" })] })] });
 
   const doc = new Document({
-    title: meta.title,
+    title: xmlText(meta.title),
     creator: "Конвертер документов",
     styles: {
       default: {
-        document: { run: { font: meta.bodyFont, size: Math.round(meta.bodySize * 2) }, paragraph: { spacing: { after: 0 } } },
+        document: { run: { font: xmlText(meta.bodyFont), size: Math.round(meta.bodySize * 2) }, paragraph: { spacing: { after: 0 } } },
         // Заголовки — для навигации и оглавления, внешний вид задаёт сам текст
         heading1: { run: { color: "000000", bold: false, italics: false }, paragraph: { spacing: { after: 0 } } },
         heading2: { run: { color: "000000", bold: false, italics: false }, paragraph: { spacing: { after: 0 } } },

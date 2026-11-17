@@ -4,7 +4,7 @@ import * as pdfjs from "pdfjs-dist";
 import { saveAs } from "file-saver";
 
 import { PdfToWordInstructionsModal } from "./components/PdfToWordInstructionsModal";
-import { convertPdfToDocx, PdfPasswordError } from "./engine";
+import { convertPdfToDocx, PdfPasswordError, type LayoutMode } from "./engine";
 import { convertDocxToPdf } from "./word2pdf";
 
 import PageShell from "../../components/PageShell";
@@ -67,6 +67,7 @@ const PdfToWord: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+  const [pdfMode, setPdfMode] = useState<LayoutMode>("image");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const busy = useRef(false);
   const [tick, setTick] = useState(0);
@@ -134,7 +135,7 @@ const PdfToWord: React.FC = () => {
         const data = await item.file.arrayBuffer();
         const run = (password?: string) =>
           convertPdfToDocx(data.slice(0), item.file.name.replace(/\.pdf$/i, ""), {
-            layout: "flow",
+            layout: pdfMode,
             password,
             onProgress: (cur, total, stage) => updateFile(item.id, { progress: (cur / total) * 100, stage }),
           });
@@ -252,6 +253,20 @@ const PdfToWord: React.FC = () => {
             e.target.value = "";
           }}
         />
+
+        {!hasFiles && (
+          <fieldset className="dc-mode">
+            <legend>Как преобразовать PDF в Word</legend>
+            <label className={pdfMode === "image" ? "is-selected" : ""}>
+              <input type="radio" name="pdf-mode" checked={pdfMode === "image"} onChange={() => setPdfMode("image")} />
+              <span><b>Сохранить внешний вид</b><small>Страницы останутся точными копиями PDF. Подходит для сложных таблиц, отчётов и форм.</small></span>
+            </label>
+            <label className={pdfMode === "flow" ? "is-selected" : ""}>
+              <input type="radio" name="pdf-mode" checked={pdfMode === "flow"} onChange={() => setPdfMode("flow")} />
+              <span><b>Сделать текст редактируемым</b><small>Текст и таблицы будут перенесены в элементы Word, но сложная вёрстка может измениться.</small></span>
+            </label>
+          </fieldset>
+        )}
 
         {/* Зона загрузки: большая, пока файлов нет; компактная полоса — потом */}
         <div
