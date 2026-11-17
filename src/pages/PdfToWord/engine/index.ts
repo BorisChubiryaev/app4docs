@@ -11,6 +11,7 @@ import * as pdfjs from "pdfjs-dist";
 import { extractPage, renderPage, visibleTextShare } from "./extract";
 import { appendLine, edgeLines, groupLines, hfKey, isDesignCandidate, layoutDesignPage, layoutPage, lineRuns, PAGE_NO_RE, lineText, type Line } from "./layout";
 import { buildDocx } from "./docx";
+import { repeatedHeaderRows } from "./tableContinuation";
 import type { Align, Block, Box, HeaderFooter, ImageBlock, Item, PageLayout, PageRaw, ParaBlock, TableBlock } from "./types";
 
 export interface ConvertResult {
@@ -203,12 +204,6 @@ function continuesTable(prev: TableBlock, next: TableBlock): boolean {
   return prev.colWidths.every((w, i) => Math.abs(w - next.colWidths[i]) < 3) && Math.abs(prev.x0 - next.x0) < 4;
 }
 
-const cellText = (t: TableBlock, r: number) =>
-  t.rows[r]
-    .map((c) => c.paras.map((p) => p.runs.map((x) => x.text).join("")).join(" "))
-    .join("|")
-    .replace(/\s+/g, " ")
-    .trim();
 
 function headerFooterFrom(lines: Line[], page: number, total: number, width: number): HeaderFooter | null {
   if (!lines.length) return null;
@@ -437,8 +432,7 @@ export async function convertPdfToDocx(data: ArrayBuffer, title: string, opts: C
       }
       if (a.kind === "table" && b.kind === "table" && continuesTable(a, b)) {
         // Повтор шапки на новой странице не дублируем
-        let skip = 0;
-        while (skip < a.headerRows && skip < b.rows.length && cellText(a, skip) === cellText(b, skip)) skip++;
+        const skip = repeatedHeaderRows(a, b);
         a.rows.push(...b.rows.slice(skip));
         a.rowHeights.push(...b.rowHeights.slice(skip));
         p.zones[0].blocks.shift();
