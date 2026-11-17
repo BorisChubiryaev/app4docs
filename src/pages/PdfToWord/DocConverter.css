@@ -114,23 +114,6 @@
   color: var(--dc-ink);
 }
 
-/* ── Режим PDF → Word ── */
-.dc-mode {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-  padding: 16px;
-  border: 1px solid var(--dc-line);
-  border-radius: 16px;
-  background: var(--dc-surface);
-}
-.dc-mode legend { padding: 0 4px; font-size: 0.88rem; font-weight: 700; }
-.dc-mode label { display: flex; align-items: flex-start; gap: 9px; padding: 12px; border: 1px solid var(--dc-line); border-radius: 12px; cursor: pointer; }
-.dc-mode label.is-selected { border-color: #515dad; background: color-mix(in srgb, #515dad 7%, var(--dc-surface)); }
-.dc-mode input { margin: 3px 0 0; accent-color: #515dad; }
-.dc-mode b,.dc-mode small { display: block; }
-.dc-mode small { margin-top: 4px; color: var(--dc-muted); font-size: 0.78rem; line-height: 1.4; }
 .dc-drop__plus {
   display: grid;
   place-items: center;
@@ -380,7 +363,6 @@
 }
 
 @media (max-width: 720px) {
-  .dc-mode { grid-template-columns: 1fr; }
   .dc-features {
     grid-template-columns: 1fr;
   }

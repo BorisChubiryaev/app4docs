@@ -297,32 +297,6 @@ export async function buildDocx(pages: PageLayout[], meta: DocMeta): Promise<Blo
   };
 
   for (const p of pages) {
-    if (p.snapshot) {
-      flush();
-      const landscape = p.width > p.height;
-      sections.push({
-        properties: {
-          type: sections.length ? SectionType.NEXT_PAGE : undefined,
-          page: {
-            size: landscape
-              ? { width: tw(p.height), height: tw(p.width), orientation: PageOrientation.LANDSCAPE }
-              : { width: tw(p.width), height: tw(p.height), orientation: PageOrientation.PORTRAIT },
-            // Word и LibreOffice могут отбросить inline-картинку размером
-            // ровно со страницу при нулевых полях. Одного пункта достаточно
-            // для совместимой области печати и визуально незаметно.
-            margin: { left: 1, right: 1, top: 1, bottom: 1, header: 0, footer: 0 },
-          },
-        },
-        children: [
-          new Paragraph({
-            children: [new ImageRun({ data: p.snapshot.data, type: p.snapshot.type, transformation: { width: px(p.width - 2), height: px(p.height - 2) } })],
-            spacing: { before: 0, after: 0 },
-          }),
-        ],
-      });
-      cur = null;
-      continue;
-    }
     if (p.design) {
       flush();
       const landscape = p.width > p.height;

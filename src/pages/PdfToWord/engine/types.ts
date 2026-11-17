@@ -187,8 +187,6 @@ export interface DesignPage {
 
 export interface PageLayout {
   design?: DesignPage;
-  /** Полная страница PDF как одно изображение: точный внешний вид в Word. */
-  snapshot?: ImageBlock;
   index: number;
   width: number;
   height: number;
