@@ -13,22 +13,28 @@ interface Props {
 }
 
 
-const RowsEditor: React.FC<Props> = ({ input, rows, names, onChange }) => {
-  const people = input === "people";
-  const pairs = input === "pairs";
-  const cols = people ? ["Имя", "Должность"] : pairs ? ["Подпись", names?.[0] || "Ряд 1", names?.[1] || "Ряд 2"] : ["Подпись", "Значение"];
+type Column = [keyof Row, string];
 
-  const cell = (r: Row, c: number): string => {
-    if (c === 0) return r.label;
-    if (people) return r.note ?? "";
-    if (c === 1) return String(r.value ?? "").replace(".", ",");
-    return String(r.value2 ?? "").replace(".", ",");
+function columnsFor(input: Input, names?: [string, string]): Column[] {
+  switch (input) {
+    case "flows": return [["label", "Источник"], ["note", "Получатель"], ["value", "Объём"]];
+    case "people": return [["label", "Имя"], ["note", "Должность"]];
+    case "pairs": return [["label", "Подпись"], ["value", names?.[0] || "Ряд 1"], ["value2", names?.[1] || "Ряд 2"]];
+    default: return [["label", "Подпись"], ["value", names?.[0] || "Значение"]];
+  }
+}
+
+const isNumberColumn = (key: keyof Row) => key === "value" || key === "value2";
+
+const RowsEditor: React.FC<Props> = ({ input, rows, names, onChange }) => {
+  const cols = columnsFor(input, names);
+  const cell = (row: Row, index: number) => {
+    const value = row[cols[index][0]];
+    return typeof value === "number" ? String(value).replace(".", ",") : value ?? "";
   };
-  const setCell = (r: Row, c: number, v: string): Row => {
-    if (c === 0) return { ...r, label: v };
-    if (people) return { ...r, note: v };
-    if (c === 1) return { ...r, value: parseNum(v) };
-    return { ...r, value2: parseNum(v) };
+  const setCell = (row: Row, index: number, text: string): Row => {
+    const key = cols[index][0];
+    return { ...row, [key]: isNumberColumn(key) ? parseNum(text) : text };
   };
 
   // Ввод чисел храним как текст, пока ячейка в фокусе, — иначе «3,» превращалось бы в «3»
@@ -57,8 +63,8 @@ const RowsEditor: React.FC<Props> = ({ input, rows, names, onChange }) => {
       <table>
         <thead>
           <tr>
-            {cols.map((c) => (
-              <th key={c}>{c}</th>
+            {cols.map(([key, name]) => (
+              <th key={key}>{name}</th>
             ))}
             <th aria-label="Удалить" />
           </tr>
@@ -66,13 +72,13 @@ const RowsEditor: React.FC<Props> = ({ input, rows, names, onChange }) => {
         <tbody>
           {rows.map((r, ri) => (
             <tr key={ri}>
-              {cols.map((_, ci) => {
+              {cols.map(([key, name], ci) => {
                 const editing = draft && draft.r === ri && draft.c === ci;
                 return (
-                  <td key={ci}>
+                  <td key={key}>
                     <input
                       value={editing ? draft.v : cell(r, ci)}
-                      inputMode={ci > 0 && !people ? "decimal" : undefined}
+                      inputMode={isNumberColumn(key) ? "decimal" : undefined}
                       onFocus={() => setDraft({ r: ri, c: ci, v: cell(r, ci) })}
                       onBlur={() => setDraft(null)}
                       onChange={(e) => {
@@ -80,7 +86,7 @@ const RowsEditor: React.FC<Props> = ({ input, rows, names, onChange }) => {
                         onChange(rows.map((x, i) => (i === ri ? setCell(x, ci, e.target.value) : x)));
                       }}
                       onPaste={(e) => onPaste(e, ri, ci)}
-                      aria-label={`${cols[ci]}, строка ${ri + 1}`}
+                      aria-label={`${name}, строка ${ri + 1}`}
                     />
                   </td>
                 );
@@ -95,7 +101,7 @@ const RowsEditor: React.FC<Props> = ({ input, rows, names, onChange }) => {
         </tbody>
       </table>
       <div className="sg-rows__foot">
-        <button className="sg-btn" onClick={() => onChange([...rows, people ? { label: "Новый человек", value: 0, note: "" } : { label: `Пункт ${rows.length + 1}`, value: 0, value2: pairs ? 0 : undefined }])}>
+        <button className="sg-btn" onClick={() => onChange([...rows, input === "people" ? { label: "Новый человек", value: 0, note: "" } : { label: `Пункт ${rows.length + 1}`, value: 0, value2: input === "pairs" ? 0 : undefined }])}>
           ＋ Строка
         </button>
         <span className="sg-hint">Можно вставить диапазон из Excel (Ctrl+V)</span>

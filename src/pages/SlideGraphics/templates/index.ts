@@ -4,15 +4,18 @@ import { CHARTS } from "./charts";
 import { MOTION } from "./motion";
 import { SBER, SBER_GREENS, SBER_TEMPLATES } from "./sber";
 import { SCENES } from "./scenes";
+import { NEW_SBER_TOOLS } from "./sberTools";
 import { MODULES } from "./modules";
 
-export const TEMPLATES: Template[] = [...MODULES, ...CHARTS, ...SBER_TEMPLATES, ...MOTION, ...SCENES];
+export const TEMPLATES: Template[] = [...NEW_SBER_TOOLS, ...MODULES, ...CHARTS, ...SBER_TEMPLATES, ...MOTION, ...SCENES];
+
+export const sberIds = new Set([...NEW_SBER_TOOLS, ...SBER_TEMPLATES].map(t => t.id));
+export const featuredIds = new Set(NEW_SBER_TOOLS.map(t => t.id));
 
 export const GROUPS: [Group | "all", string][] = [
   ["all", "Все"],
   ["modules", "Модули для презентаций"],
   ["charts", "Графики"],
-  ["sber", "Стиль СБ"],
   ["text", "Текст"],
   ["backgrounds", "Фоны"],
   ["cards", "Карточки и фото"],

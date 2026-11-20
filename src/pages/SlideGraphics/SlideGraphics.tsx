@@ -7,8 +7,7 @@ import { copyImage, download, even, renderImage, renderVideo } from "./core/expo
 import { SAFE_DARK, SAFE_LIGHT, baseColor, renderFrame, stillTime } from "./core/render";
 import type { Control, Frame, Group, Row, Scene, Template, Val } from "./core/types";
 import { BG_PRESETS } from "./templates/scenes";
-import { PRESENTATION_MODULES } from "./templates/presentationModules";
-import { GROUPS, PALETTES, TEMPLATES, byId, newScene } from "./templates";
+import { featuredIds, sberIds, GROUPS, PALETTES, TEMPLATES, byId, newScene } from "./templates";
 import "./SlideGraphics.css";
 
 // Графика для слайдов: анимированные графики, фразы, фоны и карточки.
@@ -50,7 +49,7 @@ const SIZES: [string, number][] = [
 ];
 /** Поля, которые относятся к содержанию, — в разделе «Данные» */
 const DATA_KEYS = new Set(["title", "subtitle", "value", "caption", "delta", "center", "s1", "s2", "prefix", "unit", "decimals", "text"]);
-const featuredIds = new Set(PRESENTATION_MODULES.map(t => t.id));
+const isDataControl = (c: Control) => c.data || DATA_KEYS.has(c.key);
 const FORMATS = [
   ["png", "PNG", "прозрачный фон"],
   ["jpeg", "JPEG", "с фоном"],
@@ -104,11 +103,19 @@ const Thumb: React.FC<{ tpl: Template; scene: Scene; images: Images; aspect: str
 
 const Field: React.FC<{ c: Control; value: Val | undefined; onChange: (v: Val) => void }> = ({ c, value, onChange }) => {
   switch (c.type) {
+    case "textarea":
+      return (
+        <label className="sg-field">
+          <span className="sg-field__label">{c.label}</span>
+          <textarea aria-label={c.label} rows={3} value={String(value ?? "")} onChange={e => onChange(e.target.value)} />
+        </label>
+      );
+    case "time":
     case "text":
       return (
         <label className="sg-field">
           <span className="sg-field__label">{c.label}</span>
-          <input value={String(value ?? "")} placeholder={c.placeholder} onChange={(e) => onChange(e.target.value)} />
+          <input type={c.type} value={String(value ?? "")} placeholder={c.placeholder} onChange={(e) => onChange(e.target.value)} />
         </label>
       );
     case "number":
@@ -189,6 +196,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode; open?: boole
 const SlideGraphics: React.FC = () => {
   const [view, setView] = useState<"catalog" | "editor">("catalog");
   const [group, setGroup] = useState<Group | "all">("all");
+  const [sberOnly, setSberOnly] = useState(false);
   const [query, setQuery] = useState("");
   const catalogCard = useRef<string | null>(null);
   const editorTitle = useRef<HTMLHeadingElement>(null);
@@ -486,18 +494,19 @@ const SlideGraphics: React.FC = () => {
 
   const search = query.trim().toLocaleLowerCase("ru");
   const shown = TEMPLATES.filter(t => (group === "all" || t.group === group)
+    && (!sberOnly || sberIds.has(t.id))
     && `${t.name} ${t.about}`.toLocaleLowerCase("ru").includes(search));
   const featured = shown.filter(t => featuredIds.has(t.id));
   const library = shown.filter(t => !featuredIds.has(t.id));
-  const dataControls = tpl.controls.filter((c) => DATA_KEYS.has(c.key));
-  const lookControls = tpl.controls.filter((c) => !DATA_KEYS.has(c.key) && (!c.when || c.when(scene.params)));
+  const dataControls = tpl.controls.filter(isDataControl);
+  const lookControls = tpl.controls.filter((c) => !isDataControl(c) && (!c.when || c.when(scene.params)));
   // Выбор палитры: шаблон может переключить свои цвета на неё
   const pickPalette = (pal: string[], auto: boolean) =>
     update({ palette: [...pal], paletteAuto: auto, params: { ...scene.params, ...(tpl.onPalette?.(scene.params, pal) ?? {}) } });
   const transparent = !tpl.ownBackground && scene.background.kind === "transparent";
   const cardTpl = ["carousel", "deck", "flow"].includes(tpl.id);
   const usesPhrases = tpl.input === "phrases" || cardTpl;
-  const usesRows = tpl.input === "rows" || tpl.input === "pairs" || tpl.input === "people";
+  const usesRows = tpl.input === "flows" || tpl.input === "rows" || tpl.input === "pairs" || tpl.input === "people";
   const usesPhotos = tpl.input === "photos" || tpl.input === "people";
   const stageBackdrop = backdrop ?? autoBackdrop(scene);
   const previewDark = transparent ? stageBackdrop === "dark" : isDark(baseColor(scene, tpl) ?? "#ffffff");
@@ -540,18 +549,24 @@ const SlideGraphics: React.FC = () => {
                 </select>
               </label>
             </div>
-            <div className="sg-categories ds-tabs" role="group" aria-label="Категории шаблонов">
-              {GROUPS.map(([g, l]) => (
-                <button key={g} aria-pressed={group === g} className={`ds-tab${group === g ? " ds-tab--active" : ""}`} onClick={() => setGroup(g)}>
-                  {l}
-                </button>
-              ))}
+            <div className="sg-filter-options">
+              <button className="sg-sber-filter" type="button" aria-pressed={sberOnly} onClick={() => setSberOnly(on => !on)}>
+                <span className="sg-sber-filter__swatch" aria-hidden="true">{sberOnly ? "✓" : ""}</span>
+                В стиле Сбера
+              </button>
+              <div className="sg-categories ds-tabs" role="group" aria-label="Категории шаблонов">
+                {GROUPS.map(([g, l]) => (
+                  <button key={g} aria-pressed={group === g} className={`ds-tab${group === g ? " ds-tab--active" : ""}`} onClick={() => setGroup(g)}>
+                    {l}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
           {featured.length > 0 && (
             <section aria-labelledby="sg-new-title">
               <h2 className="ds-section-title sg-section-head" id="sg-new-title">Новые инструменты</h2>
-              <div className="sg-grid">{featured.map(renderCard)}</div>
+              <div className="sg-grid sg-grid--new">{featured.map(renderCard)}</div>
             </section>
           )}
           {library.length > 0 && (
@@ -563,7 +578,7 @@ const SlideGraphics: React.FC = () => {
           {shown.length === 0 && (
             <div className="ds-panel sg-empty">
               <p role="status">Инструменты по вашему запросу не найдены.</p>
-              <button className="btn-secondary" onClick={() => { setQuery(""); setGroup("all"); }}>Сбросить фильтры</button>
+              <button className="btn-secondary" onClick={() => { setQuery(""); setGroup("all"); setSberOnly(false); }}>Сбросить фильтры</button>
             </div>
           )}
         </div>

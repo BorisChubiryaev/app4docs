@@ -10,23 +10,26 @@ export interface Row {
   value: number;
   /** Второе значение (план/факт, прошлый/этот год) */
   value2?: number;
-  /** Подпись под именем (должность) */
+  /** Должность (people) или получатель потока (flows) */
   note?: string;
 }
 
-export type Group = "modules" | "charts" | "sber" | "text" | "backgrounds" | "cards";
+export type Group = "modules" | "charts" | "text" | "backgrounds" | "cards";
 
 /** Какие данные вводит пользователь */
-export type Input = "rows" | "pairs" | "single" | "phrases" | "photos" | "people" | "none";
+export type Input = "rows" | "flows" | "pairs" | "single" | "phrases" | "photos" | "people" | "none";
 
 export type Control = (
-  | { key: string; label: string; type: "text"; placeholder?: string }
+  | { key: string; label: string; type: "text" | "time"; placeholder?: string }
+  | { key: string; label: string; type: "textarea" }
   | { key: string; label: string; type: "number"; min?: number; max?: number; step?: number }
   | { key: string; label: string; type: "range"; min: number; max: number; step: number; unit?: string }
   | { key: string; label: string; type: "select"; options: [string, string][] }
   | { key: string; label: string; type: "toggle" }
   | { key: string; label: string; type: "color" }
 ) & {
+  /** Поле исходных данных с собственным ключом шаблона */
+  data?: boolean;
   /** Показывать настройку только при таких параметрах (иначе она ни на что не влияет) */
   when?: (p: Params) => boolean;
 };
