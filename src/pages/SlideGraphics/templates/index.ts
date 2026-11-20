@@ -3,11 +3,13 @@ import { CHARTS } from "./charts";
 import { MOTION } from "./motion";
 import { SBER, SBER_GREENS, SBER_TEMPLATES } from "./sber";
 import { SCENES } from "./scenes";
+import { MODULES } from "./modules";
 
-export const TEMPLATES: Template[] = [...CHARTS, ...SBER_TEMPLATES, ...MOTION, ...SCENES];
+export const TEMPLATES: Template[] = [...MODULES, ...CHARTS, ...SBER_TEMPLATES, ...MOTION, ...SCENES];
 
 export const GROUPS: [Group | "all", string][] = [
   ["all", "Все"],
+  ["modules", "Новые модули"],
   ["charts", "Графики"],
   ["sber", "Стиль СБ"],
   ["text", "Текст"],

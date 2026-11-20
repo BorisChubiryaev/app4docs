@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import PageShell from "../../components/PageShell";
+import { Link } from "react-router-dom";
+import ThemeToggle from "../../components/ThemeToggle";
 import InstructionsModalShell from "../../components/InstructionsModal";
 import RowsEditor from "./components/RowsEditor";
 import { FONT, isDark } from "./core/draw";
@@ -7,6 +8,7 @@ import { copyImage, download, even, renderImage, renderVideo } from "./core/expo
 import { SAFE_DARK, SAFE_LIGHT, baseColor, renderFrame, stillTime } from "./core/render";
 import type { Control, Frame, Group, Row, Scene, Template, Val } from "./core/types";
 import { BG_PRESETS } from "./templates/scenes";
+import { MODULES } from "./templates/modules";
 import { GROUPS, PALETTES, TEMPLATES, byId, newScene } from "./templates";
 import "./SlideGraphics.css";
 
@@ -335,10 +337,10 @@ const SlideGraphics: React.FC = () => {
     const el = stageRef.current;
     if (!el) return;
     const fit = () => {
-      const bw = el.clientWidth - 64;
-      const bh = el.clientHeight - 150;
+      const bw = Math.max(1, el.clientWidth - 24);
+      const bh = Math.max(1, el.clientHeight - 24);
       const k = Math.min(bw / out.w, bh / out.h);
-      setStageSize({ w: Math.max(80, Math.floor(out.w * k)), h: Math.max(45, Math.floor(out.h * k)) });
+      setStageSize({ w: Math.max(1, Math.floor(out.w * k)), h: Math.max(1, Math.floor(out.h * k)) });
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -467,7 +469,7 @@ const SlideGraphics: React.FC = () => {
     }
   };
 
-  const shown = useMemo(() => TEMPLATES.filter((t) => group === "all" || t.group === group), [group]);
+  const shown = useMemo(() => TEMPLATES.filter((t) => group === "all" ? t.group !== "modules" : t.group === group), [group]);
   const dataControls = tpl.controls.filter((c) => DATA_KEYS.has(c.key));
   const lookControls = tpl.controls.filter((c) => !DATA_KEYS.has(c.key) && (!c.when || c.when(scene.params)));
   // Выбор палитры: шаблон может переключить свои цвета на неё
@@ -483,20 +485,57 @@ const SlideGraphics: React.FC = () => {
   const fmtLabel = FORMATS.find((x) => x[0] === format)![1];
   const autoPal = previewDark ? SAFE_DARK : SAFE_LIGHT;
 
+  const renderCard = (t: Template) => (
+    <button key={t.id} className="sg-card" onClick={() => open(t.id)} onMouseEnter={() => setHovered(t.id)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(t.id)} onBlur={() => setHovered(null)}>
+      <div className="sg-card__pic" aria-hidden="true">
+        <Thumb tpl={t} scene={scenes[t.id]} images={images} aspect={aspect} hover={hovered === t.id} />
+        <div className="sg-card__tags">
+          {t.loop && <span>Петля</span>}
+          {t.interactive && <span>За курсором</span>}
+        </div>
+      </div>
+      <div className="sg-card__body">
+        <strong>{t.name}</strong>
+        <span>{t.about}</span>
+        <i aria-hidden="true" />
+      </div>
+    </button>
+  );
+
   return (
-    <PageShell title="Графика для слайдов" onShowInstructions={() => setShowHelp(true)} width={1480} fill={view === "editor"}>
+    <div className={`sg-studio sg-studio--${view}`}>
+      <header className="sg-masthead">
+        <div className="sg-masthead__inner">
+          <Link className="sg-home" to="/" aria-label="На главную Convertix">← Convertix</Link>
+          <span className="sg-masthead__name">Студия слайдов</span>
+          <div className="sg-masthead__actions">
+            <button className="sg-ghost" onClick={() => setShowHelp(true)}>Инструкция</button>
+            <ThemeToggle />
+          </div>
+        </div>
+      </header>
+      <main className="sg-workspace">
       {view === "catalog" ? (
         <div className="sg-catalog">
           <header className="sg-hero">
-            <h2>
-              Графика, которая <span>оживает</span> на слайде
-            </h2>
-            <p>Выберите шаблон, впишите свои числа или фразы и заберите картинку без фона в 4K или видео MP4. Бесплатно и без ограничений — всё считается в браузере.</p>
+            <div>
+              <h1>Графика<br />для слайдов<span>.</span></h1>
+              <p>Создайте график, схему или анимацию и вставьте её в презентацию. Выгрузка в PNG, JPEG и MP4.</p>
+            </div>
+            <div className="sg-hero__art" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>
           </header>
+          {group === "all" && (
+            <section aria-labelledby="sg-new-title">
+              <div className="sg-section-head"><h2 id="sg-new-title">Новые модули</h2><p>Для отчётов, планов и решений</p></div>
+              <div className="sg-grid sg-grid--featured">{MODULES.map(renderCard)}</div>
+            </section>
+          )}
+          <section aria-labelledby="sg-library-title">
+            <div className="sg-section-head"><h2 id="sg-library-title">Библиотека шаблонов</h2></div>
           <div className="sg-filters">
-            <div className="sg-tray" role="tablist">
+            <div className="sg-tray" role="group" aria-label="Категории шаблонов">
               {GROUPS.map(([g, l]) => (
-                <button key={g} role="tab" aria-selected={group === g} className={group === g ? "is-on" : ""} onClick={() => setGroup(g)}>
+                <button key={g} aria-pressed={group === g} className={group === g ? "is-on" : ""} onClick={() => setGroup(g)}>
                   {l}
                   <small>{g === "all" ? TEMPLATES.length : TEMPLATES.filter((t) => t.group === g).length}</small>
                 </button>
@@ -510,23 +549,8 @@ const SlideGraphics: React.FC = () => {
               ))}
             </div>
           </div>
-          <div className="sg-grid">
-            {shown.map((t) => (
-              <button key={t.id} className="sg-card" onClick={() => open(t.id)} onMouseEnter={() => setHovered(t.id)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(t.id)} onBlur={() => setHovered(null)}>
-                <div className="sg-card__pic">
-                  <Thumb tpl={t} scene={scenes[t.id]} images={images} aspect={aspect} hover={hovered === t.id} />
-                  <div className="sg-card__tags">
-                    {t.loop && <span>петля</span>}
-                    {t.interactive && <span>за курсором</span>}
-                  </div>
-                </div>
-                <div className="sg-card__body">
-                  <strong>{t.name}</strong>
-                  <span>{t.about}</span>
-                </div>
-              </button>
-            ))}
-          </div>
+            <div className="sg-grid">{shown.map(renderCard)}</div>
+          </section>
         </div>
       ) : (
         <div className="sg-editor">
@@ -534,7 +558,7 @@ const SlideGraphics: React.FC = () => {
             <button className="sg-back" onClick={() => setView("catalog")}>
               ← Каталог
             </button>
-            <h2 className="sg-panel__title">{tpl.name}</h2>
+            <h1 className="sg-panel__title">{tpl.name}</h1>
             <p className="sg-panel__about">{tpl.about}</p>
 
             {(dataControls.length > 0 || usesRows || usesPhotos || usesPhrases) && (
@@ -602,7 +626,7 @@ const SlideGraphics: React.FC = () => {
               </Section>
             )}
 
-            <Section title="Цвета">
+            <Section title="Цвета" open={false}>
               <div className="sg-pals">
                 <button className={`sg-pal ${scene.paletteAuto ? "is-on" : ""}`} onClick={() => pickPalette(autoPal, true)} title="Проверенная палитра: цвета различимы, в том числе при нарушениях цветовосприятия">
                   <span className="sg-pal__dots">
@@ -645,7 +669,7 @@ const SlideGraphics: React.FC = () => {
             </Section>
 
             {!tpl.ownBackground && (
-              <Section title="Фон">
+              <Section title="Фон" open={false}>
                 <div className="sg-chips">
                   {(
                     [
@@ -686,7 +710,7 @@ const SlideGraphics: React.FC = () => {
             </button>
           </aside>
 
-          <section className={`sg-stage ${previewDark ? "is-dark" : ""}`} ref={stageRef}>
+          <section className={`sg-stage ${previewDark ? "is-dark" : ""}`} aria-label="Холст и экспорт">
             <div className="sg-stage__top">
               <div className="sg-tray sg-tray--mono" role="radiogroup" aria-label="Формат кадра">
                 {ASPECTS.map(([a]) => (
@@ -708,7 +732,7 @@ const SlideGraphics: React.FC = () => {
                 )}
                 <div className="sg-export" ref={exportRef}>
                   <button className="sg-primary" onClick={() => setShowExport((v) => !v)} aria-expanded={showExport}>
-                    ⬇ {fmtLabel} <span aria-hidden="true">▾</span>
+                    Экспорт · {fmtLabel} <span aria-hidden="true">▾</span>
                   </button>
                   {showExport && (
                     <div className="sg-pop" role="dialog" aria-label="Выгрузка">
@@ -795,10 +819,11 @@ const SlideGraphics: React.FC = () => {
               </div>
             </div>
 
-            <div className="sg-canvas-wrap" style={{ background: transparent ? BACKDROP[stageBackdrop] : undefined }}>
+            <div className="sg-canvas-wrap" ref={stageRef}>
               <canvas
+                aria-label={`Предпросмотр: ${tpl.name}`}
                 ref={canvasRef}
-                style={{ width: stageSize.w, height: stageSize.h, cursor: tpl.interactive ? (pinned ? "pointer" : "crosshair") : undefined }}
+                style={{ width: stageSize.w, height: stageSize.h, background: transparent ? BACKDROP[stageBackdrop] : undefined, cursor: tpl.interactive ? (pinned ? "pointer" : "crosshair") : undefined }}
                 onPointerMove={onMove}
                 onPointerDown={onClick}
               />
@@ -852,8 +877,8 @@ const SlideGraphics: React.FC = () => {
                 </div>
               )}
               <div className="sg-timeline">
-                <button className="sg-play" onClick={() => (playing ? setPlaying(false) : time >= dur && !tpl.loop ? restart() : setPlaying(true))} aria-label={playing ? "Пауза" : "Воспроизвести"}>
-                  {playing ? "❚❚" : "▶"}
+                <button className={`sg-play${playing ? " is-playing" : ""}`} onClick={() => (playing ? setPlaying(false) : time >= dur && !tpl.loop ? restart() : setPlaying(true))} aria-label={playing ? "Пауза" : "Воспроизвести"}>
+                  <span aria-hidden="true" />
                 </button>
                 <button className="sg-round" onClick={restart} aria-label="С начала" title="С начала">
                   ↺
@@ -877,7 +902,7 @@ const SlideGraphics: React.FC = () => {
                   {time.toFixed(1)} / {dur.toFixed(1)} с
                 </span>
                 <label className="sg-dur" title="Длительность ролика">
-                  <input type="number" min={1} max={60} step={0.5} value={dur} onChange={(e) => setDurs((d) => ({ ...d, [tplId]: Math.min(60, Math.max(1, Number(e.target.value) || tpl.duration)) }))} />с
+                  <input type="number" aria-label="Длительность ролика, секунды" min={1} max={60} step={0.5} value={dur} onChange={(e) => setDurs((d) => ({ ...d, [tplId]: Math.min(60, Math.max(1, Number(e.target.value) || tpl.duration)) }))} />с
                 </label>
               </div>
             </div>
@@ -885,12 +910,13 @@ const SlideGraphics: React.FC = () => {
         </div>
       )}
 
-      <InstructionsModalShell isOpen={showHelp} onClose={() => setShowHelp(false)} title="🎬 Графика для слайдов" footerLabel="Понятно!" maxWidth={720}>
+      </main>
+      <InstructionsModalShell isOpen={showHelp} onClose={() => setShowHelp(false)} title="Графика для слайдов" footerLabel="Понятно!" maxWidth={720}>
         <div className="instructions-section">
           <h3>Как пользоваться</h3>
           <ol>
             <li>Выберите шаблон в каталоге — при наведении он показывает анимацию.</li>
-            <li>Слева впишите свои числа или вставьте диапазон из Excel, добавьте фразы или фото.</li>
+            <li>В панели настроек впишите свои числа или вставьте диапазон из Excel, добавьте фразы или фото.</li>
             <li>Настройте вид, цвета и фон. «Проверенная» палитра различима даже при нарушениях цветовосприятия.</li>
             <li>Кнопка справа вверху — выгрузка картинкой или видео нужного размера.</li>
           </ol>
@@ -913,7 +939,7 @@ const SlideGraphics: React.FC = () => {
           <p>Всё рисуется в браузере, данные и фото никуда не отправляются. Ограничений на число картинок и видео нет.</p>
         </div>
       </InstructionsModalShell>
-    </PageShell>
+    </div>
   );
 };
 
