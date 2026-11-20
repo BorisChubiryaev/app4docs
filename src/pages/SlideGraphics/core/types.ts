@@ -51,6 +51,9 @@ export interface Frame {
   pal: string[];
   /** Основной и приглушённый цвет текста под фон */
   ink: string;
+  textOverride?: string;
+  backgroundImage?: HTMLImageElement;
+  backgroundLayers?: BackgroundLayer[];
   muted: string;
   /** Фон тёмный (для выбора контрастных деталей) */
   dark: boolean;
@@ -97,9 +100,21 @@ export interface Template {
   draw(f: Frame): void;
 }
 
-export type BackgroundKind = "transparent" | "white" | "light" | "dark" | "custom";
+export type BackgroundKind = "transparent" | "white" | "light" | "dark" | "custom" | "image";
+export interface BackgroundLayer {
+  image: HTMLImageElement;
+  name: string;
+  x: number;
+  y: number;
+  size: number;
+}
 export interface Background {
+  layers?: BackgroundLayer[];
+
   kind: BackgroundKind;
+  image?: HTMLImageElement;
+  imageName?: string;
+  imageTone?: string;
   color: string;
 }
 
@@ -111,7 +126,8 @@ export interface Scene {
   palette: string[];
   background: Background;
   /** Цвет текста: авто по фону или принудительно */
-  ink: "auto" | "dark" | "light";
+  ink: "auto" | "dark" | "light" | "custom";
+  textColor?: string;
   /** Проверенная палитра, подобранная под светлый или тёмный фон */
   paletteAuto: boolean;
 }

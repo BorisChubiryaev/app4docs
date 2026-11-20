@@ -1,6 +1,6 @@
 // Шаблоны без графиков: фразы, фоны для слайдов, раскладки и карточки с фото.
 
-import { blob, captionOf, clamp, drawCover, pickImage, easeBack, easeInOut, easeOut, fitFont, font, grain, isDark, lerp, mix, pc, prog, rgba, rng, roundRect, wrap } from "../core/draw";
+import { paintText, paintBackgroundImage, paintBackgroundLayers, blob, captionOf, clamp, drawCover, pickImage, easeBack, easeInOut, easeOut, fitFont, font, grain, isDark, lerp, mix, pc, prog, rgba, rng, roundRect, wrap } from "../core/draw";
 import type { Frame, Template } from "../core/types";
 
 const TAU = Math.PI * 2;
@@ -58,7 +58,7 @@ const phrases: Template = {
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = f.ink;
     for (const l of l1) {
-      ctx.fillText(l, x, y);
+      paintText(f, l, x, y);
       y += lh;
     }
     let shown = typed;
@@ -66,7 +66,7 @@ const phrases: Template = {
     for (const l of l2) {
       const part = l.slice(0, Math.max(0, shown));
       shown -= l.length + 1;
-      ctx.fillText(part, x - (left ? 0 : (ctx.measureText(l).width - ctx.measureText(part).width) / 2), y);
+      paintText(f, part, x - (left ? 0 : (ctx.measureText(l).width - ctx.measureText(part).width) / 2), y);
       y += lh;
     }
     // Курсор печати
@@ -85,6 +85,7 @@ function meshBackground(f: Frame, seed: number, count: number, size: number, spe
   const r = rng(seed);
   ctx.fillStyle = String(f.p.base ?? "#0c0d12");
   ctx.fillRect(0, 0, w, h);
+  paintBackgroundImage(f);
   const ph = (t / dur) * TAU;
   for (let i = 0; i < count; i++) {
     const cx = r() * w;
@@ -178,12 +179,13 @@ const glass: Template = {
   },
   draw(f) {
     const { ctx, w, h, s } = f;
-    const img = f.images[0];
+    const img = f.backgroundImage ?? f.images[0];
     const paint = (g: Frame) => {
       if (img) {
         g.ctx.fillStyle = "#000";
         g.ctx.fillRect(0, 0, g.w, g.h);
         drawCover(g.ctx, img as HTMLImageElement, 0, 0, g.w, g.h);
+        paintBackgroundLayers(g);
       } else meshBackground(g, Number(f.p.seed ?? 1), 5, 1, 1);
     };
     paint(f);
@@ -244,6 +246,7 @@ const cover: Template = {
     const { ctx, w, h, s, t, dur } = f;
     ctx.fillStyle = String(f.p.base ?? "#07080d");
     ctx.fillRect(0, 0, w, h);
+    paintBackgroundImage(f);
     const place = String(f.p.place ?? "right");
     const cx = place === "left" ? w * 0.22 : place === "center" ? w / 2 : w * 0.78;
     const cy = h * 0.55;
@@ -278,13 +281,13 @@ const cover: Template = {
       ctx.textBaseline = "alphabetic";
       let y = h / 2 - (lines.length * px * 1.05) / 2 + px * 0.8 + (1 - k) * 30 * s;
       for (const l of lines) {
-        ctx.fillText(l, textX, y);
+        paintText(f, l, textX, y);
         y += px * 1.05;
       }
       if (sub) {
         fitFont(ctx, sub, maxW, 36 * s, 500);
         ctx.fillStyle = "rgba(255,255,255,0.72)";
-        ctx.fillText(sub, textX, y + 20 * s);
+        paintText(f, sub, textX, y + 20 * s);
       }
     }
     ctx.globalAlpha = 1;
@@ -314,6 +317,7 @@ const spiral: Template = {
     const { ctx, w, h, s, t, dur } = f;
     ctx.fillStyle = String(f.p.base ?? "#090a10");
     ctx.fillRect(0, 0, w, h);
+    paintBackgroundImage(f);
     const n = Number(f.p.count ?? 36);
     const twist = (Number(f.p.twist ?? 12) / 100) * TAU;
     const R = Math.hypot(w, h) * 0.55;
@@ -428,12 +432,12 @@ const bento: Template = {
       if (main) {
         const px = fitFont(ctx, main, tile.w - p * 2, Math.min(tile.h * 0.32, 120 * s), 800);
         ctx.fillStyle = ink;
-        ctx.fillText(main, tile.x + p, tile.y + tile.h - p - (sub ? px * 0.6 : 0));
+        paintText(f, main, tile.x + p, tile.y + tile.h - p - (sub ? px * 0.6 : 0));
       }
       if (sub) {
         fitFont(ctx, sub, tile.w - p * 2, Math.min(tile.h * 0.13, 34 * s), 500);
         ctx.fillStyle = rgba(ink === "#ffffff" ? "#ffffff" : "#15171c", 0.7);
-        ctx.fillText(sub, tile.x + p, tile.y + tile.h - p * 0.9 + 4 * s);
+        paintText(f, sub, tile.x + p, tile.y + tile.h - p * 0.9 + 4 * s);
       }
       ctx.restore();
     });
@@ -466,13 +470,13 @@ function photoOrCard(f: Frame, i: number, x: number, y: number, w: number, h: nu
     const lines = wrap(ctx, main, w - p * 2).slice(0, 3);
     let yy = y + h - p - (sub ? w * 0.07 : 0) - (lines.length - 1) * w * 0.12;
     for (const l of lines) {
-      ctx.fillText(l, x + p, yy);
+      paintText(f, l, x + p, yy);
       yy += w * 0.12;
     }
     if (sub) {
       fitFont(ctx, sub, w - p * 2, Math.min(w * 0.055, 30 * s), 500);
       ctx.fillStyle = "rgba(255,255,255,0.8)";
-      ctx.fillText(sub, x + p, y + h - p * 0.8);
+      paintText(f, sub, x + p, y + h - p * 0.8);
     }
   }
   ctx.restore();
@@ -542,7 +546,7 @@ const people: Template = {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.font = font(cw * 0.26, 800);
-        ctx.fillText(initials, x + cw / 2, y + photoH / 2);
+        paintText(f, initials, x + cw / 2, y + photoH / 2);
       }
       const py = glassStyle ? y + ch - panelH - 14 * s : y + photoH;
       if (glassStyle) {
@@ -562,11 +566,11 @@ const people: Template = {
       const role = rows[i].note ?? "";
       const npx = fitFont(ctx, name, tw, Math.min(cw * 0.1, 40 * s), 700);
       ctx.fillStyle = ink;
-      ctx.fillText(name, tx, py + panelH * 0.45 + npx * 0.3);
+      paintText(f, name, tx, py + panelH * 0.45 + npx * 0.3);
       if (role) {
         fitFont(ctx, role, tw, Math.min(cw * 0.065, 26 * s), 500);
         ctx.fillStyle = glassStyle ? "rgba(255,255,255,0.85)" : "rgba(21,23,28,0.6)";
-        ctx.fillText(role, tx, py + panelH * 0.78);
+        paintText(f, role, tx, py + panelH * 0.78);
       }
       ctx.restore();
       ctx.globalAlpha = 1;

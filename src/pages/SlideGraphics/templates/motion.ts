@@ -2,7 +2,7 @@
 // курсора — по своей траектории, так же пишется видео), лента карточек и
 // линия со следом.
 
-import { badge, captionOf, clamp, drawCover, pickImage, easeInOut, fitFont, fmtUnit, font, header, lerp, mix, pc, prog, rgba, rng, roundRect, smoothPath, wrap } from "../core/draw";
+import { paintText, badge, captionOf, clamp, drawCover, pickImage, easeInOut, fitFont, fmtUnit, font, header, lerp, mix, pc, prog, rgba, rng, roundRect, smoothPath, wrap } from "../core/draw";
 import type { Frame, Template } from "../core/types";
 
 const TAU = Math.PI * 2;
@@ -116,7 +116,7 @@ const ribbon: Template = {
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.a);
-      ctx.fillText(ch, 0, px * 0.04);
+      paintText(f, ch, 0, px * 0.04);
       ctx.restore();
       d += widths[i];
     });
@@ -223,13 +223,13 @@ function card(f: Frame, i: number, x: number, y: number, w: number, h: number, r
       const lines = wrap(ctx, main, w - p * 2).slice(0, 3);
       let yy = y + h - p - (sub ? w * 0.08 : 0) - (lines.length - 1) * w * 0.13;
       for (const l of lines) {
-        ctx.fillText(l, x + p, yy);
+        paintText(f, l, x + p, yy);
         yy += w * 0.13;
       }
       if (sub) {
         fitFont(ctx, sub, w - p * 2, Math.min(w * 0.06, 28 * s), 500);
         ctx.fillStyle = "rgba(255,255,255,0.8)";
-        ctx.fillText(sub, x + p, y + h - p * 0.75);
+        paintText(f, sub, x + p, y + h - p * 0.75);
       }
     }
   }
@@ -419,7 +419,7 @@ const trail: Template = {
       ctx.fillStyle = f.muted;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(rows[i].label, x, y1 + 28 * s);
+      paintText(f, rows[i].label, x, y1 + 28 * s);
       ctx.globalAlpha = 1;
     });
   },

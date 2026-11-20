@@ -3,7 +3,7 @@
 // (проверена валидатором на светлом и тёмном фоне), поэтому любой шаблон можно
 // перекрасить. Логотипов и фирменного шрифта здесь нет — только цвета и манера.
 
-import { clamp, easeBack, easeInOut, easeOut, fitFont, fmtUnit, font, grain, header, isDark, lerp, mix, pc, prog, rgb, rgba, roundRect, wrap } from "../core/draw";
+import { paintText, paintBackgroundImage, clamp, easeBack, easeInOut, easeOut, fitFont, fmtUnit, font, grain, header, isDark, lerp, mix, pc, prog, rgb, rgba, roundRect, wrap } from "../core/draw";
 import type { Control, Frame, Row, Template } from "../core/types";
 
 const TAU = Math.PI * 2;
@@ -194,13 +194,13 @@ const rings: Template = {
       ctx.textBaseline = "middle";
       ctx.font = font(fitFont(ctx, r.label, maxW * 0.5, 26 * s, 600), 600);
       ctx.fillStyle = f.muted;
-      ctx.fillText(r.label, x0 + 26 * s, y - rowH * 0.22);
+      paintText(f, r.label, x0 + 26 * s, y - rowH * 0.22);
       const pct = Math.round(ratio(r) * 100 * easeOut(prog(t, 0.3 + i * 0.15, 1.6)));
       ctx.font = font(Math.min(64 * s, rowH * 0.46), 800);
       ctx.fillStyle = f.ink;
       ctx.textBaseline = "alphabetic";
       const big = `${pct}%`;
-      ctx.fillText(big, x0, y + rowH * 0.3);
+      paintText(f, big, x0, y + rowH * 0.3);
       const bw = ctx.measureText(big).width;
       ctx.font = font(22 * s, 500);
       ctx.fillStyle = f.muted;
@@ -208,7 +208,7 @@ const rings: Template = {
       const s2 = String(f.p.s2 ?? "План");
       const note = r.value2 ? `${s1} ${fmtUnit(r.value, f)} · ${s2} ${fmtUnit(r.value2, f)}` : `${s1} ${fmtUnit(r.value, f)}`;
       ctx.font = font(fitFont(ctx, note, Math.max(60 * s, maxW - bw - 24 * s), 22 * s, 500), 500);
-      ctx.fillText(note, x0 + bw + 18 * s, y + rowH * 0.3);
+      paintText(f, note, x0 + bw + 18 * s, y + rowH * 0.3);
       ctx.restore();
     });
     ctx.globalAlpha = 1;
@@ -324,10 +324,10 @@ const waterfall: Template = {
       ctx.fillStyle = f.ink;
       if (st.kind === "down") {
         ctx.textBaseline = "top";
-        ctx.fillText(label, x + bw / 2, Y(st.to) + 10 * s);
+        paintText(f, label, x + bw / 2, Y(st.to) + 10 * s);
       } else {
         ctx.textBaseline = "bottom";
-        ctx.fillText(label, x + bw / 2, Y(st.to) - 10 * s);
+        paintText(f, label, x + bw / 2, Y(st.to) - 10 * s);
       }
       // Подпись категории под осью — до двух строк
       ctx.font = font(20 * s, 500);
@@ -335,7 +335,7 @@ const waterfall: Template = {
       ctx.textBaseline = "top";
       wrap(ctx, st.label, slot * 0.94)
         .slice(0, 2)
-        .forEach((line, j) => ctx.fillText(line, x + bw / 2, Math.max(Y(0), Y(lo)) + 14 * s + j * 24 * s));
+        .forEach((line, j) => paintText(f, line, x + bw / 2, Math.max(Y(0), Y(lo)) + 14 * s + j * 24 * s));
       ctx.globalAlpha = 1;
     });
   },
@@ -443,7 +443,7 @@ const gauge: Template = {
       ctx.textAlign = Math.cos(a) < -0.2 ? "right" : Math.cos(a) > 0.2 ? "left" : "center";
       ctx.textBaseline = "bottom";
       const lr = r1 + 14 * s;
-      ctx.fillText(`цель ${fmtUnit(target, f)}`, cx + Math.cos(a) * lr, cy + Math.sin(a) * lr);
+      paintText(f, `цель ${fmtUnit(target, f)}`, cx + Math.cos(a) * lr, cy + Math.sin(a) * lr);
       ctx.globalAlpha = 1;
     }
     // Минимум и максимум
@@ -451,21 +451,21 @@ const gauge: Template = {
     ctx.fillStyle = f.muted;
     ctx.textBaseline = "top";
     ctx.textAlign = "center";
-    ctx.fillText(fmtUnit(0, f), cx - R, cy + th / 2 + 10 * s);
-    ctx.fillText(fmtUnit(max, f), cx + R, cy + th / 2 + 10 * s);
+    paintText(f, fmtUnit(0, f), cx - R, cy + th / 2 + 10 * s);
+    paintText(f, fmtUnit(max, f), cx + R, cy + th / 2 + 10 * s);
     // Число
     const shown = v * clamp(easeOut(prog(t, 0.3, 1.8)));
     const text = fmtUnit(shown, f);
     ctx.textBaseline = "alphabetic";
     ctx.font = font(fitFont(ctx, fmtUnit(v, f), R * 1.25, R * 0.5, 800), 800);
     ctx.fillStyle = f.ink;
-    ctx.fillText(text, cx, cy - R * 0.05);
+    paintText(f, text, cx, cy - R * 0.05);
     if (cap) {
       ctx.globalAlpha = easeOut(prog(t, 0.8, 0.6));
       ctx.font = font(fitFont(ctx, cap, w - pad * 2, 30 * s, 500), 500);
       ctx.fillStyle = f.muted;
       ctx.textBaseline = "top";
-      ctx.fillText(cap, cx, cy + th / 2 + 50 * s);
+      paintText(f, cap, cx, cy + th / 2 + 50 * s);
       ctx.globalAlpha = 1;
     }
   },
@@ -526,8 +526,8 @@ const slope: Template = {
     ctx.fillStyle = f.muted;
     ctx.textAlign = "center";
     ctx.textBaseline = "bottom";
-    ctx.fillText(String(f.p.s1 ?? ""), x1, yTop - 32 * s);
-    ctx.fillText(String(f.p.s2 ?? ""), x2, yTop - 32 * s);
+    paintText(f, String(f.p.s1 ?? ""), x1, yTop - 32 * s);
+    paintText(f, String(f.p.s2 ?? ""), x2, yTop - 32 * s);
     const gap = 54 * s;
     const ly = spread(rows.map((r) => Y(r.value)), gap, yTop - 10 * s, yBot + 10 * s);
     const ry = spread(rows.map((r) => Y(r.value2 ?? r.value)), gap, yTop - 10 * s, yBot + 10 * s);
@@ -550,10 +550,10 @@ const slope: Template = {
       ctx.fillStyle = f.muted;
       const nameW = x1 - pad - 120 * s;
       ctx.font = font(fitFont(ctx, r.label, nameW, 22 * s, 500), 500);
-      ctx.fillText(r.label, x1 - 110 * s, ly[i]);
+      paintText(f, r.label, x1 - 110 * s, ly[i]);
       ctx.font = font(28 * s, 700);
       ctx.fillStyle = f.ink;
-      ctx.fillText(fmtUnit(r.value, f), x1 - 26 * s, ly[i]);
+      paintText(f, fmtUnit(r.value, f), x1 - 26 * s, ly[i]);
       ctx.globalAlpha = 1;
       // Линия
       if (k > 0) {
@@ -588,7 +588,7 @@ const slope: Template = {
         ctx.font = font(28 * s, 700);
         ctx.fillStyle = f.ink;
         const val = fmtUnit(v2, f);
-        ctx.fillText(val, x2 + 26 * s, ry[i]);
+        paintText(f, val, x2 + 26 * s, ry[i]);
         let x = x2 + 26 * s + ctx.measureText(val).width + 14 * s;
         if (f.p.delta !== false && r.value) {
           const d = ((v2 - r.value) / Math.abs(r.value)) * 100;
@@ -599,12 +599,12 @@ const slope: Template = {
           ctx.fillStyle = rgba(rising ? up : down, f.dark ? 0.25 : 0.14);
           ctx.fill();
           ctx.fillStyle = f.ink;
-          ctx.fillText(txt, x + 10 * s, ry[i] + 1 * s);
+          paintText(f, txt, x + 10 * s, ry[i] + 1 * s);
           x += tw + 34 * s;
         }
         ctx.font = font(fitFont(ctx, r.label, Math.max(40 * s, w - pad - x), 22 * s, 500), 500);
         ctx.fillStyle = f.muted;
-        ctx.fillText(r.label, x, ry[i]);
+        paintText(f, r.label, x, ry[i]);
         ctx.globalAlpha = 1;
       }
     });
@@ -716,13 +716,13 @@ const bubbles: Template = {
       if (R > 70 * s) {
         const lpx = fitFont(ctx, r.label, R * 1.6, Math.min(R * 0.2, 26 * s), 600);
         ctx.font = font(vpx, 800);
-        ctx.fillText(val, x, y - lpx * 0.55);
+        paintText(f, val, x, y - lpx * 0.55);
         ctx.font = font(lpx, 600);
         ctx.globalAlpha = kt * 0.85;
-        ctx.fillText(r.label, x, y + vpx * 0.55);
+        paintText(f, r.label, x, y + vpx * 0.55);
       } else {
         ctx.font = font(vpx, 800);
-        ctx.fillText(val, x, y);
+        paintText(f, val, x, y);
       }
       ctx.globalAlpha = 1;
     });
@@ -738,7 +738,7 @@ const bubbles: Template = {
         .map((p) => `${rows[p.i].label} — ${fmtUnit(rows[p.i].value, f)}`)
         .join("   ·   ");
       ctx.font = font(fitFont(ctx, txt, w - pad * 2, 20 * s, 500), 500);
-      ctx.fillText(txt, w / 2, h - pad * 0.45);
+      paintText(f, txt, w / 2, h - pad * 0.45);
       ctx.globalAlpha = 1;
     }
   },
@@ -791,6 +791,7 @@ const aurora: Template = {
     const base = String(f.p.base ?? "#03140c");
     ctx.fillStyle = base;
     ctx.fillRect(0, 0, w, h);
+    paintBackgroundImage(f);
     // Сияние мягкое, поэтому считаем его в небольшом холсте постоянной ширины,
     // размываем и растягиваем в два шага — без ступенек при любом размере кадра
     const bw = 640;
@@ -885,14 +886,14 @@ const aurora: Template = {
     if (sub) {
       ctx.font = font(fitFont(ctx, sub, w - pad * 2, 36 * s, 500), 500);
       ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.fillText(sub, pad, y);
+      paintText(f, sub, pad, y);
       y -= 36 * s * 1.5;
     }
     if (title) {
       const px = fitFont(ctx, title, w - pad * 2, 110 * s, 800);
       ctx.font = font(px, 800);
       ctx.fillStyle = "#ffffff";
-      ctx.fillText(title, pad, y);
+      paintText(f, title, pad, y);
     }
   },
 };
@@ -1013,10 +1014,10 @@ const roadmap: Template = {
       ctx.textBaseline = "top";
       ctx.font = font(fitFont(ctx, when, cardW, 34 * s, 800), 800);
       ctx.fillStyle = passed ? c1 : f.ink;
-      ctx.fillText(when, tx, by);
+      paintText(f, when, tx, by);
       ctx.font = font(24 * s, 500);
       ctx.fillStyle = f.muted;
-      lines.forEach((line, j) => ctx.fillText(line, tx, by + 44 * s + j * 30 * s));
+      lines.forEach((line, j) => paintText(f, line, tx, by + 44 * s + j * 30 * s));
       ctx.globalAlpha = 1;
     });
   },

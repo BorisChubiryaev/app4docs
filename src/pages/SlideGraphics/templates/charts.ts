@@ -2,6 +2,7 @@
 // кольцо, процент, полярная роза, воронка, большое число.
 
 import {
+  paintText,
   badge,
   blob,
   clamp,
@@ -61,7 +62,7 @@ function label(f: Frame, text: string, x: number, y: number, maxW: number, px: n
   ctx.fillStyle = f.muted;
   ctx.textAlign = align;
   ctx.textBaseline = "top";
-  ctx.fillText(text, x, y);
+  paintText(f, text, x, y);
 }
 
 function fillBar(f: Frame, x: number, y: number, w: number, h: number, color: string, horizontal = false) {
@@ -191,7 +192,7 @@ const bars: Template = {
         ctx.fillStyle = Number(f.p.highlight) > 0 && Number(f.p.highlight) - 1 !== i ? f.muted : f.ink;
         ctx.textAlign = "center";
         ctx.textBaseline = v >= 0 ? "bottom" : "top";
-        ctx.fillText(fmtUnit(v, f), x + bw / 2, v >= 0 ? y - 12 * s : y + 12 * s);
+        paintText(f, fmtUnit(v, f), x + bw / 2, v >= 0 ? y - 12 * s : y + 12 * s);
         ctx.globalAlpha = 1;
       }
       ctx.globalAlpha = clamp(prog(t, 0.1 + i * 0.05, 0.5));
@@ -261,7 +262,7 @@ const hbars: Template = {
       ctx.fillStyle = f.ink;
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
-      ctx.fillText(r.label, x0 - 20 * s, y + bh / 2);
+      paintText(f, r.label, x0 - 20 * s, y + bh / 2);
       ctx.globalAlpha = 1;
       // Подложка-дорожка
       roundRect(ctx, x0, y, x1 - x0, bh, Number(f.p.radius ?? 10) * s);
@@ -272,7 +273,7 @@ const hbars: Template = {
       ctx.font = font(30 * s, 700);
       ctx.fillStyle = f.ink;
       ctx.textAlign = "left";
-      ctx.fillText(fmtUnit(r.value * k, f), x0 + bw + 14 * s, y + bh / 2);
+      paintText(f, fmtUnit(r.value * k, f), x0 + bw + 14 * s, y + bh / 2);
       ctx.globalAlpha = 1;
     });
   },
@@ -428,7 +429,7 @@ const pairs: Template = {
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       ctx.fillStyle = f.ink;
-      ctx.fillText(name, lx, pad * 0.8 + 20 * s);
+      paintText(f, name, lx, pad * 0.8 + 20 * s);
       const sx = lx - tw - 32 * s;
       const sy = pad * 0.8 + 9 * s;
       if (isFront) paintFront(sx, sy, 22 * s, 22 * s, 5 * s);
@@ -450,7 +451,7 @@ const pairs: Template = {
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
         const top2 = Math.min(y1 - h1, y1 - h2);
-        ctx.fillText(fmtUnit((row.value2 ?? 0) * k2, f), cx, top2 - 12 * s);
+        paintText(f, fmtUnit((row.value2 ?? 0) * k2, f), cx, top2 - 12 * s);
         ctx.globalAlpha = 1;
       }
       label(f, row.label, cx, y1 + 16 * s, slot * 0.98, 26 * s);
@@ -572,7 +573,7 @@ const line: Template = {
         ctx.fillStyle = f.ink;
         ctx.textAlign = "center";
         ctx.textBaseline = "bottom";
-        ctx.fillText(fmtUnit(vals[i], f), x, y - 18 * s);
+        paintText(f, fmtUnit(vals[i], f), x, y - 18 * s);
       }
       label(f, rows[i].label, x, y1 + 22 * s, ((x1 - x0) / (n - 1)) * 0.95, 24 * s);
       ctx.globalAlpha = 1;
@@ -656,14 +657,14 @@ const kpi: Template = {
     if (title) {
       const sz = fitFont(ctx, title, cw - 128 * s, 40 * s, 600);
       ctx.fillStyle = muted;
-      ctx.fillText(title, px, y + sz * 0.8);
+      paintText(f, title, px, y + sz * 0.8);
       y += sz * 1.4;
     }
     const v = Number(f.p.value ?? 0) * easeOut(prog(t, 0.2, 1.6));
     const big = fitFont(ctx, fmtUnit(Number(f.p.value ?? 0), f), cw - 128 * s, Math.min(200 * s, ch * 0.3), 800);
     ctx.font = font(big, 800);
     ctx.fillStyle = ink;
-    ctx.fillText(fmtUnit(v, f), px, y + big * 0.9);
+    paintText(f, fmtUnit(v, f), px, y + big * 0.9);
     y += big * 1.12;
     const delta = String(f.p.delta ?? "").trim();
     if (delta) {
@@ -678,7 +679,7 @@ const kpi: Template = {
       ctx.fill();
       ctx.fillStyle = dc;
       ctx.textBaseline = "middle";
-      ctx.fillText(delta, px + 18 * s, y + sz * 0.88);
+      paintText(f, delta, px + 18 * s, y + sz * 0.88);
       ctx.globalAlpha = kIn;
       y += sz * 1.7;
     }
@@ -824,10 +825,10 @@ const donut: Template = {
         ctx.textBaseline = "alphabetic";
         ctx.font = font(34 * s, 800);
         ctx.fillStyle = f.ink;
-        ctx.fillText(main, lx + (right ? 12 : -12) * s, ey + 2 * s);
+        paintText(f, main, lx + (right ? 12 : -12) * s, ey + 2 * s);
         ctx.font = font(24 * s, 500);
         ctx.fillStyle = f.muted;
-        ctx.fillText(r.label, lx + (right ? 12 : -12) * s, ey + 32 * s);
+        paintText(f, r.label, lx + (right ? 12 : -12) * s, ey + 32 * s);
         ctx.globalAlpha = 1;
       }
       a0 = a1;
@@ -839,11 +840,11 @@ const donut: Template = {
     ctx.textBaseline = "middle";
     const big = fitFont(ctx, fmtUnit(total, f), rIn * 1.6, rIn * 0.45, 800);
     ctx.fillStyle = f.ink;
-    ctx.fillText(fmtUnit(total * kc, f), cx, cy - (f.p.center ? big * 0.22 : 0));
+    paintText(f, fmtUnit(total * kc, f), cx, cy - (f.p.center ? big * 0.22 : 0));
     if (f.p.center) {
       fitFont(ctx, String(f.p.center), rIn * 1.5, 26 * s, 500);
       ctx.fillStyle = f.muted;
-      ctx.fillText(String(f.p.center), cx, cy + big * 0.55);
+      paintText(f, String(f.p.center), cx, cy + big * 0.55);
     }
     ctx.globalAlpha = 1;
   },
@@ -918,7 +919,7 @@ const percent: Template = {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const cap = String(f.p.caption ?? "");
-    ctx.fillText(text, cx, cy - (cap ? big * 0.2 : 0));
+    paintText(f, text, cx, cy - (cap ? big * 0.2 : 0));
     if (cap) {
       ctx.globalAlpha = clamp(prog(t, 0.6, 0.6));
       const lines = (() => {
@@ -936,7 +937,7 @@ const percent: Template = {
         return out.slice(0, 3);
       })();
       ctx.fillStyle = f.muted;
-      lines.forEach((l, i) => ctx.fillText(l, cx, cy + big * 0.5 + i * 32 * s));
+      lines.forEach((l, i) => paintText(f, l, cx, cy + big * 0.5 + i * 32 * s));
       ctx.globalAlpha = 1;
     }
   },
@@ -1097,12 +1098,12 @@ const rose: Template = {
       const lr = R + 34 * s;
       ctx.font = font(22 * s, 500);
       ctx.fillStyle = f.muted;
-      ctx.fillText(r.label, cx + Math.cos(mid) * lr, cy + Math.sin(mid) * lr);
+      paintText(f, r.label, cx + Math.cos(mid) * lr, cy + Math.sin(mid) * lr);
       if (f.p.values !== false) {
         ctx.font = font(22 * s, 700);
         ctx.fillStyle = isDark(color) ? "#fff" : "#141414";
         const vr = Math.max(r0 + 24 * s, rr - 26 * s);
-        if (rr - r0 > 50 * s) ctx.fillText(fmtUnit(r.value, f), cx + Math.cos(mid) * vr, cy + Math.sin(mid) * vr);
+        if (rr - r0 > 50 * s) paintText(f, fmtUnit(r.value, f), cx + Math.cos(mid) * vr, cy + Math.sin(mid) * vr);
       }
       ctx.globalAlpha = 1;
     });
@@ -1172,11 +1173,11 @@ function drawRoseHeat(f: Frame, cx: number, cy: number, R: number, max: number, 
     const two = f.p.values !== false;
     ctx.font = font(20 * s, 500);
     ctx.fillStyle = f.muted;
-    ctx.fillText(r.label, x, two ? y - 12 * s : y);
+    paintText(f, r.label, x, two ? y - 12 * s : y);
     if (two) {
       ctx.font = font(22 * s, 700);
       ctx.fillStyle = f.ink;
-      ctx.fillText(fmtUnit(r.value, f), x, y + 13 * s);
+      paintText(f, fmtUnit(r.value, f), x, y + 13 * s);
     }
   });
   ctx.globalAlpha = 1;
@@ -1187,7 +1188,7 @@ function drawRoseHeat(f: Frame, cx: number, cy: number, R: number, max: number, 
     const size = fitFont(ctx, label, R * 0.7, 54 * s, 800);
     ctx.font = font(size, 800);
     ctx.fillStyle = "#16171d";
-    ctx.fillText(label, cx, cy);
+    paintText(f, label, cx, cy);
     ctx.globalAlpha = 1;
   }
 }
@@ -1278,20 +1279,20 @@ const funnel: Template = {
       fitFont(ctx, r.label, seg * 0.9, 28 * s, 600);
       ctx.fillStyle = f.muted;
       ctx.textBaseline = "bottom";
-      ctx.fillText(r.label, cx, cy - H / 2 - 30 * s);
+      paintText(f, r.label, cx, cy - H / 2 - 30 * s);
       const vt = fmtUnit(r.value, f);
       fitFont(ctx, vt, seg * 0.9, 40 * s, 800);
       ctx.textBaseline = "middle";
       const inside = th[i] > 70 * s;
       ctx.fillStyle = inside ? "#ffffff" : f.ink;
-      ctx.fillText(vt, cx, inside ? cy : cy - th[i] / 2 - 32 * s);
+      paintText(f, vt, cx, inside ? cy : cy - th[i] / 2 - 32 * s);
       if (f.p.conv !== false && i > 0) {
         const conv = `${fmt((r.value / (rows[i - 1].value || 1)) * 100, 0)}\u202f%`;
         const bx = x0 + seg * i;
         ctx.font = font(24 * s, 700);
         ctx.fillStyle = f.muted;
         ctx.textBaseline = "top";
-        ctx.fillText(`→ ${conv}`, bx, cy + H / 2 + 30 * s);
+        paintText(f, `→ ${conv}`, bx, cy + H / 2 + 30 * s);
       }
       ctx.globalAlpha = 1;
     });
@@ -1341,12 +1342,12 @@ const bignum: Template = {
       ctx.fillStyle = g;
     } else if (fill === "silhouette") ctx.fillStyle = f.dark ? "#06070a" : "#14161c";
     else ctx.fillStyle = f.ink;
-    ctx.fillText(text, w / 2, cy);
+    paintText(f, text, w / 2, cy);
     if (cap) {
       ctx.globalAlpha = clamp(prog(t, 0.8, 0.6));
       fitFont(ctx, cap, w * 0.8, 40 * s, 500);
       ctx.fillStyle = f.muted;
-      ctx.fillText(cap, w / 2, cy + big * 0.62 + 20 * s);
+      paintText(f, cap, w / 2, cy + big * 0.62 + 20 * s);
       ctx.globalAlpha = 1;
     }
   },

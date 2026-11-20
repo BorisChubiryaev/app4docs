@@ -121,14 +121,14 @@ export function header(f: Frame, x: number, y: number, maxW: number) {
     const px = fitFont(ctx, title, maxW, 54 * s, 700);
     yy += px;
     ctx.fillStyle = f.ink;
-    ctx.fillText(title, x, yy);
+    paintText(f, title, x, yy);
     yy += px * 0.28;
   }
   if (sub) {
     const px = fitFont(ctx, sub, maxW, 28 * s, 500);
     yy += px * 1.15;
     ctx.fillStyle = f.muted;
-    ctx.fillText(sub, x, yy);
+    paintText(f, sub, x, yy);
     yy += px * 0.3;
   }
   ctx.restore();
@@ -251,7 +251,7 @@ export function badge(f: Frame, text: string, x: number, y: number, color: strin
   ctx.fillStyle = isDark(color) ? "#fff" : "#111";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text, bx + bw / 2, y - bh / 2 + px * 0.04);
+  paintText(f, text, bx + bw / 2, y - bh / 2 + px * 0.04);
 }
 
 // ── Карточки: фото и подписи вместе ──
@@ -279,3 +279,25 @@ export function captionOf(f: Frame, i: number, onPhoto: boolean) {
   return onPhoto && i < list.length ? text : undefined;
 }
 
+
+/** Сохраняет цвет фигур и акцентов, меняя только надписи. */
+export function paintText(f: Frame, text: string, x: number, y: number, width?: number) {
+  const { ctx } = f;
+  const original = ctx.fillStyle;
+  if (f.textOverride) ctx.fillStyle = f.textOverride;
+  ctx.fillText(text, x, y, width);
+  if (f.textOverride) ctx.fillStyle = original;
+}
+
+export function paintBackgroundImage(f: Frame) {
+  if (f.backgroundImage) drawCover(f.ctx, f.backgroundImage, 0, 0, f.w, f.h);
+  paintBackgroundLayers(f);
+}
+
+export function paintBackgroundLayers(f: Frame) {
+  for (const layer of f.backgroundLayers ?? []) {
+    const scale = Math.min(f.w / layer.image.naturalWidth, f.h / layer.image.naturalHeight) * layer.size / 100;
+    const w = layer.image.naturalWidth * scale, h = layer.image.naturalHeight * scale;
+    f.ctx.drawImage(layer.image, (f.w - w) * layer.x / 100, (f.h - h) * layer.y / 100, w, h);
+  }
+}

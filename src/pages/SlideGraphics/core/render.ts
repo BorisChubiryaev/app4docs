@@ -1,6 +1,6 @@
 // Отрисовка кадра сцены в заданном размере и в заданный момент времени.
 
-import { isDark } from "./draw";
+import { isDark, paintBackgroundImage } from "./draw";
 import type { Background, Frame, Scene, Template } from "./types";
 
 export const CONVERTIX = ["#0087cd", "#8253aa", "#ff1c77", "#515dad"];
@@ -14,7 +14,7 @@ const SBER_LIGHT = "#21a038,#1971c2,#e8a317,#7048e8";
 const SBER_DARK = ["#21a038", "#3d8be0", "#b77c00", "#8a6cf0"];
 export const SAFE_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
 
-export const BG_COLORS: Record<Exclude<Background["kind"], "custom" | "transparent">, string> = {
+export const BG_COLORS: Record<Exclude<Background["kind"], "custom" | "transparent" | "image">, string> = {
   white: "#ffffff",
   light: "#f4f5f8",
   dark: "#0e1016",
@@ -22,8 +22,9 @@ export const BG_COLORS: Record<Exclude<Background["kind"], "custom" | "transpare
 
 /** Цвет подложки или null, если фон прозрачный */
 export function baseColor(scene: Scene, tpl: Template): string | null {
-  if (tpl.ownBackground) return String(scene.params.base ?? "#000000");
   const b = scene.background;
+  if (b.kind === "image") return b.imageTone ?? b.color;
+  if (tpl.ownBackground) return String(scene.params.base ?? "#000000");
   if (b.kind === "transparent") return null;
   if (b.kind === "custom") return b.color;
   return BG_COLORS[b.kind];
@@ -65,12 +66,16 @@ export function renderFrame(
     images,
     pal: scene.paletteAuto ? (dark ? SAFE_DARK : SAFE_LIGHT) : !scene.palette.length ? ["#4f6ef7"] : dark && scene.palette.join() === SBER_LIGHT ? SBER_DARK : scene.palette,
     ink: dark ? "#ffffff" : "#15171c",
+    textOverride: scene.ink === "custom" ? scene.textColor ?? "#15171c" : undefined,
+    backgroundLayers: scene.background.layers,
+    backgroundImage: scene.background.kind === "image" ? scene.background.image : undefined,
     muted: dark ? "rgba(255,255,255,0.66)" : "rgba(21,23,28,0.58)",
     dark,
     base,
     follow,
   };
   try {
+    if (!tpl.ownBackground) paintBackgroundImage(f);
     tpl.draw(f);
   } finally {
     ctx.restore();

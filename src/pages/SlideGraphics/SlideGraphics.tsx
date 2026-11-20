@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageShell from "../../components/PageShell";
 import InstructionsModalShell from "../../components/InstructionsModal";
+import PresentationAnimator from "./components/PresentationAnimator";
+import BackgroundPhoto from "./components/BackgroundPhoto";
 import RowsEditor from "./components/RowsEditor";
 import { FONT, isDark } from "./core/draw";
 import { copyImage, download, even, renderImage, renderVideo } from "./core/export";
@@ -194,7 +196,7 @@ const Section: React.FC<{ title: string; children: React.ReactNode; open?: boole
 // ── Страница ──
 
 const SlideGraphics: React.FC = () => {
-  const [view, setView] = useState<"catalog" | "editor">("catalog");
+  const [view, setView] = useState<"catalog" | "editor" | "presentation">("catalog");
   const [group, setGroup] = useState<Group | "all">("all");
   const [query, setQuery] = useState("");
   const catalogCard = useRef<string | null>(null);
@@ -531,6 +533,10 @@ const SlideGraphics: React.FC = () => {
     <PageShell title="Графика для слайдов" width={1440} onShowInstructions={() => setShowHelp(true)}>
       {view === "catalog" ? (
         <div className="sg-studio sg-catalog">
+          <section className="ds-panel sg-import-entry">
+            <div><h2>Анимация своей презентации</h2><p>Добавьте эффекты к тексту и диаграммам из файла PowerPoint.</p></div>
+            <button className="btn-primary" onClick={() => setView("presentation")}>Открыть редактор PPTX</button>
+          </section>
           <section className="ds-panel sg-filters" aria-label="Поиск и фильтры">
             <div className="sg-search-row">
               <input className="ds-input sg-search" type="search" aria-label="Поиск инструментов" placeholder="Найти инструмент" value={query} onChange={e => setQuery(e.target.value)} />
@@ -574,6 +580,8 @@ const SlideGraphics: React.FC = () => {
             </div>
           )}
         </div>
+      ) : view === "presentation" ? (
+        <PresentationAnimator onBack={() => setView("catalog")} />
       ) : (
         <div className="sg-studio sg-editor">
           <div className="sg-editor-heading">
@@ -691,8 +699,8 @@ const SlideGraphics: React.FC = () => {
               )}
             </Section>
 
-            {!tpl.ownBackground && (
-              <Section title="Фон" open={false}>
+            <Section title="Фон" open={false}>
+              {!tpl.ownBackground && <>
                 <div className="sg-chips">
                   {(
                     [
@@ -713,21 +721,26 @@ const SlideGraphics: React.FC = () => {
                   <label className="sg-field sg-field--row">
                     <span className="sg-field__label">Цвет фона</span>
                     <span className="sg-colorpick">
-                      <input type="color" value={scene.background.color} onChange={(e) => update({ background: { kind: "custom", color: e.target.value } })} />
+                      <input type="color" value={scene.background.color} onChange={(e) => update({ background: { ...scene.background, kind: "custom", color: e.target.value } })} />
                       <code>{scene.background.color}</code>
                     </span>
                   </label>
                 )}
-                <label className="sg-field sg-field--row">
-                  <span className="sg-field__label">Цвет текста</span>
-                  <select value={scene.ink} onChange={(e) => update({ ink: e.target.value as Scene["ink"] })}>
-                    <option value="auto">По фону</option>
-                    <option value="dark">Тёмный — для светлых слайдов</option>
-                    <option value="light">Светлый — для тёмных слайдов</option>
-                  </select>
-                </label>
-              </Section>
-            )}
+              </>}
+              <BackgroundPhoto key={tplId} background={scene.background} onChange={background => update({ background })} fallback={tpl.defaults.background ?? { kind: "transparent", color: "#ffffff" }} />
+              <label className="sg-field sg-field--row">
+                <span className="sg-field__label">Цвет текста</span>
+                <select value={scene.ink} onChange={(e) => update({ ink: e.target.value as Scene["ink"] })}>
+                  <option value="auto">По фону</option>
+                  <option value="custom">Свой цвет</option>
+                  <option value="dark">Тёмный — для светлых слайдов</option>
+                  <option value="light">Светлый — для тёмных слайдов</option>
+                </select>
+              </label>
+              {scene.ink === "custom" && <label className="sg-field sg-field--row">Свой цвет текста
+                <input type="color" value={scene.textColor ?? "#15171c"} onChange={e => update({ textColor: e.target.value })} />
+              </label>}
+            </Section>
             <button className="sg-reset" onClick={() => update(newScene(tpl))}>
               Вернуть настройки шаблона
             </button>
