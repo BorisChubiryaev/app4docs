@@ -1,15 +1,20 @@
 import type { Group, Scene, Template } from "../core/types";
+import { CONVERTIX } from "../core/render";
 import { CHARTS } from "./charts";
 import { MOTION } from "./motion";
 import { SBER, SBER_GREENS, SBER_TEMPLATES } from "./sber";
 import { SCENES } from "./scenes";
+import { NEW_SBER_TOOLS } from "./sberTools";
+import { MODULES } from "./modules";
 
-export const TEMPLATES: Template[] = [...CHARTS, ...SBER_TEMPLATES, ...MOTION, ...SCENES];
+export const TEMPLATES: Template[] = [...NEW_SBER_TOOLS, ...MODULES, ...CHARTS, ...SBER_TEMPLATES, ...MOTION, ...SCENES];
+
+export const featuredIds = new Set(NEW_SBER_TOOLS.map(t => t.id));
 
 export const GROUPS: [Group | "all", string][] = [
   ["all", "Все"],
+  ["modules", "Модули для презентаций"],
   ["charts", "Графики"],
-  ["sber", "Стиль СБ"],
   ["text", "Текст"],
   ["backgrounds", "Фоны"],
   ["cards", "Карточки и фото"],
@@ -19,7 +24,7 @@ export const GROUPS: [Group | "all", string][] = [
 // в «Фирменной» фиолетовый и индиго почти не различаются — она для одного
 // ряда и градиентов.
 export const PALETTES: [string, string[]][] = [
-  ["Фирменная", ["#0087cd", "#8253aa", "#ff1c77", "#515dad"]],
+  ["Фирменная", CONVERTIX],
   ["Неон", ["#5b5bf7", "#ff4fa3", "#2bd9a6", "#ffb547"]],
   // Стиль СБ: для нескольких категорий (проверена на светлом и тёмном фоне)
   // и зелёные — для одного ряда и градиентов

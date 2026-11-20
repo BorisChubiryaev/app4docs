@@ -7,7 +7,7 @@ import { copyImage, download, even, renderImage, renderVideo } from "./core/expo
 import { SAFE_DARK, SAFE_LIGHT, baseColor, renderFrame, stillTime } from "./core/render";
 import type { Control, Frame, Group, Row, Scene, Template, Val } from "./core/types";
 import { BG_PRESETS } from "./templates/scenes";
-import { GROUPS, PALETTES, TEMPLATES, byId, newScene } from "./templates";
+import { featuredIds, GROUPS, PALETTES, TEMPLATES, byId, newScene } from "./templates";
 import "./SlideGraphics.css";
 
 // Графика для слайдов: анимированные графики, фразы, фоны и карточки.
@@ -49,6 +49,7 @@ const SIZES: [string, number][] = [
 ];
 /** Поля, которые относятся к содержанию, — в разделе «Данные» */
 const DATA_KEYS = new Set(["title", "subtitle", "value", "caption", "delta", "center", "s1", "s2", "prefix", "unit", "decimals", "text"]);
+const isDataControl = (c: Control) => c.data || DATA_KEYS.has(c.key);
 const FORMATS = [
   ["png", "PNG", "прозрачный фон"],
   ["jpeg", "JPEG", "с фоном"],
@@ -81,15 +82,16 @@ const Thumb: React.FC<{ tpl: Template; scene: Scene; images: Images; aspect: str
     [w, h, scene, tpl, images, transparent],
   );
   useEffect(() => {
-    if (!hover) {
+    if (!hover || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       drawAt(stillTime(tpl, tpl.duration, tpl.duration * 0.3));
       return;
     }
     let raf = 0;
     const start = performance.now();
     const tick = () => {
-      drawAt((performance.now() - start) / 1000);
-      raf = requestAnimationFrame(tick);
+      const t = (performance.now() - start) / 1000;
+      drawAt(t);
+      if (tpl.loop || t < tpl.duration) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -101,11 +103,19 @@ const Thumb: React.FC<{ tpl: Template; scene: Scene; images: Images; aspect: str
 
 const Field: React.FC<{ c: Control; value: Val | undefined; onChange: (v: Val) => void }> = ({ c, value, onChange }) => {
   switch (c.type) {
+    case "textarea":
+      return (
+        <label className="sg-field">
+          <span className="sg-field__label">{c.label}</span>
+          <textarea aria-label={c.label} rows={3} value={String(value ?? "")} onChange={e => onChange(e.target.value)} />
+        </label>
+      );
+    case "time":
     case "text":
       return (
         <label className="sg-field">
           <span className="sg-field__label">{c.label}</span>
-          <input value={String(value ?? "")} placeholder={c.placeholder} onChange={(e) => onChange(e.target.value)} />
+          <input type={c.type} value={String(value ?? "")} placeholder={c.placeholder} onChange={(e) => onChange(e.target.value)} />
         </label>
       );
     case "number":
@@ -186,6 +196,9 @@ const Section: React.FC<{ title: string; children: React.ReactNode; open?: boole
 const SlideGraphics: React.FC = () => {
   const [view, setView] = useState<"catalog" | "editor">("catalog");
   const [group, setGroup] = useState<Group | "all">("all");
+  const [query, setQuery] = useState("");
+  const catalogCard = useRef<string | null>(null);
+  const editorTitle = useRef<HTMLHeadingElement>(null);
   const [scenes, setScenes] = useState<Record<string, Scene>>(() => Object.fromEntries(TEMPLATES.map((t) => [t.id, newScene(t)])));
   const [tplId, setTplId] = useState(TEMPLATES[0].id);
   const [images, setImages] = useState<Images>([]);
@@ -250,7 +263,18 @@ const SlideGraphics: React.FC = () => {
   const update = (patch: Partial<Scene>) => setScenes((all) => ({ ...all, [tplId]: { ...all[tplId], ...patch } }));
   const setParam = (k: string, v: Val) => update({ params: { ...scene.params, [k]: v } });
 
+  useEffect(() => {
+    if (view === "editor") {
+      window.scrollTo(0, 0);
+      editorTitle.current?.focus({ preventScroll: true });
+    } else if (catalogCard.current) {
+      document.getElementById(catalogCard.current)?.focus();
+    }
+  }, [view]);
+
   const open = (id: string) => {
+    catalogCard.current = `sg-card-${id}`;
+    setHovered(null);
     setTplId(id);
     setView("editor");
     timeRef.current = 0;
@@ -335,10 +359,10 @@ const SlideGraphics: React.FC = () => {
     const el = stageRef.current;
     if (!el) return;
     const fit = () => {
-      const bw = el.clientWidth - 64;
-      const bh = el.clientHeight - 150;
+      const bw = Math.max(1, el.clientWidth - 24);
+      const bh = Math.max(1, el.clientHeight - 24);
       const k = Math.min(bw / out.w, bh / out.h);
-      setStageSize({ w: Math.max(80, Math.floor(out.w * k)), h: Math.max(45, Math.floor(out.h * k)) });
+      setStageSize({ w: Math.max(1, Math.floor(out.w * k)), h: Math.max(1, Math.floor(out.h * k)) });
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -467,76 +491,99 @@ const SlideGraphics: React.FC = () => {
     }
   };
 
-  const shown = useMemo(() => TEMPLATES.filter((t) => group === "all" || t.group === group), [group]);
-  const dataControls = tpl.controls.filter((c) => DATA_KEYS.has(c.key));
-  const lookControls = tpl.controls.filter((c) => !DATA_KEYS.has(c.key) && (!c.when || c.when(scene.params)));
+  const search = query.trim().toLocaleLowerCase("ru");
+  const shown = TEMPLATES.filter(t => (group === "all" || t.group === group)
+    && `${t.name} ${t.about}`.toLocaleLowerCase("ru").includes(search));
+  const featured = shown.filter(t => featuredIds.has(t.id));
+  const library = shown.filter(t => !featuredIds.has(t.id));
+  const dataControls = tpl.controls.filter(isDataControl);
+  const lookControls = tpl.controls.filter((c) => !isDataControl(c) && (!c.when || c.when(scene.params)));
   // Выбор палитры: шаблон может переключить свои цвета на неё
   const pickPalette = (pal: string[], auto: boolean) =>
     update({ palette: [...pal], paletteAuto: auto, params: { ...scene.params, ...(tpl.onPalette?.(scene.params, pal) ?? {}) } });
   const transparent = !tpl.ownBackground && scene.background.kind === "transparent";
   const cardTpl = ["carousel", "deck", "flow"].includes(tpl.id);
   const usesPhrases = tpl.input === "phrases" || cardTpl;
-  const usesRows = tpl.input === "rows" || tpl.input === "pairs" || tpl.input === "people";
+  const usesRows = tpl.input === "flows" || tpl.input === "rows" || tpl.input === "pairs" || tpl.input === "people";
   const usesPhotos = tpl.input === "photos" || tpl.input === "people";
   const stageBackdrop = backdrop ?? autoBackdrop(scene);
   const previewDark = transparent ? stageBackdrop === "dark" : isDark(baseColor(scene, tpl) ?? "#ffffff");
   const fmtLabel = FORMATS.find((x) => x[0] === format)![1];
   const autoPal = previewDark ? SAFE_DARK : SAFE_LIGHT;
 
+  const renderCard = (t: Template) => (
+    <button key={t.id} id={`sg-card-${t.id}`} className="sg-card ds-card" onClick={() => open(t.id)} onMouseEnter={() => setHovered(t.id)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(t.id)} onBlur={() => setHovered(null)}>
+      <div className="sg-card__pic" aria-hidden="true">
+        <Thumb tpl={t} scene={scenes[t.id]} images={images} aspect={aspect} hover={hovered === t.id} />
+        <div className="sg-card__tags">
+          {t.loop && <span>Петля</span>}
+          {t.interactive && <span>За курсором</span>}
+        </div>
+      </div>
+      <div className="sg-card__body">
+        <strong>{t.name}</strong>
+        <span>{t.about}</span>
+      </div>
+    </button>
+  );
+
   return (
-    <PageShell title="Графика для слайдов" onShowInstructions={() => setShowHelp(true)} width={1480} fill={view === "editor"}>
+    <PageShell title="Графика для слайдов" width={1440} onShowInstructions={() => setShowHelp(true)}>
       {view === "catalog" ? (
-        <div className="sg-catalog">
-          <header className="sg-hero">
-            <h2>
-              Графика, которая <span>оживает</span> на слайде
-            </h2>
-            <p>Выберите шаблон, впишите свои числа или фразы и заберите картинку без фона в 4K или видео MP4. Бесплатно и без ограничений — всё считается в браузере.</p>
-          </header>
-          <div className="sg-filters">
-            <div className="sg-tray" role="tablist">
+        <div className="sg-studio sg-catalog">
+          <section className="ds-panel sg-filters" aria-label="Поиск и фильтры">
+            <div className="sg-search-row">
+              <input className="ds-input sg-search" type="search" aria-label="Поиск инструментов" placeholder="Найти инструмент" value={query} onChange={e => setQuery(e.target.value)} />
+              <label className="sg-category-picker">
+                <span id="sg-category-label">Категория</span>
+                <select className="ds-select" aria-labelledby="sg-category-label" value={group} onChange={e => setGroup(e.target.value as Group | "all")}>
+                  {GROUPS.map(([g, name]) => <option key={g} value={g}>{name}</option>)}
+                </select>
+              </label>
+              <label className="sg-aspect">
+                <span id="sg-aspect-label">Формат кадра</span>
+                <select className="ds-select" aria-labelledby="sg-aspect-label" value={aspect} onChange={e => setAspect(e.target.value)}>
+                  {ASPECTS.map(([a]) => <option key={a}>{a}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="sg-categories ds-tabs" role="group" aria-label="Категории шаблонов">
               {GROUPS.map(([g, l]) => (
-                <button key={g} role="tab" aria-selected={group === g} className={group === g ? "is-on" : ""} onClick={() => setGroup(g)}>
+                <button key={g} aria-pressed={group === g} className={`ds-tab${group === g ? " ds-tab--active" : ""}`} onClick={() => setGroup(g)}>
                   {l}
-                  <small>{g === "all" ? TEMPLATES.length : TEMPLATES.filter((t) => t.group === g).length}</small>
                 </button>
               ))}
             </div>
-            <div className="sg-tray sg-tray--mono" role="radiogroup" aria-label="Формат кадра">
-              {ASPECTS.slice(0, 5).map(([a]) => (
-                <button key={a} role="radio" aria-checked={aspect === a} className={aspect === a ? "is-on" : ""} onClick={() => setAspect(a)}>
-                  {a}
-                </button>
-              ))}
+          </section>
+          {featured.length > 0 && (
+            <section aria-labelledby="sg-new-title">
+              <h2 className="ds-section-title sg-section-head" id="sg-new-title">Новые инструменты</h2>
+              <div className="sg-grid sg-grid--new">{featured.map(renderCard)}</div>
+            </section>
+          )}
+          {library.length > 0 && (
+            <section aria-labelledby="sg-library-title">
+              <h2 className="ds-section-title sg-section-head" id="sg-library-title">Библиотека шаблонов</h2>
+              <div className="sg-grid">{library.map(renderCard)}</div>
+            </section>
+          )}
+          {shown.length === 0 && (
+            <div className="ds-panel sg-empty">
+              <p role="status">Инструменты по вашему запросу не найдены.</p>
+              <button className="btn-secondary" onClick={() => { setQuery(""); setGroup("all"); }}>Сбросить фильтры</button>
             </div>
-          </div>
-          <div className="sg-grid">
-            {shown.map((t) => (
-              <button key={t.id} className="sg-card" onClick={() => open(t.id)} onMouseEnter={() => setHovered(t.id)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(t.id)} onBlur={() => setHovered(null)}>
-                <div className="sg-card__pic">
-                  <Thumb tpl={t} scene={scenes[t.id]} images={images} aspect={aspect} hover={hovered === t.id} />
-                  <div className="sg-card__tags">
-                    {t.loop && <span>петля</span>}
-                    {t.interactive && <span>за курсором</span>}
-                  </div>
-                </div>
-                <div className="sg-card__body">
-                  <strong>{t.name}</strong>
-                  <span>{t.about}</span>
-                </div>
-              </button>
-            ))}
-          </div>
+          )}
         </div>
       ) : (
-        <div className="sg-editor">
-          <aside className="sg-panel">
-            <button className="sg-back" onClick={() => setView("catalog")}>
-              ← Каталог
-            </button>
-            <h2 className="sg-panel__title">{tpl.name}</h2>
-            <p className="sg-panel__about">{tpl.about}</p>
-
+        <div className="sg-studio sg-editor">
+          <div className="sg-editor-heading">
+            <button className="ds-nav-btn" onClick={() => setView("catalog")}>← Каталог</button>
+            <div>
+              <h2 tabIndex={-1} ref={editorTitle}>{tpl.name}</h2>
+              <p>{tpl.about}</p>
+            </div>
+          </div>
+          <aside className="sg-panel ds-panel" aria-label="Настройки шаблона">
             {(dataControls.length > 0 || usesRows || usesPhotos || usesPhrases) && (
               <Section title="Данные">
                 {dataControls.map((c) => (
@@ -573,7 +620,7 @@ const SlideGraphics: React.FC = () => {
                 )}
                 {usesPhrases && (
                   <label className="sg-field">
-                    <span className="sg-field__label">{cardTpl ? "Подписи карточек — по одной в строке, вторая часть после «|»" : "Фразы — по одной в строке, вторая часть после «|»"}</span>
+                    <span className="sg-field__label">{tpl.phrasesLabel ?? (cardTpl ? "Подписи карточек — по одной в строке, вторая часть после «|»" : "Фразы — по одной в строке, вторая часть после «|»")}</span>
                     <textarea rows={6} value={scene.phrases.join("\n")} onChange={(e) => update({ phrases: e.target.value.split("\n") })} />
                   </label>
                 )}
@@ -602,7 +649,7 @@ const SlideGraphics: React.FC = () => {
               </Section>
             )}
 
-            <Section title="Цвета">
+            <Section title="Цвета" open={false}>
               <div className="sg-pals">
                 <button className={`sg-pal ${scene.paletteAuto ? "is-on" : ""}`} onClick={() => pickPalette(autoPal, true)} title="Проверенная палитра: цвета различимы, в том числе при нарушениях цветовосприятия">
                   <span className="sg-pal__dots">
@@ -645,7 +692,7 @@ const SlideGraphics: React.FC = () => {
             </Section>
 
             {!tpl.ownBackground && (
-              <Section title="Фон">
+              <Section title="Фон" open={false}>
                 <div className="sg-chips">
                   {(
                     [
@@ -686,7 +733,7 @@ const SlideGraphics: React.FC = () => {
             </button>
           </aside>
 
-          <section className={`sg-stage ${previewDark ? "is-dark" : ""}`} ref={stageRef}>
+          <section className={`sg-stage ${previewDark ? "is-dark" : ""}`} aria-label="Холст и экспорт">
             <div className="sg-stage__top">
               <div className="sg-tray sg-tray--mono" role="radiogroup" aria-label="Формат кадра">
                 {ASPECTS.map(([a]) => (
@@ -707,8 +754,8 @@ const SlideGraphics: React.FC = () => {
                   </button>
                 )}
                 <div className="sg-export" ref={exportRef}>
-                  <button className="sg-primary" onClick={() => setShowExport((v) => !v)} aria-expanded={showExport}>
-                    ⬇ {fmtLabel} <span aria-hidden="true">▾</span>
+                  <button className="btn-primary" onClick={() => setShowExport((v) => !v)} aria-expanded={showExport}>
+                    Экспорт · {fmtLabel} <span aria-hidden="true">▾</span>
                   </button>
                   {showExport && (
                     <div className="sg-pop" role="dialog" aria-label="Выгрузка">
@@ -768,7 +815,7 @@ const SlideGraphics: React.FC = () => {
                       )}
                       {format === "png" && !transparent && !tpl.ownBackground && <p className="sg-hint">Для прозрачного PNG выберите фон «Прозрачный».</p>}
                       <div className="sg-pop__actions">
-                        <button className="sg-primary" disabled={busy !== null} onClick={() => save(false)}>
+                        <button className="btn-primary" disabled={busy !== null} onClick={() => save(false)}>
                           {format === "mp4" ? "Записать видео" : "Скачать"}
                         </button>
                         {format !== "mp4" && (
@@ -795,10 +842,11 @@ const SlideGraphics: React.FC = () => {
               </div>
             </div>
 
-            <div className="sg-canvas-wrap" style={{ background: transparent ? BACKDROP[stageBackdrop] : undefined }}>
+            <div className="sg-canvas-wrap" ref={stageRef}>
               <canvas
+                aria-label={`Предпросмотр: ${tpl.name}`}
                 ref={canvasRef}
-                style={{ width: stageSize.w, height: stageSize.h, cursor: tpl.interactive ? (pinned ? "pointer" : "crosshair") : undefined }}
+                style={{ width: stageSize.w, height: stageSize.h, background: transparent ? BACKDROP[stageBackdrop] : undefined, cursor: tpl.interactive ? (pinned ? "pointer" : "crosshair") : undefined }}
                 onPointerMove={onMove}
                 onPointerDown={onClick}
               />
@@ -852,8 +900,8 @@ const SlideGraphics: React.FC = () => {
                 </div>
               )}
               <div className="sg-timeline">
-                <button className="sg-play" onClick={() => (playing ? setPlaying(false) : time >= dur && !tpl.loop ? restart() : setPlaying(true))} aria-label={playing ? "Пауза" : "Воспроизвести"}>
-                  {playing ? "❚❚" : "▶"}
+                <button className={`sg-play${playing ? " is-playing" : ""}`} onClick={() => (playing ? setPlaying(false) : time >= dur && !tpl.loop ? restart() : setPlaying(true))} aria-label={playing ? "Пауза" : "Воспроизвести"}>
+                  <span aria-hidden="true" />
                 </button>
                 <button className="sg-round" onClick={restart} aria-label="С начала" title="С начала">
                   ↺
@@ -877,20 +925,19 @@ const SlideGraphics: React.FC = () => {
                   {time.toFixed(1)} / {dur.toFixed(1)} с
                 </span>
                 <label className="sg-dur" title="Длительность ролика">
-                  <input type="number" min={1} max={60} step={0.5} value={dur} onChange={(e) => setDurs((d) => ({ ...d, [tplId]: Math.min(60, Math.max(1, Number(e.target.value) || tpl.duration)) }))} />с
+                  <input type="number" aria-label="Длительность ролика, секунды" min={1} max={60} step={0.5} value={dur} onChange={(e) => setDurs((d) => ({ ...d, [tplId]: Math.min(60, Math.max(1, Number(e.target.value) || tpl.duration)) }))} />с
                 </label>
               </div>
             </div>
           </section>
         </div>
       )}
-
-      <InstructionsModalShell isOpen={showHelp} onClose={() => setShowHelp(false)} title="🎬 Графика для слайдов" footerLabel="Понятно!" maxWidth={720}>
+      <InstructionsModalShell isOpen={showHelp} onClose={() => setShowHelp(false)} title="Графика для слайдов" footerLabel="Понятно!" maxWidth={720}>
         <div className="instructions-section">
           <h3>Как пользоваться</h3>
           <ol>
             <li>Выберите шаблон в каталоге — при наведении он показывает анимацию.</li>
-            <li>Слева впишите свои числа или вставьте диапазон из Excel, добавьте фразы или фото.</li>
+            <li>В панели настроек впишите свои числа или вставьте диапазон из Excel, добавьте фразы или фото.</li>
             <li>Настройте вид, цвета и фон. «Проверенная» палитра различима даже при нарушениях цветовосприятия.</li>
             <li>Кнопка справа вверху — выгрузка картинкой или видео нужного размера.</li>
           </ol>

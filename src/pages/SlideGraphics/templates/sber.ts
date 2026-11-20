@@ -85,7 +85,7 @@ function spread(ys: number[], gap: number, lo: number, hi: number) {
 const rings: Template = {
   id: "sb-rings",
   name: "Кольца целей",
-  group: "sber",
+  group: "charts",
   about: "Каждая цель — своё кольцо: дуга закрывается до процента выполнения, справа — факт, план и процент крупно.",
   input: "pairs",
   duration: 5,
@@ -220,7 +220,7 @@ const rings: Template = {
 const waterfall: Template = {
   id: "sb-waterfall",
   name: "Водопад",
-  group: "sber",
+  group: "charts",
   about: "Из чего сложился итог: первая строка — начальное значение, дальше прирост и снижение, последний столбец считается сам.",
   input: "rows",
   duration: 6,
@@ -346,7 +346,7 @@ const waterfall: Template = {
 const gauge: Template = {
   id: "sb-gauge",
   name: "Шкала цели",
-  group: "sber",
+  group: "charts",
   about: "Полукруглая шкала заполняется до значения с лёгким перелётом, отметка показывает цель, в центре число досчитывает.",
   input: "none",
   duration: 4,
@@ -476,7 +476,7 @@ const gauge: Template = {
 const slope: Template = {
   id: "sb-slope",
   name: "Было → стало",
-  group: "sber",
+  group: "charts",
   about: "Две колонки и линии между ними: сразу видно, что выросло, что упало и как поменялся порядок.",
   input: "pairs",
   duration: 5,
@@ -647,7 +647,7 @@ function pack(radii: number[]) {
 const bubbles: Template = {
   id: "sb-bubbles",
   name: "Пузыри",
-  group: "sber",
+  group: "charts",
   about: "Площадь круга — значение. Круги выпрыгивают от крупного к мелкому и мягко покачиваются; оттенок темнее у больших.",
   input: "rows",
   duration: 5,
@@ -769,7 +769,7 @@ function canBlur() {
 const aurora: Template = {
   id: "sb-aurora",
   name: "Аврора",
-  group: "sber",
+  group: "backgrounds",
   about: "Фон-заставка: волны зелёного света переливаются на тёмной основе, поверх — заголовок. Видео — бесшовная петля.",
   input: "none",
   duration: 10,
@@ -902,7 +902,7 @@ const aurora: Template = {
 const roadmap: Template = {
   id: "sb-roadmap",
   name: "Дорожная карта",
-  group: "sber",
+  group: "modules",
   about: "Этапы на плавной линии: линия прорисовывается, вехи загораются по очереди. Пройденные — залиты, будущие — контуром.",
   input: "phrases",
   duration: 6,
