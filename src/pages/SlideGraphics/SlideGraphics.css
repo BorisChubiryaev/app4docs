@@ -895,7 +895,7 @@
   .sg-card { transition: none; }
 }
 
-.sg-import-entry, .sg-deck-file, .sg-photo-choice {
+.sg-import-entry, .sg-photo-choice {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -904,15 +904,7 @@
 }
 .sg-import-entry h2 { margin: 0; font-size: 1.2rem; }
 .sg-import-entry p { margin: 6px 0 0; color: var(--muted); }
-.sg-deck { display: grid; gap: 18px; }
-.sg-deck-edit { min-width: 0; margin: 0; }
-.sg-deck-edit legend, .sg-photo-choice span { overflow-wrap: anywhere; }
-.sg-deck-object { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; padding: 16px 0; border-bottom: 1px solid var(--line); }
-.sg-deck-object > div { flex: 1 1 16rem; min-width: 0; }
-.sg-deck-object small { color: var(--muted); }
-.sg-deck-object p { white-space: pre-line; overflow-wrap: anywhere; margin: 5px 0; max-height: 12em; overflow: auto; }
-.sg-deck select, .sg-field input[type=file] { max-width: 100%; min-width: 0; }
-.sg-chart-sketch { margin: 8px 0; max-width: 540px; }
-.sg-chart-sketch figcaption { font-size: .8rem; color: var(--muted); }
+.sg-photo-choice span { overflow-wrap: anywhere; }
+.sg-field input[type=file] { max-width: 100%; min-width: 0; }
 .sg-layer { min-width: 0; display: grid; gap: 10px; margin: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .sg-layer legend { max-width: 100%; overflow-wrap: anywhere; }

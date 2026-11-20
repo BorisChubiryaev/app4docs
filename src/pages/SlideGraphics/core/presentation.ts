@@ -1,3 +1,5 @@
+import { boxOf, placedShapes, type Box } from "../../PptxRestyle/engine/shapes";
+import { findPh, phOf } from "../../PptxRestyle/engine/styles";
 import JSZip from "jszip";
 import { relsPathOf, resolvePath } from "../../PptxRestyle/engine/pkg";
 import { desc, insertOrdered, kid, kids, parseXml, serializeXml } from "../../PptxRestyle/engine/xml";
@@ -45,9 +47,13 @@ function chartSketch(doc: Document): ChartSketch | undefined {
   return { kind, series, rows: [...rows].sort(([a], [b]) => a - b).map(([, row]) => row), stacked: kid(plot, "grouping")?.getAttribute("val") === "stacked" };
 }
 
-export interface SlideObject { id: string; name: string; kind: "Текст" | "Диаграмма"; content: string; sketch?: ChartSketch }
-export interface Slide { part: string; doc: Document; objects: SlideObject[] }
-export interface Presentation { file: File; slides: Slide[] }
+export interface SlideObject { id: string; name: string; kind: "Текст" | "Диаграмма"; content: string; sketch?: ChartSketch; box?: Box; existing: boolean; textPt?: number }
+export function objectLabel(object: SlideObject) {
+  return object.content.trim().split("\n")[0] || object.name;
+}
+
+export interface Slide { part: string; doc: Document; objects: SlideObject[]; pictures: { box: Box; blob: Blob }[] }
+export interface Presentation { file: File; slides: Slide[]; width: number; height: number }
 export type Choices = Record<string, Record<string, Animation>>;
 
 async function readXml(zip: JSZip, part: string) {
@@ -78,7 +84,17 @@ export async function openPresentation(file: File): Promise<Presentation> {
   if (!main) throw new Error("Файл не содержит презентацию PowerPoint");
   const pres = await readXml(zip, main.target);
   const refs = await relationships(zip, main.target);
+  const size = kid(pres.documentElement, "sldSz");
+  const width = Number(size?.getAttribute("cx")) || 12192000;
+  const height = Number(size?.getAttribute("cy")) || 6858000;
   const slides: Slide[] = [];
+  const media = new Map<string, Blob>();
+  const layouts = new Map<string, Document>();
+  async function layoutTree(part?: string) {
+    if (!part || !zip.file(part)) return null;
+    if (!layouts.has(part)) layouts.set(part, await readXml(zip, part));
+    return desc(layouts.get(part), "spTree")[0] ?? null;
+  }
   for (const id of kids(kid(pres.documentElement, "sldIdLst"), "sldId")) {
     const part = refs.find(r => r.id === relationId(id) && r.type.endsWith("/slide"))?.target;
     if (!part) throw new Error("Не удалось найти слайд по его связи в PPTX");
@@ -86,6 +102,23 @@ export async function openPresentation(file: File): Promise<Presentation> {
     const slideRels = await relationships(zip, part);
     const objects: SlideObject[] = [];
     const tree = kid(kid(doc.documentElement, "cSld"), "spTree");
+    const placed = tree ? placedShapes(tree) : [];
+    const boxes = new Map(placed.map(s => [s.el, s.box]));
+    const existing = new Set(desc(kid(doc.documentElement, "timing"), "spTgt").map(e => e.getAttribute("spid")));
+    const layoutPart = slideRels.find(r => r.type.endsWith("/slideLayout"))?.target;
+    const pictures: Slide["pictures"] = [];
+    for (const { el, box } of placed) {
+      if (el.localName !== "pic") continue;
+      const blip = desc(el, "blip")[0];
+      const embed = Array.from(blip?.attributes ?? []).find(a => a.localName === "embed")?.value;
+      const path = slideRels.find(r => r.id === embed && r.type.endsWith("/image"))?.target;
+      const match = path?.match(/\.(png|jpe?g|gif|webp)$/i);
+      if (!path || !match) continue;
+      const entry = zip.file(path);
+      if (!entry) continue;
+      if (!media.has(path)) media.set(path, new Blob([await entry.async("arraybuffer")], { type: "image/" + match[1].toLowerCase().replace("jpg", "jpeg") }));
+      pictures.push({ box, blob: media.get(path)! });
+    }
     for (const el of Array.from(tree?.getElementsByTagName("*") ?? [])) {
       if (el.localName !== "sp" && el.localName !== "graphicFrame") continue;
       const nv = kid(kid(el, el.localName === "sp" ? "nvSpPr" : "nvGraphicFramePr"), "cNvPr");
@@ -106,12 +139,24 @@ export async function openPresentation(file: File): Promise<Presentation> {
           content = [title, ...series].filter(Boolean).join(" · ");
         }
       }
-      objects.push({ id: shapeId, kind: chart ? "Диаграмма" : "Текст", name: nv?.getAttribute("name") || "Объект " + shapeId, content, sketch });
+      let box = boxes.get(el);
+      const ph = phOf(el);
+      if (!box && ph && layoutPart) {
+        const layout = findPh(await layoutTree(layoutPart), ph, true);
+        box = layout ? boxOf(layout) ?? undefined : undefined;
+        if (!box) {
+          const master = (await relationships(zip, layoutPart)).find(r => r.type.endsWith("/slideMaster"));
+          const parent = findPh(await layoutTree(master?.target), (layout && phOf(layout)) || ph, false);
+          if (parent) box = boxOf(parent) ?? undefined;
+        }
+      }
+      const textPt = Number(desc(el, "rPr")[0]?.getAttribute("sz")) / 100 || undefined;
+      objects.push({ id: shapeId, existing: existing.has(shapeId), box, textPt, kind: chart ? "Диаграмма" : "Текст", name: nv?.getAttribute("name") || "Объект " + shapeId, content, sketch });
     }
-    slides.push({ part, doc, objects });
+    slides.push({ part, doc, objects, pictures });
   }
   if (!slides.length) throw new Error("В файле нет слайдов");
-  return { file, slides };
+  return { file, slides, width, height };
 }
 
 // Добавляем шаги в основную последовательность показа. Идентификаторы

@@ -530,7 +530,7 @@ const SlideGraphics: React.FC = () => {
   );
 
   return (
-    <PageShell title="Графика для слайдов" width={1440} onShowInstructions={() => setShowHelp(true)}>
+    <PageShell title={view === "presentation" ? "Анимация презентации" : "Графика для слайдов"} width={1440} onShowInstructions={() => setShowHelp(true)}>
       {view === "catalog" ? (
         <div className="sg-studio sg-catalog">
           <section className="ds-panel sg-import-entry">
@@ -945,7 +945,15 @@ const SlideGraphics: React.FC = () => {
           </section>
         </div>
       )}
-      <InstructionsModalShell isOpen={showHelp} onClose={() => setShowHelp(false)} title="Графика для слайдов" footerLabel="Понятно!" maxWidth={720}>
+      <InstructionsModalShell isOpen={showHelp} onClose={() => setShowHelp(false)} title={view === "presentation" ? "Анимация презентации" : "Графика для слайдов"} footerLabel="Понятно!" maxWidth={720}>
+        {view === "presentation" ? <div className="instructions-section">
+          <ol>
+            <li>Откройте файл PPTX и выберите слайд в списке.</li>
+            <li>Нажмите на текст или диаграмму на эскизе. Рамка покажет выбранный объект. Его также можно выбрать под эскизом.</li>
+            <li>Выберите эффект появления и его длительность. Кнопка «Просмотреть слайд» покажет новые эффекты по порядку.</li>
+            <li>Скачайте PPTX и включите показ слайдов в PowerPoint. Каждый новый эффект запускается отдельным щелчком после исходных эффектов слайда.</li>
+          </ol>
+        </div> : <>
         <div className="instructions-section">
           <h3>Как пользоваться</h3>
           <ol>
@@ -972,6 +980,7 @@ const SlideGraphics: React.FC = () => {
           <h3>Конфиденциальность</h3>
           <p>Всё рисуется в браузере, данные и фото никуда не отправляются. Ограничений на число картинок и видео нет.</p>
         </div>
+        </>}
       </InstructionsModalShell>
     </PageShell>
   );
