@@ -1,4 +1,5 @@
 import type { Group, Scene, Template } from "../core/types";
+import { CONVERTIX } from "../core/render";
 import { CHARTS } from "./charts";
 import { MOTION } from "./motion";
 import { SBER, SBER_GREENS, SBER_TEMPLATES } from "./sber";
@@ -9,7 +10,7 @@ export const TEMPLATES: Template[] = [...MODULES, ...CHARTS, ...SBER_TEMPLATES, 
 
 export const GROUPS: [Group | "all", string][] = [
   ["all", "Все"],
-  ["modules", "Новые модули"],
+  ["modules", "Модули для презентаций"],
   ["charts", "Графики"],
   ["sber", "Стиль СБ"],
   ["text", "Текст"],
@@ -21,7 +22,7 @@ export const GROUPS: [Group | "all", string][] = [
 // в «Фирменной» фиолетовый и индиго почти не различаются — она для одного
 // ряда и градиентов.
 export const PALETTES: [string, string[]][] = [
-  ["Фирменная", ["#0087cd", "#8253aa", "#ff1c77", "#515dad"]],
+  ["Фирменная", CONVERTIX],
   ["Неон", ["#5b5bf7", "#ff4fa3", "#2bd9a6", "#ffb547"]],
   // Стиль СБ: для нескольких категорий (проверена на светлом и тёмном фоне)
   // и зелёные — для одного ряда и градиентов

@@ -67,6 +67,7 @@ export interface Template {
   group: Group;
   about: string;
   input: Input;
+  phrasesLabel?: string;
   /** Длительность по умолчанию, с */
   duration: number;
   /** Зацикленная анимация: кадр при t и при t + dur одинаков */
