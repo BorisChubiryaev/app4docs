@@ -9,7 +9,6 @@ import { MODULES } from "./modules";
 
 export const TEMPLATES: Template[] = [...NEW_SBER_TOOLS, ...MODULES, ...CHARTS, ...SBER_TEMPLATES, ...MOTION, ...SCENES];
 
-export const sberIds = new Set([...NEW_SBER_TOOLS, ...SBER_TEMPLATES].map(t => t.id));
 export const featuredIds = new Set(NEW_SBER_TOOLS.map(t => t.id));
 
 export const GROUPS: [Group | "all", string][] = [

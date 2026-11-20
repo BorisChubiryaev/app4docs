@@ -7,7 +7,7 @@ import { copyImage, download, even, renderImage, renderVideo } from "./core/expo
 import { SAFE_DARK, SAFE_LIGHT, baseColor, renderFrame, stillTime } from "./core/render";
 import type { Control, Frame, Group, Row, Scene, Template, Val } from "./core/types";
 import { BG_PRESETS } from "./templates/scenes";
-import { featuredIds, sberIds, GROUPS, PALETTES, TEMPLATES, byId, newScene } from "./templates";
+import { featuredIds, GROUPS, PALETTES, TEMPLATES, byId, newScene } from "./templates";
 import "./SlideGraphics.css";
 
 // Графика для слайдов: анимированные графики, фразы, фоны и карточки.
@@ -196,7 +196,6 @@ const Section: React.FC<{ title: string; children: React.ReactNode; open?: boole
 const SlideGraphics: React.FC = () => {
   const [view, setView] = useState<"catalog" | "editor">("catalog");
   const [group, setGroup] = useState<Group | "all">("all");
-  const [sberOnly, setSberOnly] = useState(false);
   const [query, setQuery] = useState("");
   const catalogCard = useRef<string | null>(null);
   const editorTitle = useRef<HTMLHeadingElement>(null);
@@ -494,7 +493,6 @@ const SlideGraphics: React.FC = () => {
 
   const search = query.trim().toLocaleLowerCase("ru");
   const shown = TEMPLATES.filter(t => (group === "all" || t.group === group)
-    && (!sberOnly || sberIds.has(t.id))
     && `${t.name} ${t.about}`.toLocaleLowerCase("ru").includes(search));
   const featured = shown.filter(t => featuredIds.has(t.id));
   const library = shown.filter(t => !featuredIds.has(t.id));
@@ -549,18 +547,12 @@ const SlideGraphics: React.FC = () => {
                 </select>
               </label>
             </div>
-            <div className="sg-filter-options">
-              <button className="sg-sber-filter" type="button" aria-pressed={sberOnly} onClick={() => setSberOnly(on => !on)}>
-                <span className="sg-sber-filter__swatch" aria-hidden="true">{sberOnly ? "✓" : ""}</span>
-                В стиле Сбера
-              </button>
-              <div className="sg-categories ds-tabs" role="group" aria-label="Категории шаблонов">
-                {GROUPS.map(([g, l]) => (
-                  <button key={g} aria-pressed={group === g} className={`ds-tab${group === g ? " ds-tab--active" : ""}`} onClick={() => setGroup(g)}>
-                    {l}
-                  </button>
-                ))}
-              </div>
+            <div className="sg-categories ds-tabs" role="group" aria-label="Категории шаблонов">
+              {GROUPS.map(([g, l]) => (
+                <button key={g} aria-pressed={group === g} className={`ds-tab${group === g ? " ds-tab--active" : ""}`} onClick={() => setGroup(g)}>
+                  {l}
+                </button>
+              ))}
             </div>
           </section>
           {featured.length > 0 && (
@@ -578,7 +570,7 @@ const SlideGraphics: React.FC = () => {
           {shown.length === 0 && (
             <div className="ds-panel sg-empty">
               <p role="status">Инструменты по вашему запросу не найдены.</p>
-              <button className="btn-secondary" onClick={() => { setQuery(""); setGroup("all"); setSberOnly(false); }}>Сбросить фильтры</button>
+              <button className="btn-secondary" onClick={() => { setQuery(""); setGroup("all"); }}>Сбросить фильтры</button>
             </div>
           )}
         </div>
