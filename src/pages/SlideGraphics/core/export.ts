@@ -70,15 +70,22 @@ export interface VideoOptions {
 const followOf = (o: VideoOptions, t: number) => (o.followAt ? o.followAt(t) : (o.follow ?? null));
 
 export async function renderVideo(scene: Scene, tpl: Template, images: Images, o: VideoOptions): Promise<{ blob: Blob; ext: string }> {
+  const mp4 = await encodeMp4(scene, tpl, images, o);
+  if (mp4) return { blob: mp4, ext: "mp4" };
+  return recordRealtime(scene, tpl, images, { ...o, w: even(o.w), h: even(o.h) });
+}
+
+export async function encodeMp4(scene: Scene, tpl: Template, images: Images, o: VideoOptions): Promise<Blob | null> {
   const w = even(o.w);
   const h = even(o.h);
   const bitrate = Math.min(60e6, Math.round(w * h * o.fps * 0.14));
   const codec = await pickCodec(w, h, o.fps, bitrate);
-  if (!codec) return recordRealtime(scene, tpl, images, { ...o, w, h });
+  if (!codec) return null;
 
   const c = canvasOf(w, h);
   const ctx = c.getContext("2d", { alpha: false })!;
-  const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: "avc", width: w, height: h, frameRate: o.fps }, fastStart: "in-memory" });
+  // Use the muxer's fine-grained timescale so the last frame can end between two regular frame ticks.
+  const muxer = new Muxer({ target: new ArrayBufferTarget(), video: { codec: "avc", width: w, height: h }, fastStart: "in-memory" });
   let failure: Error | null = null;
   const enc = new VideoEncoder({
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
@@ -86,18 +93,25 @@ export async function renderVideo(scene: Scene, tpl: Template, images: Images, o
       failure = e instanceof Error ? e : new Error(String(e));
     },
   });
-  enc.configure({ codec, width: w, height: h, bitrate, framerate: o.fps, latencyMode: "quality" });
-  const frames = Math.max(1, Math.round(o.dur * o.fps));
+  const durationUs = Math.round(o.dur * 1e6);
+  const frames = Math.max(1, Math.ceil(durationUs * o.fps / 1e6));
   const usec = 1e6 / o.fps;
   try {
+    enc.configure({ codec, width: w, height: h, bitrate, framerate: o.fps, latencyMode: "quality" });
     for (let i = 0; i < frames; i++) {
       if (o.signal.aborted) throw new DOMException("Отменено", "AbortError");
       if (failure) throw failure;
-      renderFrame(ctx, w, h, i / o.fps, scene, tpl, images, o.dur, o.fallbackBase, followOf(o, i / o.fps));
-      const frame = new VideoFrame(c, { timestamp: Math.round(i * usec), duration: Math.round(usec) });
-      enc.encode(frame, { keyFrame: i % (o.fps * 2) === 0 });
-      frame.close();
-      while (enc.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 4));
+      const t = !tpl.loop && i === frames - 1 ? o.dur : i / o.fps;
+      renderFrame(ctx, w, h, t, scene, tpl, images, o.dur, o.fallbackBase, followOf(o, t));
+      const timestamp = Math.round(i * usec);
+      const end = Math.min(Math.round((i + 1) * usec), durationUs);
+      const frame = new VideoFrame(c, { timestamp, duration: end - timestamp });
+      try { enc.encode(frame, { keyFrame: i % (o.fps * 2) === 0 }); } finally { frame.close(); }
+      while (enc.encodeQueueSize > 6) {
+        o.signal.throwIfAborted();
+        if (failure) throw failure;
+        await new Promise((r) => setTimeout(r, 4));
+      }
       if (i % 5 === 0) {
         o.onProgress(i / frames);
         await new Promise((r) => setTimeout(r, 0));
@@ -110,7 +124,7 @@ export async function renderVideo(scene: Scene, tpl: Template, images: Images, o
     if (enc.state !== "closed") enc.close();
   }
   o.onProgress(1);
-  return { blob: new Blob([(muxer.target as ArrayBufferTarget).buffer], { type: "video/mp4" }), ext: "mp4" };
+  return new Blob([(muxer.target as ArrayBufferTarget).buffer], { type: "video/mp4" });
 }
 
 /** Запасной путь: запись холста в реальном времени */

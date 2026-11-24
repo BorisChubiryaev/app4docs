@@ -23,7 +23,7 @@ export type Control = (
   | { key: string; label: string; type: "text" | "time"; placeholder?: string }
   | { key: string; label: string; type: "textarea" }
   | { key: string; label: string; type: "number"; min?: number; max?: number; step?: number }
-  | { key: string; label: string; type: "range"; min: number; max: number; step: number; unit?: string }
+  | { key: string; label: string; type: "range" | "fontSize"; min: number; max: number; step: number; unit?: string }
   | { key: string; label: string; type: "select"; options: [string, string][] }
   | { key: string; label: string; type: "toggle" }
   | { key: string; label: string; type: "color" }

@@ -32,7 +32,7 @@ const ribbon: Template = {
   onPalette: (_p, pal) => ({ bandColor: pal[0] }),
   controls: [
     { key: "text", label: "Текст", type: "text" },
-    { key: "size", label: "Размер", type: "range", min: 30, max: 200, step: 1 },
+    { key: "size", label: "Размер текста", type: "fontSize", min: 30, max: 200, step: 1 },
     { key: "weight", label: "Насыщенность", type: "range", min: 400, max: 900, step: 100 },
     { key: "spacing", label: "Межбуквенный", type: "range", min: -10, max: 30, step: 1 },
     { key: "ink", label: "Цвет текста", type: "color" },
@@ -54,6 +54,7 @@ const ribbon: Template = {
     ctx.font = font(px, weight);
     const widths = [...text].map((ch) => ctx.measureText(ch).width + ls);
     const total = widths.reduce((a, b) => a + b, 0);
+    if (!Number.isFinite(total) || total <= 0) return;
     // Верёвка из звеньев: голова тянется к цели, остальные держат дистанцию.
     // Состояние не хранится: каждый кадр заново моделирует последние 4 с.
     const seg = Math.max(4 * s, px * 0.18);
@@ -96,11 +97,10 @@ const ribbon: Template = {
     };
     if (f.p.band !== false) {
       ctx.beginPath();
-      const steps2 = Math.max(2, Math.ceil(total / (4 * s)));
-      for (let i = 0; i <= steps2; i++) {
-        const p = at(start + (total * i) / steps2);
-        if (i === 0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
+      const head = at(start);
+      ctx.moveTo(head.x, head.y);
+      for (let i = 1; i < path.length; i++) {
+        if (cum[i] > start) ctx.lineTo(path[i][0], path[i][1]);
       }
       ctx.strokeStyle = String(f.p.bandColor ?? "#ff1c77");
       ctx.lineWidth = px * 1.05 + Number(f.p.pad ?? 18) * s;

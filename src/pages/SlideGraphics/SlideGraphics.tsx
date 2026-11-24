@@ -1,13 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageShell from "../../components/PageShell";
 import InstructionsModalShell from "../../components/InstructionsModal";
-import RowsEditor from "./components/RowsEditor";
+import PresentationEditor from "./components/PresentationEditor";
+import PresentationStart from "./presentation/PresentationStart";
+import Thumb from "./components/TemplateThumb";
+import { loadPhoto, type Presentation } from "./core/presentation";
+import "./presentation/workspace.css";
+import TemplateSettings from "./components/TemplateSettings";
+import AnimationTimeline from "./components/AnimationTimeline";
 import { FONT, isDark } from "./core/draw";
 import { copyImage, download, even, renderImage, renderVideo } from "./core/export";
-import { SAFE_DARK, SAFE_LIGHT, baseColor, renderFrame, stillTime } from "./core/render";
-import type { Control, Frame, Group, Row, Scene, Template, Val } from "./core/types";
-import { BG_PRESETS } from "./templates/scenes";
-import { featuredIds, GROUPS, PALETTES, TEMPLATES, byId, newScene } from "./templates";
+import { baseColor, renderFrame, stillTime } from "./core/render";
+import type { Frame, Group, Scene, Template, Val } from "./core/types";
+import { featuredIds, GROUPS, TEMPLATES, byId, newScene } from "./templates";
 import "./SlideGraphics.css";
 
 // Графика для слайдов: анимированные графики, фразы, фоны и карточки.
@@ -47,9 +52,6 @@ const SIZES: [string, number][] = [
   ["2K · 2560", 2560],
   ["4K · 3840", 3840],
 ];
-/** Поля, которые относятся к содержанию, — в разделе «Данные» */
-const DATA_KEYS = new Set(["title", "subtitle", "value", "caption", "delta", "center", "s1", "s2", "prefix", "unit", "decimals", "text"]);
-const isDataControl = (c: Control) => c.data || DATA_KEYS.has(c.key);
 const FORMATS = [
   ["png", "PNG", "прозрачный фон"],
   ["jpeg", "JPEG", "с фоном"],
@@ -67,134 +69,14 @@ const fileName = (tpl: Template, w: number, h: number, ext: string) => `${tpl.na
 const autoBackdrop = (scene: Scene): Backdrop => (scene.ink === "light" ? "dark" : "light");
 const BACKDROP: Record<Backdrop, string> = { light: "#eceef3", dark: "#16181f" };
 
-// ── Превью в каталоге: стоп-кадр, при наведении — анимация ──
-
-const Thumb: React.FC<{ tpl: Template; scene: Scene; images: Images; aspect: string; hover: boolean }> = ({ tpl, scene, images, aspect, hover }) => {
-  const ref = useRef<HTMLCanvasElement>(null);
-  const { w, h } = sizeOf(aspect, 720);
-  const transparent = !tpl.ownBackground && scene.background.kind === "transparent";
-  const drawAt = useCallback(
-    (t: number) => {
-      const c = ref.current;
-      if (!c) return;
-      renderFrame(c.getContext("2d")!, w, h, t, scene, tpl, images, tpl.duration, transparent ? BACKDROP[autoBackdrop(scene)] : undefined);
-    },
-    [w, h, scene, tpl, images, transparent],
-  );
-  useEffect(() => {
-    if (!hover || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      drawAt(stillTime(tpl, tpl.duration, tpl.duration * 0.3));
-      return;
-    }
-    let raf = 0;
-    const start = performance.now();
-    const tick = () => {
-      const t = (performance.now() - start) / 1000;
-      drawAt(t);
-      if (tpl.loop || t < tpl.duration) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [hover, drawAt, tpl]);
-  return <canvas ref={ref} width={w} height={h} className="sg-thumb" />;
-};
-
-// ── Поле настройки ──
-
-const Field: React.FC<{ c: Control; value: Val | undefined; onChange: (v: Val) => void }> = ({ c, value, onChange }) => {
-  switch (c.type) {
-    case "textarea":
-      return (
-        <label className="sg-field">
-          <span className="sg-field__label">{c.label}</span>
-          <textarea aria-label={c.label} rows={3} value={String(value ?? "")} onChange={e => onChange(e.target.value)} />
-        </label>
-      );
-    case "time":
-    case "text":
-      return (
-        <label className="sg-field">
-          <span className="sg-field__label">{c.label}</span>
-          <input type={c.type} value={String(value ?? "")} placeholder={c.placeholder} onChange={(e) => onChange(e.target.value)} />
-        </label>
-      );
-    case "number":
-      return (
-        <label className="sg-field sg-field--row">
-          <span className="sg-field__label">{c.label}</span>
-          <input
-            type="number"
-            value={Number.isFinite(Number(value)) ? Number(value) : 0}
-            min={c.min}
-            max={c.max}
-            step={c.step ?? "any"}
-            onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))}
-          />
-        </label>
-      );
-    case "range":
-      return (
-        <label className="sg-field">
-          <span className="sg-field__label">
-            {c.label}
-            <b>{`${value}${c.unit ?? ""}`}</b>
-          </span>
-          <input
-            type="range"
-            min={c.min}
-            max={c.max}
-            step={c.step}
-            value={Number(value ?? c.min)}
-            style={{ "--k": `${((Number(value ?? c.min) - c.min) / (c.max - c.min || 1)) * 100}%` } as React.CSSProperties}
-            onChange={(e) => onChange(Number(e.target.value))}
-          />
-        </label>
-      );
-    case "select":
-      return (
-        <label className="sg-field sg-field--row">
-          <span className="sg-field__label">{c.label}</span>
-          <select value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
-            {c.options.map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
-      );
-    case "toggle":
-      return (
-        <label className="sg-switch">
-          <span className="sg-field__label">{c.label}</span>
-          <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
-          <i aria-hidden="true" />
-        </label>
-      );
-    case "color":
-      return (
-        <label className="sg-field sg-field--row">
-          <span className="sg-field__label">{c.label}</span>
-          <span className="sg-colorpick">
-            <input type="color" value={String(value ?? "#000000")} onChange={(e) => onChange(e.target.value)} />
-            <code>{String(value ?? "")}</code>
-          </span>
-        </label>
-      );
-  }
-};
-
-const Section: React.FC<{ title: string; children: React.ReactNode; open?: boolean }> = ({ title, children, open = true }) => (
-  <details className="sg-sec" open={open}>
-    <summary>{title}</summary>
-    <div className="sg-sec__body">{children}</div>
-  </details>
-);
-
 // ── Страница ──
 
 const SlideGraphics: React.FC = () => {
-  const [view, setView] = useState<"catalog" | "editor">("catalog");
+  const [view, setView] = useState<"catalog" | "editor" | "presentation">("catalog");
+  const [project, setProject] = useState<{ deck: Presentation; initialObject?: string } | null>(null);
+  const deck = project?.deck ?? null;
+  const [deckDirty, setDeckDirty] = useState(false);
+  const [session, setSession] = useState(0);
   const [group, setGroup] = useState<Group | "all">("all");
   const [query, setQuery] = useState("");
   const catalogCard = useRef<string | null>(null);
@@ -247,9 +129,6 @@ const SlideGraphics: React.FC = () => {
       .then(() => setFontsReady((n) => n + 1));
   }, []);
 
-  // Освобождаем загруженные фото
-  useEffect(() => () => images.forEach((i) => URL.revokeObjectURL(i.src)), [images]);
-
   // Всплывающее меню выгрузки закрывается кликом мимо
   useEffect(() => {
     if (!showExport) return;
@@ -267,7 +146,7 @@ const SlideGraphics: React.FC = () => {
     if (view === "editor") {
       window.scrollTo(0, 0);
       editorTitle.current?.focus({ preventScroll: true });
-    } else if (catalogCard.current) {
+    } else if (view === "catalog" && catalogCard.current) {
       document.getElementById(catalogCard.current)?.focus();
     }
   }, [view]);
@@ -434,30 +313,19 @@ const SlideGraphics: React.FC = () => {
   // ── Фото ──
   const addPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
-    const loaded: Images = [];
-    for (const f of Array.from(files)) {
-      if (!f.type.startsWith("image/")) continue;
-      const img = new Image();
-      img.src = URL.createObjectURL(f);
-      try {
-        await img.decode();
-        loaded.push(img);
-      } catch {
-        URL.revokeObjectURL(img.src);
-      }
-    }
-    setImages((prev) => [...prev, ...loaded]);
+    const loaded = await Promise.allSettled(Array.from(files).filter(f => f.type.startsWith("image/")).map(loadPhoto));
+    setImages(prev => [...prev, ...loaded.flatMap(result => result.status === "fulfilled" ? [result.value] : [])]);
   };
-  const removePhoto = (i: number) =>
-    setImages((prev) => {
-      URL.revokeObjectURL(prev[i].src);
-      return prev.filter((_, j) => j !== i);
-    });
+  const removePhoto = (index: number) => setImages(prev => prev.filter((_, i) => i !== index));
 
   // ── Выгрузка ──
   const exportSize = custom ? { w: even(long), h: even(long / (out.w / out.h)) } : sizeOf(aspect, long);
   const exportFollow: Frame["follow"] = pinned ? follow : null;
   const exportFollowAt = recorded ? (t: number) => (ago: number) => sampleAt(recorded, t - ago) : undefined;
+  const exportStill = (w: number, h: number, type: "image/png" | "image/jpeg") => {
+    const t = stillTime(tpl, dur, timeRef.current);
+    return renderImage(scene, tpl, images, w, h, t, dur, type, exportFollowAt ? exportFollowAt(t) : exportFollow);
+  };
   const save = async (copy = false) => {
     setMsg("");
     const { w, h } = exportSize;
@@ -473,7 +341,7 @@ const SlideGraphics: React.FC = () => {
         setMsg(ext === "mp4" ? "Видео сохранено — вставьте его в PowerPoint или Keynote." : "Браузер записал WebM — для PowerPoint лучше Chrome или Edge последней версии.");
       } else {
         const type = format === "jpeg" && !copy ? "image/jpeg" : "image/png";
-        const blob = await renderImage(scene, tpl, images, w, h, stillTime(tpl, dur, timeRef.current), dur, type, exportFollowAt ? exportFollowAt(stillTime(tpl, dur, timeRef.current)) : exportFollow);
+        const blob = await exportStill(w, h, type);
         if (copy) {
           await copyImage(blob);
           setMsg("Картинка в буфере — вставьте в слайд (Ctrl+V).");
@@ -496,25 +364,15 @@ const SlideGraphics: React.FC = () => {
     && `${t.name} ${t.about}`.toLocaleLowerCase("ru").includes(search));
   const featured = shown.filter(t => featuredIds.has(t.id));
   const library = shown.filter(t => !featuredIds.has(t.id));
-  const dataControls = tpl.controls.filter(isDataControl);
-  const lookControls = tpl.controls.filter((c) => !isDataControl(c) && (!c.when || c.when(scene.params)));
-  // Выбор палитры: шаблон может переключить свои цвета на неё
-  const pickPalette = (pal: string[], auto: boolean) =>
-    update({ palette: [...pal], paletteAuto: auto, params: { ...scene.params, ...(tpl.onPalette?.(scene.params, pal) ?? {}) } });
   const transparent = !tpl.ownBackground && scene.background.kind === "transparent";
-  const cardTpl = ["carousel", "deck", "flow"].includes(tpl.id);
-  const usesPhrases = tpl.input === "phrases" || cardTpl;
-  const usesRows = tpl.input === "flows" || tpl.input === "rows" || tpl.input === "pairs" || tpl.input === "people";
-  const usesPhotos = tpl.input === "photos" || tpl.input === "people";
   const stageBackdrop = backdrop ?? autoBackdrop(scene);
   const previewDark = transparent ? stageBackdrop === "dark" : isDark(baseColor(scene, tpl) ?? "#ffffff");
   const fmtLabel = FORMATS.find((x) => x[0] === format)![1];
-  const autoPal = previewDark ? SAFE_DARK : SAFE_LIGHT;
 
   const renderCard = (t: Template) => (
     <button key={t.id} id={`sg-card-${t.id}`} className="sg-card ds-card" onClick={() => open(t.id)} onMouseEnter={() => setHovered(t.id)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(t.id)} onBlur={() => setHovered(null)}>
       <div className="sg-card__pic" aria-hidden="true">
-        <Thumb tpl={t} scene={scenes[t.id]} images={images} aspect={aspect} hover={hovered === t.id} />
+        <Thumb tpl={t} scene={scenes[t.id]} duration={durs[t.id]} images={images} {...sizeOf(aspect, 720)} hover={hovered === t.id} />
         <div className="sg-card__tags">
           {t.loop && <span>Петля</span>}
           {t.interactive && <span>За курсором</span>}
@@ -529,31 +387,38 @@ const SlideGraphics: React.FC = () => {
 
   return (
     <PageShell title="Графика для слайдов" width={1440} onShowInstructions={() => setShowHelp(true)}>
-      {view === "catalog" ? (
+      {deck && <PresentationEditor key={session} deck={deck} initialObject={project?.initialObject} active={view === "presentation"} onBack={() => setView("catalog")} onDirty={setDeckDirty} />}
+      {view === "presentation" ? null : view === "catalog" ? (
         <div className="sg-studio sg-catalog">
-          <section className="ds-panel sg-filters" aria-label="Поиск и фильтры">
-            <div className="sg-search-row">
-              <input className="ds-input sg-search" type="search" aria-label="Поиск инструментов" placeholder="Найти инструмент" value={query} onChange={e => setQuery(e.target.value)} />
-              <label className="sg-category-picker">
-                <span id="sg-category-label">Категория</span>
-                <select className="ds-select" aria-labelledby="sg-category-label" value={group} onChange={e => setGroup(e.target.value as Group | "all")}>
-                  {GROUPS.map(([g, name]) => <option key={g} value={g}>{name}</option>)}
-                </select>
-              </label>
-              <label className="sg-aspect">
-                <span id="sg-aspect-label">Формат кадра</span>
-                <select className="ds-select" aria-labelledby="sg-aspect-label" value={aspect} onChange={e => setAspect(e.target.value)}>
-                  {ASPECTS.map(([a]) => <option key={a}>{a}</option>)}
-                </select>
-              </label>
-            </div>
-            <div className="sg-categories ds-tabs" role="group" aria-label="Категории шаблонов">
-              {GROUPS.map(([g, l]) => (
-                <button key={g} aria-pressed={group === g} className={`ds-tab${group === g ? " ds-tab--active" : ""}`} onClick={() => setGroup(g)}>
-                  {l}
-                </button>
-              ))}
-            </div>
+          <PresentationStart previous={deck} dirty={deckDirty}
+            onResume={() => setView("presentation")}
+            onOpen={(file, initialObject) => { catalogCard.current = null; setProject({ deck: file, initialObject }); setDeckDirty(false); setSession(n => n + 1); setView("presentation"); }} />
+          <section className="sg-library-tools">
+            <h2 className="ds-section-title sg-section-head">Создать отдельную графику</h2>
+            <section className="ds-panel sg-filters" aria-label="Поиск и фильтры">
+              <div className="sg-search-row">
+                <input className="ds-input sg-search" type="search" aria-label="Поиск инструментов" placeholder="Найти инструмент" value={query} onChange={e => setQuery(e.target.value)} />
+                <label className="sg-category-picker">
+                  <span id="sg-category-label">Категория</span>
+                  <select className="ds-select" aria-labelledby="sg-category-label" value={group} onChange={e => setGroup(e.target.value as Group | "all")}>
+                    {GROUPS.map(([g, name]) => <option key={g} value={g}>{name}</option>)}
+                  </select>
+                </label>
+                <label className="sg-aspect">
+                  <span id="sg-aspect-label">Формат кадра</span>
+                  <select className="ds-select" aria-labelledby="sg-aspect-label" value={aspect} onChange={e => setAspect(e.target.value)}>
+                    {ASPECTS.map(([a]) => <option key={a}>{a}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="sg-categories ds-tabs" role="group" aria-label="Категории шаблонов">
+                {GROUPS.map(([g, l]) => (
+                  <button key={g} aria-pressed={group === g} className={`ds-tab${group === g ? " ds-tab--active" : ""}`} onClick={() => setGroup(g)}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </section>
           </section>
           {featured.length > 0 && (
             <section aria-labelledby="sg-new-title">
@@ -584,153 +449,7 @@ const SlideGraphics: React.FC = () => {
             </div>
           </div>
           <aside className="sg-panel ds-panel" aria-label="Настройки шаблона">
-            {(dataControls.length > 0 || usesRows || usesPhotos || usesPhrases) && (
-              <Section title="Данные">
-                {dataControls.map((c) => (
-                  <Field key={c.key} c={c} value={scene.params[c.key]} onChange={(v) => setParam(c.key, v)} />
-                ))}
-                {usesRows && <RowsEditor input={tpl.input} rows={scene.rows} names={[String(scene.params.s1 ?? ""), String(scene.params.s2 ?? "")]} onChange={(rows: Row[]) => update({ rows })} />}
-                {usesPhotos && (
-                  <div className="sg-photos">
-                    <div className="sg-photos__head">
-                      <span className="sg-field__label">{tpl.input === "people" ? "Фото — по порядку строк" : "Фото"}</span>
-                      <label className="sg-btn sg-btn--sm">
-                        ＋ Добавить
-                        <input type="file" accept="image/*" multiple hidden onChange={(e) => (addPhotos(e.target.files), (e.target.value = ""))} />
-                      </label>
-                    </div>
-                    {images.length ? (
-                      <>
-                      {cardTpl && <p className="sg-hint">Подписи ниже ложатся на фото по порядку. Если подписей больше, чем фото, — остальные карточки будут цветными.</p>}
-                      <div className="sg-photos__list">
-                        {images.map((img, i) => (
-                          <div key={img.src} className="sg-photo">
-                            <img src={img.src} alt="" />
-                            <button onClick={() => removePhoto(i)} aria-label="Убрать фото">
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      </>
-                    ) : (
-                      <p className="sg-hint">{tpl.id === "glass" ? "Без фото под стеклом — цветные пятна." : "Без фото — цветные карточки с подписями."} Фото остаются только в вашем браузере.</p>
-                    )}
-                  </div>
-                )}
-                {usesPhrases && (
-                  <label className="sg-field">
-                    <span className="sg-field__label">{tpl.phrasesLabel ?? (cardTpl ? "Подписи карточек — по одной в строке, вторая часть после «|»" : "Фразы — по одной в строке, вторая часть после «|»")}</span>
-                    <textarea rows={6} value={scene.phrases.join("\n")} onChange={(e) => update({ phrases: e.target.value.split("\n") })} />
-                  </label>
-                )}
-              </Section>
-            )}
-
-            {lookControls.length > 0 && (
-              <Section title="Вид">
-                {tpl.ownBackground && !["cover", "spiral", "magnet"].includes(tpl.id) && (
-                  <div className="sg-presets">
-                    {BG_PRESETS.map(([name, base, pal]) => (
-                      <button
-                        key={name}
-                        className="sg-preset"
-                        style={{ background: `radial-gradient(circle at 28% 30%, ${pal[0]}, transparent 62%), radial-gradient(circle at 76% 72%, ${pal[1]}, transparent 60%), ${base}` }}
-                        onClick={() => update({ palette: [...pal], paletteAuto: false, params: { ...scene.params, base } })}
-                      >
-                        <span>{name}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {lookControls.map((c) => (
-                  <Field key={c.key} c={c} value={scene.params[c.key]} onChange={(v) => setParam(c.key, v)} />
-                ))}
-              </Section>
-            )}
-
-            <Section title="Цвета" open={false}>
-              <div className="sg-pals">
-                <button className={`sg-pal ${scene.paletteAuto ? "is-on" : ""}`} onClick={() => pickPalette(autoPal, true)} title="Проверенная палитра: цвета различимы, в том числе при нарушениях цветовосприятия">
-                  <span className="sg-pal__dots">
-                    {autoPal.slice(0, 5).map((c) => (
-                      <i key={c} style={{ background: c }} />
-                    ))}
-                  </span>
-                  Проверенная
-                </button>
-                {PALETTES.map(([name, pal]) => (
-                  <button key={name} className={`sg-pal ${!scene.paletteAuto && scene.palette.join() === pal.join() ? "is-on" : ""}`} onClick={() => pickPalette(pal, false)}>
-                    <span className="sg-pal__dots">
-                      {pal.map((c) => (
-                        <i key={c} style={{ background: c }} />
-                      ))}
-                    </span>
-                    {name}
-                  </button>
-                ))}
-              </div>
-              {!scene.paletteAuto && (
-                <div className="sg-swatches">
-                  {scene.palette.map((c, i) => (
-                    <span key={i} className="sg-swatch">
-                      <input type="color" value={c} onChange={(e) => update({ palette: scene.palette.map((x, j) => (j === i ? e.target.value : x)) })} aria-label={`Цвет ${i + 1}`} />
-                      {scene.palette.length > 1 && (
-                        <button onClick={() => update({ palette: scene.palette.filter((_, j) => j !== i) })} aria-label="Убрать цвет">
-                          ✕
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                  {scene.palette.length < 8 && (
-                    <button className="sg-btn sg-btn--sm" onClick={() => update({ palette: [...scene.palette, scene.palette[scene.palette.length - 1] ?? "#4f6ef7"] })}>
-                      ＋
-                    </button>
-                  )}
-                </div>
-              )}
-            </Section>
-
-            {!tpl.ownBackground && (
-              <Section title="Фон" open={false}>
-                <div className="sg-chips">
-                  {(
-                    [
-                      ["transparent", "Прозрачный"],
-                      ["white", "Белый"],
-                      ["light", "Светлый"],
-                      ["dark", "Тёмный"],
-                      ["custom", "Свой"],
-                    ] as const
-                  ).map(([k, l]) => (
-                    <button key={k} className={scene.background.kind === k ? "is-on" : ""} onClick={() => update({ background: { ...scene.background, kind: k } })}>
-                      {k !== "transparent" && <i style={{ background: k === "custom" ? scene.background.color : k === "white" ? "#fff" : k === "light" ? "#f4f5f8" : "#0e1016" }} />}
-                      {l}
-                    </button>
-                  ))}
-                </div>
-                {scene.background.kind === "custom" && (
-                  <label className="sg-field sg-field--row">
-                    <span className="sg-field__label">Цвет фона</span>
-                    <span className="sg-colorpick">
-                      <input type="color" value={scene.background.color} onChange={(e) => update({ background: { kind: "custom", color: e.target.value } })} />
-                      <code>{scene.background.color}</code>
-                    </span>
-                  </label>
-                )}
-                <label className="sg-field sg-field--row">
-                  <span className="sg-field__label">Цвет текста</span>
-                  <select value={scene.ink} onChange={(e) => update({ ink: e.target.value as Scene["ink"] })}>
-                    <option value="auto">По фону</option>
-                    <option value="dark">Тёмный — для светлых слайдов</option>
-                    <option value="light">Светлый — для тёмных слайдов</option>
-                  </select>
-                </label>
-              </Section>
-            )}
-            <button className="sg-reset" onClick={() => update(newScene(tpl))}>
-              Вернуть настройки шаблона
-            </button>
+            <TemplateSettings {...{ tpl, scene, images, previewDark, update, addPhotos, removePhoto }} />
           </aside>
 
           <section className={`sg-stage ${previewDark ? "is-dark" : ""}`} aria-label="Холст и экспорт">
@@ -899,62 +618,54 @@ const SlideGraphics: React.FC = () => {
                   )}
                 </div>
               )}
-              <div className="sg-timeline">
-                <button className={`sg-play${playing ? " is-playing" : ""}`} onClick={() => (playing ? setPlaying(false) : time >= dur && !tpl.loop ? restart() : setPlaying(true))} aria-label={playing ? "Пауза" : "Воспроизвести"}>
-                  <span aria-hidden="true" />
-                </button>
-                <button className="sg-round" onClick={restart} aria-label="С начала" title="С начала">
-                  ↺
-                </button>
-                <input
-                  type="range"
-                  min={0}
-                  max={dur}
-                  step={0.01}
-                  value={time}
-                  style={{ "--k": `${(time / dur) * 100}%` } as React.CSSProperties}
-                  onChange={(e) => {
-                    setPlaying(false);
-                    timeRef.current = Number(e.target.value);
-                    setTime(timeRef.current);
-                    draw(timeRef.current);
-                  }}
-                  aria-label="Время"
-                />
-                <span className="sg-time">
-                  {time.toFixed(1)} / {dur.toFixed(1)} с
-                </span>
-                <label className="sg-dur" title="Длительность ролика">
-                  <input type="number" aria-label="Длительность ролика, секунды" min={1} max={60} step={0.5} value={dur} onChange={(e) => setDurs((d) => ({ ...d, [tplId]: Math.min(60, Math.max(1, Number(e.target.value) || tpl.duration)) }))} />с
-                </label>
-              </div>
+              <AnimationTimeline playing={playing} time={time} duration={dur} onRestart={restart}
+                onPlay={() => playing ? setPlaying(false) : time >= dur && !tpl.loop ? restart() : setPlaying(true)}
+                onSeek={t => { setPlaying(false); timeRef.current = t; setTime(t); draw(t); }}
+                clip={{ duration: dur, onChange: next => {
+                  timeRef.current = Math.min(timeRef.current, next);
+                  setTime(timeRef.current);
+                  setDurs(d => ({ ...d, [tplId]: next }));
+                } }} />
             </div>
           </section>
         </div>
       )}
       <InstructionsModalShell isOpen={showHelp} onClose={() => setShowHelp(false)} title="Графика для слайдов" footerLabel="Понятно!" maxWidth={720}>
-        <div className="instructions-section">
-          <h3>Как пользоваться</h3>
+        {view !== "editor" && <div className="instructions-section">
+          <h3>Работа со своей презентацией</h3>
           <ol>
-            <li>Выберите шаблон в каталоге — при наведении он показывает анимацию.</li>
-            <li>В панели настроек впишите свои числа или вставьте диапазон из Excel, добавьте фразы или фото.</li>
-            <li>Настройте вид, цвета и фон. «Проверенная» палитра различима даже при нарушениях цветовосприятия.</li>
-            <li>Кнопка справа вверху — выгрузка картинкой или видео нужного размера.</li>
+            {view === "catalog" && <li>Нажмите «Открыть PPTX» или «Попробовать на примере».</li>}
+            <li>Выберите миниатюру и нажмите на объект прямо на слайде. Его также можно выбрать в списке элементов.</li>
+            <li>Для текста доступны правка надписи, кегль и цвет. Для диаграммы можно сменить палитру с сохранением исходных рядов или выбрать графический шаблон.</li>
+            <li>Кнопка «Добавить графику» вставляет новый объект. Его можно перетащить и изменить размер за угловой маркер.</li>
+            <li>«Сравнить с оригиналом» показывает исходный вид. «Скачать PPTX» сохраняет копию со всеми правками.</li>
           </ol>
-        </div>
-        <div className="instructions-section">
-          <h3>Что можно сохранить</h3>
-          <ul>
-            <li>PNG с прозрачным фоном — ложится на любой слайд.</li>
-            <li>JPEG с фоном, размер до 4K и больше (своя ширина до 7680 px).</li>
-            <li>Видео MP4 — вставляется в PowerPoint и Keynote. Фоны и карусели зациклены без шва.</li>
-            <li>«Копировать» кладёт картинку в буфер — сразу Ctrl+V в слайд.</li>
-          </ul>
-        </div>
-        <div className="instructions-section">
-          <h3>Живые шаблоны</h3>
-          <p>«Лента-змейка» и «Магнитное поле» следуют за курсором. Клик по кадру закрепляет положение — так его и сохранит картинка или видео. Без курсора шаблон движется сам — так пишется видео по умолчанию.</p>
-        </div>
+          <p>Анимация шаблона запускается прямо на слайде. Под ним можно поставить её на паузу или повторить. В скачанной презентации откройте режим показа в настольном PowerPoint. Для сохранения одного кадра выключите «Анимация в PPTX».</p>
+        </div>}
+        {view !== "presentation" && <>
+          <div className="instructions-section">
+            <h3>Создание отдельной графики</h3>
+            <ol>
+              <li>Выберите шаблон в каталоге — при наведении он показывает анимацию.</li>
+              <li>В панели настроек впишите свои числа или вставьте диапазон из Excel, добавьте фразы или фото.</li>
+              <li>Настройте вид, цвета и фон. «Проверенная» палитра различима даже при нарушениях цветовосприятия.</li>
+              <li>Кнопка справа вверху — выгрузка картинкой или видео нужного размера.</li>
+            </ol>
+          </div>
+          <div className="instructions-section">
+            <h3>Что можно сохранить</h3>
+            <ul>
+              <li>PNG с прозрачным фоном — ложится на любой слайд.</li>
+              <li>JPEG с фоном, размер до 4K и больше (своя ширина до 7680 px).</li>
+              <li>Видео MP4 — вставляется в PowerPoint и Keynote. Фоны и карусели зациклены без шва.</li>
+              <li>«Копировать» кладёт картинку в буфер — сразу Ctrl+V в слайд.</li>
+            </ul>
+          </div>
+          <div className="instructions-section">
+            <h3>Живые шаблоны</h3>
+            <p>«Лента-змейка» и «Магнитное поле» следуют за курсором. Клик по кадру закрепляет положение — так его и сохранит картинка или видео. Без курсора шаблон движется сам — так пишется видео по умолчанию.</p>
+          </div>
+        </>}
         <div className="instructions-section">
           <h3>Конфиденциальность</h3>
           <p>Всё рисуется в браузере, данные и фото никуда не отправляются. Ограничений на число картинок и видео нет.</p>
