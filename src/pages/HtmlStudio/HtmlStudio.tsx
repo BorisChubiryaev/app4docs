@@ -72,6 +72,10 @@ const HtmlStudio: React.FC = () => {
   const [codeDirty, setCodeDirty] = useState(false);
   const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number } | null>(null);
   const [drag, setDrag] = useState(false);
+  const [pdfStatus, setPdfStatus] = useState("");
+  const [pdfError, setPdfError] = useState("");
+  const pdfJob = useRef<AbortController | null>(null);
+  useEffect(() => () => pdfJob.current?.abort(), []);
 
   const htmlRef = useRef<string | null>(null);
   const past = useRef<string[]>([]);
@@ -477,12 +481,43 @@ const HtmlStudio: React.FC = () => {
     setTimeout(() => URL.revokeObjectURL(a.href), 1500);
   };
 
-  const openInTab = (print = false) => {
+  const exportPdf = async () => {
+    if (pdfJob.current || htmlRef.current === null) return;
+    stopEdit();
+    if (view === "code") applyCode();
+    const source = htmlRef.current;
+    const stage = stageRef.current;
+    const visible = stage?.querySelector("iframe");
+    const width = visible?.clientWidth || (device === "desktop" ? stage?.clientWidth : parseInt(DEVICE_W[device])) || 1024;
+    const job = new AbortController();
+    pdfJob.current = job;
+    setPdfError("");
+    setPdfStatus("Готовим PDF…");
+    try {
+      const { generatePdf } = await import("./core/pdf");
+      const blob = await generatePdf(source, width, visible?.clientHeight || 768, job.signal, setPdfStatus);
+      if (job.signal.aborted) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = (name.trim() || "страница") + ".pdf";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      if (!job.signal.aborted) setPdfError(e instanceof Error ? e.message : "Не удалось создать PDF.");
+    } finally {
+      if (pdfJob.current === job) {
+        pdfJob.current = null;
+        setPdfStatus("");
+      }
+    }
+  };
+
+  const openInTab = () => {
     if (htmlRef.current === null) return;
     const url = URL.createObjectURL(new Blob([htmlRef.current], { type: "text/html;charset=utf-8" }));
     const w = window.open(url, "_blank");
     if (!w) return say("Браузер заблокировал новое окно — разрешите всплывающие окна");
-    if (print) w.addEventListener("load", () => setTimeout(() => w.print(), 400));
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
 
@@ -497,6 +532,10 @@ const HtmlStudio: React.FC = () => {
 
   const closeDoc = () => {
     if (!window.confirm("Закрыть документ? Несохранённые изменения останутся в черновике.")) return;
+    pdfJob.current?.abort();
+    pdfJob.current = null;
+    setPdfStatus("");
+    setPdfError("");
     setHtml(null);
     htmlRef.current = null;
     setFrameDoc(null);
@@ -658,6 +697,10 @@ const HtmlStudio: React.FC = () => {
           </ul>
         </div>
         <div className="instructions-section">
+          <h3>Скачать PDF</h3>
+          <p>PDF сохраняет экранную вёрстку при выбранной ширине. Длинные страницы делятся на листы A4 с полями 10 мм. Текст можно искать и копировать.</p>
+        </div>
+        <div className="instructions-section">
           <h3>Безопасность и ограничения</h3>
           <ul>
             <li>При правке скрипты страницы не выполняются, ссылки не открываются — чужие файлы открывать безопасно</li>
@@ -722,11 +765,11 @@ const HtmlStudio: React.FC = () => {
           <button className="btn-primary hs-save" onClick={download} title="Скачать HTML-файл">
             💾 Скачать
           </button>
-          <button className="hs-btn" onClick={() => openInTab(false)} title="Открыть в новой вкладке браузера (со скриптами)">
+          <button className="hs-btn" onClick={openInTab} title="Открыть в новой вкладке браузера (со скриптами)">
             ↗ В браузере
           </button>
-          <button className="hs-btn" onClick={() => openInTab(true)} title="Печать или «Сохранить как PDF»">
-            🖨 PDF
+          <button className="hs-btn" onClick={exportPdf} disabled={!!pdfStatus} title="Скачать страницу в PDF">
+            {pdfStatus ? "Готовим PDF…" : "Скачать PDF"}
           </button>
           <button className="hs-btn" onClick={copyCode} title="Скопировать весь код">
             📋 Код
@@ -736,6 +779,8 @@ const HtmlStudio: React.FC = () => {
           </button>
         </div>
 
+        {pdfStatus && <div className="hs-hint" role="status">{pdfStatus}</div>}
+        {pdfError && <div className="hs-hint" role="alert">{pdfError}</div>}
         <div className={`hs-work ${view === "visual" ? "" : "is-full"}`}>
           <div className="hs-stage" ref={stageRef}>
             {view === "visual" && (
