@@ -1,10 +1,6 @@
 // HomePage.jsx
 import { useEffect, useState, useCallback, useMemo, memo } from "react";
-import {
-  handleUrlExcelDownload,
-  hasUrlDownloadData,
-} from "../utils/urlExcelDownloader";
-import DownloadSuccessModal from "../components/DownloadSuccessModal";
+import HomeNotifications from "../components/HomeNotifications";
 import GamesMenu from "../components/GamesMenu";
 import ThemeToggle from "../components/ThemeToggle";
 import { Link } from "react-router-dom";
@@ -13,7 +9,7 @@ import "./HomePage.css";
 
 // ⬇️ ССЫЛКА НА ОПРОС CSI (удовлетворённость проектом).
 // Вставьте сюда реальный URL опроса — используется и в кнопке «Опрос»
-// в футере, и в одноразовом окне с просьбой пройти опрос.
+// в футере, и в карточке с приглашением пройти опрос.
 const SURVEY_URL = "https://public.oprosso.sber.ru/p/jgwgns80";
 
 // ⬇️ ССЫЛКА НА СБЕРЧАТ ДЛЯ РЕБРЕНДИНГА
@@ -85,126 +81,6 @@ const ToolCard = memo(({ tool, index }) => (
     </ul>
   </Link>
 ));
-
-// ─── Модальное окно обратной связи ───
-const FeedbackModal = memo(({ isOpen, onClose }) => {
-  const handleWriteToUs = useCallback(() => {
-    const subject = encodeURIComponent(
-      "Обратная связь по инструменту сравнения Excel-файлов",
-    );
-    const body = encodeURIComponent(
-      "Здравствуйте!\n\nХочу поделиться обратной связью о работе приложения:\n\n[Опишите ваш опыт работы, предложения или идеи здесь]\n\n--\nОтправлено из приложения сравнения Excel-файлов",
-    );
-    window.open(
-      `mailto:LGBotsoeva@sberbank.ru,BSChubiryaev@sberbank.ru?subject=${subject}&body=${body}`,
-    );
-    onClose();
-  }, [onClose]);
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="lg-modal-overlay" onClick={onClose}>
-      <div className="lg-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="lg-modal__glass" />
-        <div className="lg-modal__shine" />
-
-        <div className="lg-modal__content">
-          <button className="lg-modal__close" onClick={onClose}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path
-                d="M4 4l10 10M14 4L4 14"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-
-          <div className="lg-modal__icon-wrap">
-            <span className="lg-modal__icon">💬</span>
-          </div>
-
-          <h2 className="lg-modal__title">Благодарим за использование!</h2>
-
-          <p className="lg-modal__text">
-            Команда разработки{" "}
-            <span className="lg-gradient-text">Unit Data Team</span> благодарит
-            Вас за использование нашего продукта! Пожалуйста, оставьте обратную
-            связь об опыте работы. Это поможет нам стать лучше!
-          </p>
-
-          <div className="lg-modal__actions">
-            <button
-              className="lg-btn lg-btn--primary"
-              onClick={handleWriteToUs}
-            >
-              ✉️ Написать нам
-            </button>
-            <button className="lg-btn lg-btn--ghost" onClick={onClose}>
-              Закрыть
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-// ─── Окно с просьбой пройти опрос CSI (показывается один раз) ───
-const CsiModal = memo(({ isOpen, onClose }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="lg-modal-overlay" onClick={onClose}>
-      <div className="lg-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="lg-modal__glass" />
-        <div className="lg-modal__shine" />
-
-        <div className="lg-modal__content">
-          <button className="lg-modal__close" onClick={onClose}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path
-                d="M4 4l10 10M14 4L4 14"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
-
-          <div className="lg-modal__icon-wrap">
-            <span className="lg-modal__icon">⭐</span>
-          </div>
-
-          <h2 className="lg-modal__title">Оцените проект</h2>
-
-          <p className="lg-modal__text">
-            Помогите нам стать лучше — пройдите короткий опрос
-            удовлетворённости проектом{" "}
-            <span className="lg-gradient-text">Convertix</span>. Это займёт пару
-            минут и очень поможет команде.
-          </p>
-
-          <div className="lg-modal__actions">
-            <a
-              className="lg-btn lg-btn--primary lg-footer__btn"
-              href={SURVEY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={onClose}
-            >
-              ⭐ Пройти опрос
-            </a>
-            <button className="lg-btn lg-btn--ghost" onClick={onClose}>
-              Позже
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
 
 // ─── Данные инструментов ───
 type Tool = {
@@ -1105,10 +981,6 @@ const ListLayout = memo(() => (
 
 // ─── Главная страница ───
 const HomePage = () => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isCsiOpen, setIsCsiOpen] = useState(false);
-  const [showDownloadModal, setShowDownloadModal] = useState(false);
-  const [downloadedFilename, setDownloadedFilename] = useState<string>("");
   const [layout, setLayout] = useState<string>(
     () => localStorage.getItem("hp-layout") || "menu",
   );
@@ -1116,10 +988,6 @@ const HomePage = () => {
     setLayout(id);
     localStorage.setItem("hp-layout", id);
   }, []);
-
-  // Обработчики для модалок
-  const closeModal = useCallback(() => setIsModalOpen(false), []);
-  const closeCsi = useCallback(() => setIsCsiOpen(false), []);
 
   // Тихо подкачиваем движок PDF → PowerPoint (~33 МБ) в кэш браузера, когда
   // страница простаивает: к открытию инструмента он уже на месте. Файлы
@@ -1136,59 +1004,10 @@ const HomePage = () => {
     return () => window.clearTimeout(timer);
   }, []);
 
-  // Добавьте эффект для обработки URL при загрузке главной страницы:
-  useEffect(() => {
-    const processUrlDownload = async () => {
-      if (hasUrlDownloadData()) {
-        const success = await handleUrlExcelDownload({
-          onSuccess: (filename) => {
-            setDownloadedFilename(filename);
-            setShowDownloadModal(true);
-          },
-          onError: (error) => {
-            console.error("URL download error:", error);
-          },
-        });
-
-        if (!success) {
-          // Если не удалось скачать, не показываем модальное окно
-          console.log("No download data or already processed");
-        }
-      }
-    };
-
-    processUrlDownload();
-  }, []);
-
-  // Показ модальных окон с приоритетами:
-  // 1. CSI (опрос удовлетворённости) — показывается один раз
-  // 2. Обратная связь — показывается один раз
-  useEffect(() => {
-    // Проверяем CSI
-    if (!localStorage.getItem("csiSurveyShown")) {
-      const timer = setTimeout(() => {
-        setIsCsiOpen(true);
-        localStorage.setItem("csiSurveyShown", "true");
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-
-    // Проверяем feedback
-    if (!localStorage.getItem("feedbackModalShown")) {
-      const timer = setTimeout(() => {
-        setIsModalOpen(true);
-        localStorage.setItem("feedbackModalShown", "true");
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, []);
-
   return (
     <div className="lg-page">
       <AnimatedBackground />
 
-      <FeedbackModal isOpen={isModalOpen} onClose={closeModal} />
-      <CsiModal isOpen={isCsiOpen} onClose={closeCsi} />
       {/* ─── Header ─── */}
       <header className="lg-header">
         <div className="lg-header__glass" />
@@ -1301,6 +1120,7 @@ const HomePage = () => {
 
       {/* ─── Footer / Support ─── */}
       <footer className="lg-footer">
+        <HomeNotifications surveyUrl={SURVEY_URL} chatUrl={SBERCHAT_URL} />
         <div className="lg-footer__glass" />
         <div className="lg-footer__content">
           <div className="lg-footer__info">
@@ -1366,11 +1186,6 @@ const HomePage = () => {
           </div>
         </div>
       </footer>
-      <DownloadSuccessModal
-        isOpen={showDownloadModal}
-        onClose={() => setShowDownloadModal(false)}
-        filename={downloadedFilename}
-      />
     </div>
   );
 };
