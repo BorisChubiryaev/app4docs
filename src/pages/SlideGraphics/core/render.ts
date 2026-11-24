@@ -52,12 +52,14 @@ export function renderFrame(
     ctx.fillRect(0, 0, w, h);
   }
   const dark = scene.ink === "light" ? true : scene.ink === "dark" ? false : base ? isDark(base) : forceBase ? isDark(forceBase) : false;
+  // Entrance effects have authored keyframes in seconds. Retiming the clip must still reach its final frame.
+  const tScene = tpl.loop ? ((t % dur) + dur) % dur : Math.min(1, Math.max(0, t / dur)) * tpl.duration;
   const f: Frame = {
     ctx,
     w,
     h,
-    t: tpl.loop ? ((t % dur) + dur) % dur : Math.min(Math.max(0, t), dur),
-    dur,
+    t: tScene,
+    dur: tpl.loop ? dur : tpl.duration,
     s: Math.min(w, h) / 1080,
     p: scene.params,
     rows: scene.rows,

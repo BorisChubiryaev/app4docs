@@ -16,7 +16,7 @@ const phrases: Template = {
   duration: 9,
   loop: false,
   controls: [
-    { key: "size", label: "Размер текста", type: "range", min: 40, max: 160, step: 1 },
+    { key: "size", label: "Размер текста", type: "fontSize", min: 40, max: 160, step: 1 },
     { key: "align", label: "Выравнивание", type: "select", options: [["center", "По центру"], ["left", "Слева"]] },
     { key: "zoom", label: "Приближение кадра", type: "toggle" },
   ],

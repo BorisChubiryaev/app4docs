@@ -304,6 +304,8 @@
 .sg-field--row select {
   max-width: 58%;
 }
+.sg-field__label:has(input) { align-items: center; }
+.sg-field .sg-field__label input[type="number"] { width: 78px; padding: 4px 7px; }
 .sg-field input:focus,
 .sg-field textarea:focus,
 .sg-field select:focus,
@@ -726,6 +728,7 @@
 .sg-timeline input[type="range"] {
   flex: 1;
   min-width: 0;
+  background: linear-gradient(90deg, var(--sg-accent) var(--k), var(--line) var(--k));
 }
 .sg-play,
 .sg-round {
@@ -763,11 +766,11 @@
   font-size: 0.8rem;
 }
 .sg-dur input {
-  width: 52px;
+  width: 64px;
   padding: 5px 6px;
-  border: none;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface-2);
+  background: var(--surface);
   color: var(--ink);
   font: inherit;
   font-size: 0.8rem;
@@ -890,6 +893,8 @@
 }
 @media (max-width: 480px) {
   .sg-grid { grid-template-columns: minmax(0, 1fr); }
+  .sg-timeline { display: grid; grid-template-columns: auto auto 1fr auto; }
+  .sg-timeline .sg-dur { grid-column: 1 / -1; justify-content: flex-end; }
 }
 @media (prefers-reduced-motion: reduce) {
   .sg-card { transition: none; }
